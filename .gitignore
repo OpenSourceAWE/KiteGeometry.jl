@@ -6,8 +6,8 @@
 .benchmarkci
 AGENTS.md
 Manifest.toml
-Manifest-v1.11.toml
-Manifest-v1.12.toml
+Manifest-v1.*.toml
+LocalPreferences.toml
 benchmark/*.json
 coverage
 docs/build/

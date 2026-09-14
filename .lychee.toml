@@ -1,0 +1,16 @@
+# SPDX-FileCopyrightText: 2026 Bart van de Lint
+# SPDX-License-Identifier: MIT
+
+exclude = [
+  "@ref",
+  "@[Cc]ite.*",
+  "^https://github.com/.*/releases/tag/v.*$",
+  "^https://doi.org/FIXME$",
+  "^https://OpenSourceAWE.github.io/KiteGeometry.jl/stable/?$",
+
+  "zenodo.org/badge/DOI/FIXME$"
+]
+
+exclude_path = [
+  "docs/build"
+]

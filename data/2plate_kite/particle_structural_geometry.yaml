@@ -1,0 +1,150 @@
+##############################
+## System Structure ##########
+##############################
+# This file defines the 2-plate kite SystemStructure components
+# Indices are auto-generated from order - only names are needed
+
+###########################
+## Variables ##############
+###########################
+# Named values reused below: a number is substituted where it is written, a
+# mapping fills the columns it names at once.
+variables:
+  bridle_comp: 0.010
+  dyneema:
+    youngs_modulus: 55.0e9
+    damping_per_stiffness: 0.00077
+    density: 724.0
+  wing_element:
+    youngs_modulus: 6.3661977236758134e9
+    damping_per_stiffness: 0.002
+    density: 724.0
+
+###########################
+## Points #################
+###########################
+# Indices auto-generated from order (1, 2, 3, ...)
+# Access by name: sys.points[:le_left] or by index: sys.points[1]
+
+points:
+  headers: [name, pos_cad, type, wing_idx, transform_idx, extra_mass, body_frame_damping, world_frame_damping, area, drag_coeff]
+  data:
+    # Wing points - leading edge (LE) and trailing edge (TE). Particle wing
+    # nodes are DYNAMIC; their wing membership is carried by twist_surfaces.
+    - [le_left,    [-0.5, 1.0, 2.0], DYNAMIC, main_wing, main_transform, 0.1, 10.0, 0.0, 0.0, 0.0]
+    - [te_left,    [0.5,  1.0, 2.3], DYNAMIC, main_wing, main_transform, 0.1, 10.0, 0.0, 0.0, 0.0]
+    - [le_center,  [-0.5, 0.0, 2.5], DYNAMIC, main_wing, main_transform, 0.1, 10.0, 0.0, 0.0, 0.0]
+    - [te_center,  [0.5,  0.0, 2.8], DYNAMIC, main_wing, main_transform, 0.1, 10.0, 0.0, 0.0, 0.0]
+    - [le_right,   [-0.5,-1.0, 2.0], DYNAMIC, main_wing, main_transform, 0.1, 10.0, 0.0, 0.0, 0.0]
+    - [te_right,   [0.5, -1.0, 2.3], DYNAMIC, main_wing, main_transform, 0.1, 10.0, 0.0, 0.0, 0.0]
+
+    # Bridle points
+    - [steering_left, [0.0, 0.5, 0.5], DYNAMIC, main_wing, main_transform, 0.1, 10.0, 0.0, 0.0, 0.0]
+    - [steering_right,[0.0,-0.5, 0.5], DYNAMIC, main_wing, main_transform, 0.1, 10.0, 0.0, 0.0, 0.0]
+
+    # Tether attachment and ground points
+    - [kcu,        [0.0, 0.0, 0.0],   DYNAMIC, main_wing, main_transform, 1.0, 0.0, 0.0, 0.1, 1.0]
+    - [ground,     [0.0, 0.0, -20.0],  STATIC,  main_wing, main_transform, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+###########################
+## Segments ###############
+###########################
+# References use symbolic names (e.g., te_left) instead of numeric indices
+
+segments:
+  headers: [name, point_i, point_j, l0, diameter_mm, youngs_modulus, damping_per_stiffness, density, compression_frac]
+  data:
+    # Wing structural elements - leading edge tubes
+    - [le_tube_left,  te_left, te_center, nothing, 1.0, wing_element, 1.0]
+    - [le_tube_right, te_center, te_right, nothing, 1.0, wing_element, 1.0]
+
+    # Wing structural elements - struts (chords)
+    - [strut_left,   le_left, te_left, nothing, 1.0, wing_element, 1.0]
+    - [strut_center, le_center, te_center, nothing, 1.0, wing_element, 1.0]
+    - [strut_right,  le_right, te_right, nothing, 1.0, wing_element, 1.0]
+
+    # Wing structural elements - trailing edge wires
+    - [te_wire_left,  le_center, le_right, nothing, 1.0, wing_element, 1.0]
+    - [te_wire_right, le_center, le_left, nothing, 1.0, wing_element, 1.0]
+
+    # Wing structural elements - diagonal springs
+    - [diag_1, te_left, le_center, nothing, 1.0, wing_element, 0.010]
+    - [diag_2, le_left, te_center, nothing, 1.0, wing_element, 0.010]
+    - [diag_3, te_right, le_center, nothing, 1.0, wing_element, 0.010]
+    - [diag_4, le_right, te_center, nothing, 1.0, wing_element, 0.010]
+
+    # Bridle segments
+    - [le_left, le_left, kcu, nothing, 1.0, dyneema, bridle_comp]
+    - [le_center, le_center, kcu, nothing, 1.0, dyneema, bridle_comp]
+    - [le_right, le_right, kcu, nothing, 1.0, dyneema, bridle_comp]
+    - [te_center, te_center, kcu, nothing, 1.0, dyneema, bridle_comp]
+    - [le_steering_left, le_left, steering_left, nothing, 1.0, dyneema, bridle_comp]
+    - [te_steering_left, te_left, steering_left, nothing, 1.0, dyneema, bridle_comp]
+    - [kcu_steering_left, steering_left, kcu, nothing, 1.0, dyneema, bridle_comp]
+    - [le_steering_right, le_right, steering_right, nothing, 1.0, dyneema, bridle_comp]
+    - [te_steering_right, te_right, steering_right, nothing, 1.0, dyneema, bridle_comp]
+    - [kcu_steering_right, steering_right, kcu, nothing, 1.0, dyneema, bridle_comp]
+
+    # Tether segments are auto-generated
+
+###########################
+## Pulleys ################
+###########################
+pulleys:
+  headers: [name, segment_i, segment_j, type]
+  data:
+    - [left, le_steering_left, te_steering_left, DYNAMIC]
+    - [right, le_steering_right, te_steering_right, DYNAMIC]
+
+###########################
+## Tethers ################
+###########################
+tethers:
+  headers: [name, start_point, end_point, n_segments, youngs_modulus, damping_per_stiffness, density, diameter_mm, init_stretched_length]
+  data:
+    - [main_tether, kcu, ground, 6, dyneema, 1.0, 20.0]
+
+###########################
+## Winches ################
+###########################
+winches:
+  headers: [name, tether_idxs, winch_point]
+  data:
+    - [main_winch, [main_tether], ground]
+
+###########################
+## Twist surfaces #########
+###########################
+# LE/TE pairs define the wing's aerodynamic surface; membership marks the
+# structural nodes as wing points.
+twist_surfaces:
+  headers: [name, point_idxs, type, moment_frac, damping]
+  data:
+    - [left,   [le_left, te_left],     STATIC, 0.75, 50.0]
+    - [center, [le_center, te_center], STATIC, 0.75, 50.0]
+    - [right,  [le_right, te_right],   STATIC, 0.75, 50.0]
+
+###########################
+## Wings ##################
+###########################
+wings:
+  data:
+    - name: main_wing
+      dynamics_type: PARTICLE_DYNAMICS
+      twist_surfaces: [left, center, right]
+      origin_idx: kcu
+      z_ref_points: [kcu, le_center]
+      y_ref_points: [le_right, le_left]
+
+###########################
+## Transforms #############
+###########################
+transforms:
+  data:
+    - name: main_transform
+      elevation: 50
+      azimuth: 0.0
+      heading: 0.0
+      wing_idx: main_wing
+      base_pos: [0.0, 0.0, 0.0]
+      base_point_idx: ground
