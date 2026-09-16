@@ -16,10 +16,9 @@ segment count, KiteViewers a sidecar CSV with neither names nor tethers. State
 is already shared, as `SysState`; the definition is not, so nothing composes and
 no viewer can draw another package's system.
 
-This package holds that definition. The awesIO structure document is its
-interface — YAML and JSON are two encodings of one model — and the Julia type
-mirrors it one to one, so a system that can be written can be read by anything
-that reads the schema.
+This package holds that definition. The awesIO structure schema is the format it
+follows and the source of truth where the two differ; the field sets here are
+written by hand.
 
 ```julia
 using KiteGeometry, KiteUtils

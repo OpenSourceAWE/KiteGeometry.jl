@@ -7,9 +7,7 @@
 One airborne wind energy system: its topology, its CAD geometry and its
 material, and nothing that a simulation of it produces.
 
-Each collection mirrors one table of the awesIO structure document, so a system
-that can be written can be read by anything that reads the schema. Every
-collection whose members can differ in model — segments, tethers, winches and
+Every collection whose members can differ in model — segments, tethers, winches and
 joints — is a type parameter, so a system whose segments all share one force law
 is concretely typed.
 

@@ -19,9 +19,9 @@ wing twists about, and the transforms that place the whole thing in the world.
 Nothing in it is written per simulation step, so the same definition can be
 handed to the package that integrates the system and to the one that draws it.
 
-The awesIO structure document is the interface: each collection mirrors one of
-its tables, so a system that can be written can be read by anything that reads
-the schema.
+The field sets are SymbolicAWEModels' authoring columns, written by hand. The
+awesIO structure schema is the format they are to follow; where the two differ
+today, the schema is right.
 
 ## Reading a system
 

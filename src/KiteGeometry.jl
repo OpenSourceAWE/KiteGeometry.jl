@@ -5,8 +5,7 @@
     KiteGeometry
 
 One system definition for airborne wind energy systems: the topology, the CAD
-geometry and the material of a kite, a tether and a winch, in a type that
-mirrors the awesIO structure document one to one.
+geometry and the material of a kite, a tether and a winch, in one type.
 
 [`SystemDefinition`](@ref) is that type and [`load_definition`](@ref) reads one
 from an authoring YAML file. Nothing here carries simulation state, so a
