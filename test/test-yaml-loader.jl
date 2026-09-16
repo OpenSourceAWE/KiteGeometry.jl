@@ -30,7 +30,7 @@ wing_element_stiffness(diameter_mm) =
 
     kcu = definition.points[:kcu]
     @test kcu.idx == 9
-    @test kcu.pos_cad == [0.0, 0.0, 0.0]
+    @test kcu.pos_CAD == [0.0, 0.0, 0.0]
     @test kcu.type == DYNAMIC
     @test kcu.extra_mass == 1.0
     @test kcu.body_frame_damping == [0.0, 0.0, 0.0]
@@ -42,7 +42,7 @@ wing_element_stiffness(diameter_mm) =
     @test !kcu.is_wing_node
 
     le_left = definition.points[:le_left]
-    @test le_left.pos_cad == [-0.5, 1.0, 2.0]
+    @test le_left.pos_CAD == [-0.5, 1.0, 2.0]
     @test le_left.body_frame_damping == [10.0, 10.0, 10.0]
     @test le_left.is_wing_node
     @test definition.points[:ground].type == STATIC
@@ -134,7 +134,7 @@ end
     # The rest lengths divide the placed standoff, not the CAD distance of 20 m
     # between kcu and ground — here the two happen to agree.
     @test all(segment -> segment.l0 ≈ 20.0 / 6, chain)
-    @test points[:main_tether_point_3].pos_cad ≈ [0.0, 0.0, -10.0]
+    @test points[:main_tether_point_3].pos_CAD ≈ [0.0, 0.0, -10.0]
     @test points[:main_tether_point_3].transform_idx == 1
     @test points[:main_tether_point_3].type == DYNAMIC
 end

@@ -4,9 +4,9 @@
 # Two bodies a metre apart on the x axis, the shape every joint test links.
 two_bodies() = [
     Body(:root; mass=1.0, inertia_principal=[1.0, 1.0, 1.0],
-         pos_cad=[0.0, 0.0, 0.0], type=STATIC),
+         pos_CAD=[0.0, 0.0, 0.0], type=STATIC),
     Body(:tip; mass=1.0, inertia_principal=[1.0, 1.0, 1.0],
-         pos_cad=[1.0, 0.0, 0.0])]
+         pos_CAD=[1.0, 0.0, 0.0])]
 
 elastic_model() = ElasticJoint(; stiffness_axial=1.0e4, stiffness_shear=2.0e3,
     stiffness_torsion=30.0, stiffness_bending=40.0)

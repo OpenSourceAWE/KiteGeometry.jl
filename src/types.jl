@@ -103,13 +103,13 @@ mutable struct Point
     "raw beam-anchoring joint reference; 0 = not beam-anchored"
     const joint_ref::NameRef
     "position in the CAD frame [m]"
-    const pos_cad::KVec3
+    const pos_CAD::KVec3
     "undeformed position relative to the wing COM, principal frame [m]"
     const pos_undeformed_KA::KVec3
-    "anchor offset in the anchoring body's frame [m]; derived from `pos_cad`
+    "anchor offset in the anchoring body's frame [m]; derived from `pos_CAD`
     when left at zero"
     anchor_KA::KVec3
-    "parameter `s ∈ [0, 1]` along the beam element; derived from `pos_cad`"
+    "parameter `s ∈ [0, 1]` along the beam element; derived from `pos_CAD`"
     beam_frac::SimFloat
     "perpendicular offset off the beam centerline, rest element frame [m]"
     beam_offset_b::KVec3
@@ -135,9 +135,9 @@ mutable struct Point
 end
 
 """
-    Point(name, pos_cad, type; wing, transform, body, joint, ...)
+    Point(name, pos_CAD, type; wing, transform, body, joint, ...)
 
-A point mass at CAD position `pos_cad` [m] with the given
+A point mass at CAD position `pos_CAD` [m] with the given
 [`DynamicsType`](@ref).
 
 A `BODY_STATIC` point rides a [`Body`](@ref) and needs one of `body`, `joint`
@@ -157,7 +157,7 @@ or `wing` to say which — a wing is a body, so `wing` rides that wing's body.
 - `drag_coeff`: drag coefficient [-].
 - `fix_sphere`, `fix_static`: constrain the point to a sphere, or freeze it.
 """
-function Point(name, pos_cad, type;
+function Point(name, pos_CAD, type;
     wing=nothing, transform=nothing, body=nothing, anchor_KA=nothing,
     joint=nothing, extra_mass=0.0, body_frame_damping=nothing,
     world_frame_damping=nothing, area=0.0, drag_coeff=0.0,
@@ -181,7 +181,7 @@ function Point(name, pos_cad, type;
     Point(0, name, 0, 0, 0, 0,
         isnothing(transform) ? 0 : transform, wing_ref,
         isnothing(body) ? 0 : body, isnothing(joint) ? 0 : joint,
-        KVec3(pos_cad...), zeros(KVec3),
+        KVec3(pos_CAD...), zeros(KVec3),
         isnothing(anchor_KA) ? zeros(KVec3) : KVec3(anchor_KA...),
         zero(SimFloat), zeros(KVec3),
         type, extra_mass,

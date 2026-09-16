@@ -27,7 +27,7 @@ set_data_path("data/2plate_kite")
 definition = load_definition("data/2plate_kite/particle_structural_geometry.yaml";
                              set=Settings("system.yaml"))
 
-definition.points[:kcu].pos_cad
+definition.points[:kcu].pos_CAD
 definition.segments[:strut_left].model.unit_stiffness
 ```
 

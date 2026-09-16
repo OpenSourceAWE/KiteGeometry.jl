@@ -32,7 +32,7 @@ set_data_path("data/2plate_kite")
 definition = load_definition("data/2plate_kite/particle_structural_geometry.yaml";
                              set=Settings("system.yaml"))
 
-definition.points[:kcu].pos_cad          # by name
+definition.points[:kcu].pos_CAD          # by name
 definition.segments[1].l0                # or by position
 definition.wings[:main_wing].twist_surface_idxs
 ```
@@ -46,8 +46,8 @@ segment count has its intermediate points and segments generated.
 
 Three frames appear, and a name says which one it means.
 
-- **CAD** is the design frame the file is written in, suffixed `_cad`.
-  `pos_cad` is a design position, never a place in the world — do not draw it
+- **CAD** is the design frame the file is written in, suffixed `_CAD`.
+  `pos_CAD` is a design position, never a place in the world — do not draw it
   as one.
 - **KA** is a rigid body's own frame, suffixed `_KA`. A rotation reads
   `R_<from>_to_<to>`, as in a body's `R_KA_to_CAD`.

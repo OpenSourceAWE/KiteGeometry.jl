@@ -61,7 +61,7 @@ end
 
 @testset "a full inertia tensor diagonalises into the principal frame" begin
     inertia = [2.0 0.0 0.5; 0.0 3.0 0.0; 0.5 0.0 4.0]
-    body = Body(:hub; mass=2.0, inertia=inertia, pos_cad=[0.0, 0.0, 1.0])
+    body = Body(:hub; mass=2.0, inertia=inertia, pos_CAD=[0.0, 0.0, 1.0])
 
     rotation = body.R_KA_to_principal
     @test rotation * inertia * rotation' ≈ Diagonal(body.inertia_principal)
@@ -74,9 +74,9 @@ end
     @test y_rotation * inertia * y_rotation' ≈ Diagonal(moments)
 
     @test_throws "not both" Body(:hub; mass=2.0, inertia=inertia,
-        inertia_principal=[1.0, 1.0, 1.0], pos_cad=[0.0, 0.0, 0.0])
+        inertia_principal=[1.0, 1.0, 1.0], pos_CAD=[0.0, 0.0, 0.0])
     @test_throws "provide `inertia_principal` or `inertia`" Body(:hub;
-        mass=2.0, pos_cad=[0.0, 0.0, 0.0])
+        mass=2.0, pos_CAD=[0.0, 0.0, 0.0])
 end
 
 @testset "a point states which body it rides" begin

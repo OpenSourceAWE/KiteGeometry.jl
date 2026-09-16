@@ -62,7 +62,7 @@ component its position, and resolve every name reference to an index.
 
 Segment rest lengths left at zero are taken from the CAD geometry, densities
 left at `NaN` from `set`, and a body-anchored point's `anchor_KA` from its
-`pos_cad` where it is zero.
+`pos_CAD` where it is zero.
 """
 function SystemDefinition(name, set::Settings;
     points=Point[], twist_surfaces=TwistSurface[], segments=Segment[],
@@ -276,8 +276,8 @@ end
 Distance between a segment's endpoints as the CAD geometry places them [m].
 """
 segment_cad_length(segment, points) =
-    norm(points[segment.point_idxs[1]].pos_cad -
-         points[segment.point_idxs[2]].pos_cad)
+    norm(points[segment.point_idxs[1]].pos_CAD -
+         points[segment.point_idxs[2]].pos_CAD)
 
 """
     resolve_tether_endpoints!(tether, segments, point_names)
@@ -321,7 +321,7 @@ function anchor_point!(point::Point, bodies, joints)
     if point.body_idx > 0 && iszero(point.anchor_KA)
         body = bodies[point.body_idx]
         has_fitted_frame(body) || (point.anchor_KA =
-            KVec3(body.R_KA_to_CAD' * (point.pos_cad - body.pos_cad)))
+            KVec3(body.R_KA_to_CAD' * (point.pos_CAD - body.pos_CAD)))
     end
     point.joint_idx == 0 && return
     derive_beam_anchor!(point, joints[point.joint_idx], bodies)
@@ -331,7 +331,7 @@ end
     has_fitted_frame(body) -> Bool
 
 Whether a body's own frame is fitted from reference points rather than placed
-by `pos_cad` and `R_KA_to_CAD`. What fits it is the package that simulates
+by `pos_CAD` and `R_KA_to_CAD`. What fits it is the package that simulates
 or draws the definition, so nothing derived from that frame is filled here.
 """
 has_fitted_frame(body::Body) =
@@ -342,16 +342,16 @@ has_fitted_frame(body::Body) =
     derive_beam_anchor!(point, joint, bodies)
 
 Derive a beam-anchored point's `beam_frac` and `beam_offset_b` from its
-`pos_cad`, by projecting onto the rest beam line between the joint's two node
+`pos_CAD`, by projecting onto the rest beam line between the joint's two node
 anchors: the axial fraction `s ∈ [0, 1]` and the perpendicular remainder in the
 rest element frame, so the point keeps that offset as the beam bends.
 """
 function derive_beam_anchor!(point::Point, joint, bodies)
     body_a, body_b = bodies[joint.body_a_idx], bodies[joint.body_b_idx]
-    node_a = body_a.pos_cad .+ body_a.R_KA_to_CAD * joint.anchor_a_KA
-    node_b = body_b.pos_cad .+ body_b.R_KA_to_CAD * joint.anchor_b_KA
+    node_a = body_a.pos_CAD .+ body_a.R_KA_to_CAD * joint.anchor_a_KA
+    node_b = body_b.pos_CAD .+ body_b.R_KA_to_CAD * joint.anchor_b_KA
     e1, e2, e3, len = beam_element_frame(node_a, node_b, body_a.R_KA_to_CAD)
-    relative = point.pos_cad .- node_a
+    relative = point.pos_CAD .- node_a
     s = clamp(dot(relative, e1) / len, 0.0, 1.0)
     point.beam_frac = s
     perpendicular = relative .- (s * len) .* e1
@@ -395,8 +395,8 @@ function expand_auto_tethers!(points, segments, tethers)
 
         start_idx = resolve_ref(tether.start_point_ref, point_names, "point")
         end_idx = resolve_ref(tether.end_point_ref, point_names, "point")
-        start_pos = points[start_idx].pos_cad
-        direction = points[end_idx].pos_cad - start_pos
+        start_pos = points[start_idx].pos_CAD
+        direction = points[end_idx].pos_CAD - start_pos
         transform = shared_transform(tether, points[start_idx], points[end_idx])
         n_segments = tether.n_segments
         segment_l0 = something(tether.init_stretched_len, norm(direction)) /
