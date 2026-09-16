@@ -105,10 +105,10 @@ mutable struct Point
     "position in the CAD frame [m]"
     const pos_cad::KVec3
     "undeformed position relative to the wing COM, principal frame [m]"
-    const pos_undeformed_b::KVec3
+    const pos_undeformed_KA::KVec3
     "anchor offset in the anchoring body's frame [m]; derived from `pos_cad`
     when left at zero"
-    anchor_b::KVec3
+    anchor_KA::KVec3
     "parameter `s ∈ [0, 1]` along the beam element; derived from `pos_cad`"
     beam_frac::SimFloat
     "perpendicular offset off the beam centerline, rest element frame [m]"
@@ -149,7 +149,7 @@ or `wing` to say which — a wing is a body, so `wing` rides that wing's body.
 - `body`: [`Body`](@ref) the point is anchored to; requires `BODY_STATIC`.
 - `joint`: beam [`Joint`](@ref) whose deformed centerline the point rides;
   requires `BODY_STATIC`.
-- `anchor_b::KVec3`: anchor offset in the body frame [m], used with `body`.
+- `anchor_KA::KVec3`: anchor offset in the body frame [m], used with `body`.
 - `extra_mass`: point mass [kg].
 - `body_frame_damping`, `world_frame_damping`: scalar or per-axis damping
   [N·s/m].
@@ -158,7 +158,7 @@ or `wing` to say which — a wing is a body, so `wing` rides that wing's body.
 - `fix_sphere`, `fix_static`: constrain the point to a sphere, or freeze it.
 """
 function Point(name, pos_cad, type;
-    wing=nothing, transform=nothing, body=nothing, anchor_b=nothing,
+    wing=nothing, transform=nothing, body=nothing, anchor_KA=nothing,
     joint=nothing, extra_mass=0.0, body_frame_damping=nothing,
     world_frame_damping=nothing, area=0.0, drag_coeff=0.0,
     fix_sphere=false, fix_static=false
@@ -182,7 +182,7 @@ function Point(name, pos_cad, type;
         isnothing(transform) ? 0 : transform, wing_ref,
         isnothing(body) ? 0 : body, isnothing(joint) ? 0 : joint,
         KVec3(pos_cad...), zeros(KVec3),
-        isnothing(anchor_b) ? zeros(KVec3) : KVec3(anchor_b...),
+        isnothing(anchor_KA) ? zeros(KVec3) : KVec3(anchor_KA...),
         zero(SimFloat), zeros(KVec3),
         type, extra_mass,
         damping_vector(body_frame_damping), damping_vector(world_frame_damping),
@@ -630,9 +630,9 @@ mutable struct Transform
     rot_point_idx::Union{Int64, Nothing}
     "raw reference of the point placed at (elevation, azimuth)"
     const rot_point_ref::Union{NameRef, Nothing}
-    "resolved index of the point placed at `base_pos_enu`"
+    "resolved index of the point placed at `base_pos_ENU`"
     base_point_idx::Union{Int64, Nothing}
-    "raw reference of the point placed at `base_pos_enu`"
+    "raw reference of the point placed at `base_pos_ENU`"
     const base_point_ref::Union{NameRef, Nothing}
     "resolved index of the transform this one chains onto"
     base_transform_idx::Union{Int64, Nothing}
@@ -652,7 +652,7 @@ mutable struct Transform
     turn_rate::SimFloat
     "where the base point lands, ENU [m]; `nothing` = taken from
     `base_transform`"
-    base_pos_enu::Union{KVec3, Nothing}
+    base_pos_ENU::Union{KVec3, Nothing}
 end
 
 """

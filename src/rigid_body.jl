@@ -90,9 +90,9 @@ mutable struct Body
     "principal moments of inertia `[Ixx, Iyy, Izz]` [kg·m²]"
     const inertia_principal::KVec3
     "body frame → principal frame"
-    const R_body_to_principal::Matrix{SimFloat}
+    const R_KA_to_principal::Matrix{SimFloat}
     "offset from the body origin to the centre of mass, body frame [m]"
-    const com_offset_b::KVec3
+    const com_offset_KA::KVec3
     "how the principal frame is computed from an inertia tensor"
     principal_frame_method::PrincipalFrameMethod
     "per-axis spin damping about the body axes [1/s]"
@@ -112,7 +112,7 @@ mutable struct Body
     "position of the body origin in the CAD frame [m]"
     const pos_cad::KVec3
     "body frame → CAD frame; the placed orientation before any transform"
-    const R_body_to_cad::Matrix{SimFloat}
+    const R_KA_to_CAD::Matrix{SimFloat}
     "name of the aerodynamic model this body carries; `:none` = a plain body"
     aero_model::Symbol
     "resolved twist-surface indices"
@@ -139,16 +139,16 @@ Whether `body` carries aerodynamics, which is what makes a body a wing.
 is_wing(body::Body) = body.aero_model !== :none
 
 """
-    Body(name; mass, inertia_principal | inertia, pos_cad, Q_body_to_cad,
-         com_offset_b, R_body_to_principal, angular_damping,
+    Body(name; mass, inertia_principal | inertia, pos_cad, Q_KA_to_CAD,
+         com_offset_KA, R_KA_to_principal, angular_damping,
          world_frame_damping, body_frame_damping, fix_sphere, fix_static,
          type, transform, wing, principal_frame_method)
 
 A plain rigid body of mass `mass` [kg] whose origin sits at `pos_cad` [m] in
-the CAD frame, oriented by the quaternion `Q_body_to_cad` (scalar first).
+the CAD frame, oriented by the quaternion `Q_KA_to_CAD` (scalar first).
 
 Give the inertia one of two ways: `inertia_principal`, the three principal
-moments, with `R_body_to_principal` naming the body → principal rotation; or
+moments, with `R_KA_to_principal` naming the body → principal rotation; or
 `inertia`, the full 3×3 body-frame tensor, from which both are derived by
 `principal_frame_method`. One, not both.
 
@@ -158,8 +158,8 @@ body-frame damping resolves against.
 """
 function Body(name;
     mass::Real, inertia_principal=nothing, inertia=nothing, pos_cad,
-    Q_body_to_cad=SimFloat[1, 0, 0, 0], com_offset_b=zeros(KVec3),
-    R_body_to_principal=Matrix{SimFloat}(I, 3, 3), angular_damping=0.0,
+    Q_KA_to_CAD=SimFloat[1, 0, 0, 0], com_offset_KA=zeros(KVec3),
+    R_KA_to_principal=Matrix{SimFloat}(I, 3, 3), angular_damping=0.0,
     world_frame_damping=0.0, body_frame_damping=0.0, fix_sphere=false,
     fix_static=false, type::DynamicsType=DYNAMIC, transform=nothing,
     wing=nothing, principal_frame_method::PrincipalFrameMethod=EIGEN_DECOMP
@@ -169,7 +169,7 @@ function Body(name;
     if !isnothing(inertia)
         isnothing(inertia_principal) ||
             error("Body $name: give `inertia` or `inertia_principal`, not both.")
-        inertia_principal, R_body_to_principal =
+        inertia_principal, R_KA_to_principal =
             principal_frame(inertia, principal_frame_method)
     elseif isnothing(inertia_principal)
         error("Body $name: provide `inertia_principal` or `inertia`.")
@@ -177,18 +177,18 @@ function Body(name;
     return Body(0, name, 0, isnothing(transform) ? 0 : transform,
         0, isnothing(wing) ? 0 : wing,
         SimFloat(mass), KVec3(inertia_principal),
-        Matrix{SimFloat}(R_body_to_principal), KVec3(com_offset_b),
+        Matrix{SimFloat}(R_KA_to_principal), KVec3(com_offset_KA),
         principal_frame_method, damping_vector(angular_damping),
         damping_vector(world_frame_damping), damping_vector(body_frame_damping),
         fix_sphere, fix_static, type, RIGID_DYNAMICS, KVec3(pos_cad),
-        quaternion_to_rotation_matrix(Q_body_to_cad),
+        quaternion_to_rotation_matrix(Q_KA_to_CAD),
         :none, Int64[], NameRef[], one(SimFloat), true, nothing, nothing, nothing)
 end
 
 """
     Wing(name, twist_surfaces; dynamics_type=RIGID_DYNAMICS, aero_model,
-         transform, pos_cad, R_body_to_cad, inertia_principal, mass,
-         com_offset_b, angular_damping, world_frame_damping,
+         transform, pos_cad, R_KA_to_CAD, inertia_principal, mass,
+         com_offset_KA, angular_damping, world_frame_damping,
          body_frame_damping, group_points_moment, z_ref_points, y_ref_points,
          origin, principal_frame_method)
 
@@ -203,8 +203,8 @@ keywords when `z_ref_points`, `y_ref_points` and `origin` are given instead.
 function Wing(name, twist_surfaces;
     dynamics_type::WingType=RIGID_DYNAMICS, aero_model=nothing,
     transform=nothing, pos_cad=zeros(KVec3),
-    R_body_to_cad=Matrix{SimFloat}(I, 3, 3), inertia_principal=zeros(KVec3),
-    mass=0.0, com_offset_b=zeros(KVec3), angular_damping=[0.0, 150.0, 0.0],
+    R_KA_to_CAD=Matrix{SimFloat}(I, 3, 3), inertia_principal=zeros(KVec3),
+    mass=0.0, com_offset_KA=zeros(KVec3), angular_damping=[0.0, 150.0, 0.0],
     world_frame_damping=0.0, body_frame_damping=0.0, drag_frac=1.0,
     group_points_moment::Bool=true, z_ref_points=nothing, y_ref_points=nothing,
     origin=nothing, principal_frame_method::PrincipalFrameMethod=EIGEN_DECOMP
@@ -213,11 +213,11 @@ function Wing(name, twist_surfaces;
         dynamics_type == RIGID_DYNAMICS ? :linearized : :direct)
     return Body(0, name, 0, isnothing(transform) ? 1 : transform, 0, 0,
         SimFloat(mass), KVec3(inertia_principal),
-        Matrix{SimFloat}(I, 3, 3), KVec3(com_offset_b), principal_frame_method,
+        Matrix{SimFloat}(I, 3, 3), KVec3(com_offset_KA), principal_frame_method,
         damping_vector(angular_damping), damping_vector(world_frame_damping),
         damping_vector(body_frame_damping), false, false,
         dynamics_type == RIGID_DYNAMICS ? DYNAMIC : KINEMATIC, dynamics_type,
-        KVec3(pos_cad), Matrix{SimFloat}(R_body_to_cad),
+        KVec3(pos_cad), Matrix{SimFloat}(R_KA_to_CAD),
         Symbol(aero_model), Int64[], name_refs(twist_surfaces),
         SimFloat(drag_frac),
         group_points_moment, weighted_ref_pair(z_ref_points),
@@ -235,7 +235,7 @@ weighted_ref_pair(points) = isnothing(points) ? nothing :
 
 """
     principal_frame(inertia, method=EIGEN_DECOMP)
-        -> (inertia_principal, R_body_to_principal)
+        -> (inertia_principal, R_KA_to_principal)
 
 Diagonalise a 3×3 symmetric inertia tensor into its principal moments and the
 rotation `R` taking the input frame to the principal frame, so that
@@ -282,7 +282,7 @@ function best_axis_permutation(axes)
 end
 
 """
-    inertia_y_rotation(inertia) -> (inertia_principal, R_body_to_principal)
+    inertia_y_rotation(inertia) -> (inertia_principal, R_KA_to_principal)
 
 Diagonalise `inertia` by the closed-form rotation about y through
 `θ = atan(2·I₁₃, I₁₁ − I₃₃) / 2`, which zeroes the `I[1, 3]` cross terms and

@@ -61,7 +61,7 @@ tether written as a start point, an end point and a segment count, assign every
 component its position, and resolve every name reference to an index.
 
 Segment rest lengths left at zero are taken from the CAD geometry, densities
-left at `NaN` from `set`, and a body-anchored point's `anchor_b` from its
+left at `NaN` from `set`, and a body-anchored point's `anchor_KA` from its
 `pos_cad` where it is zero.
 """
 function SystemDefinition(name, set::Settings;
@@ -303,7 +303,7 @@ end
     anchor_point!(point, bodies, joints)
 
 Complete a point that rides a body or a beam. A `BODY_STATIC` point given only
-a wing rides that wing's own body; an `anchor_b` left at zero is derived from
+a wing rides that wing's own body; an `anchor_KA` left at zero is derived from
 the point's CAD position, and a beam rider's position along the element from
 the same. A point riding a body whose own frame is fitted from reference
 points keeps its zero anchor — there is no frame yet to express it in.
@@ -318,10 +318,10 @@ function anchor_point!(point::Point, bodies, joints)
             "(body $(point.body_idx) vs wing $(point.wing_idx)); a wing is a " *
             "body, so they must reference the same one.")
     end
-    if point.body_idx > 0 && iszero(point.anchor_b)
+    if point.body_idx > 0 && iszero(point.anchor_KA)
         body = bodies[point.body_idx]
-        has_fitted_frame(body) || (point.anchor_b =
-            KVec3(body.R_body_to_cad' * (point.pos_cad - body.pos_cad)))
+        has_fitted_frame(body) || (point.anchor_KA =
+            KVec3(body.R_KA_to_CAD' * (point.pos_cad - body.pos_cad)))
     end
     point.joint_idx == 0 && return
     derive_beam_anchor!(point, joints[point.joint_idx], bodies)
@@ -331,7 +331,7 @@ end
     has_fitted_frame(body) -> Bool
 
 Whether a body's own frame is fitted from reference points rather than placed
-by `pos_cad` and `R_body_to_cad`. What fits it is the package that simulates
+by `pos_cad` and `R_KA_to_CAD`. What fits it is the package that simulates
 or draws the definition, so nothing derived from that frame is filled here.
 """
 has_fitted_frame(body::Body) =
@@ -348,9 +348,9 @@ rest element frame, so the point keeps that offset as the beam bends.
 """
 function derive_beam_anchor!(point::Point, joint, bodies)
     body_a, body_b = bodies[joint.body_a_idx], bodies[joint.body_b_idx]
-    node_a = body_a.pos_cad .+ body_a.R_body_to_cad * joint.anchor_a_b
-    node_b = body_b.pos_cad .+ body_b.R_body_to_cad * joint.anchor_b_b
-    e1, e2, e3, len = beam_element_frame(node_a, node_b, body_a.R_body_to_cad)
+    node_a = body_a.pos_cad .+ body_a.R_KA_to_CAD * joint.anchor_a_KA
+    node_b = body_b.pos_cad .+ body_b.R_KA_to_CAD * joint.anchor_b_KA
+    e1, e2, e3, len = beam_element_frame(node_a, node_b, body_a.R_KA_to_CAD)
     relative = point.pos_cad .- node_a
     s = clamp(dot(relative, e1) / len, 0.0, 1.0)
     point.beam_frac = s

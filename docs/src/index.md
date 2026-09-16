@@ -46,13 +46,14 @@ segment count has its intermediate points and segments generated.
 
 Three frames appear, and a name says which one it means.
 
-- **CAD** is the design frame the file is written in. `pos_cad` is a design
-  position, never a place in the world — do not draw it as one.
-- **body** is a rigid body's own frame. A rotation reads `R_<from>_to_<to>`,
-  as in `R_body_to_cad`.
-- **ENU** is the world: east, north, up. A [`Transform`](@ref) maps CAD to ENU
-  at a chosen elevation, azimuth and heading, and a world-frame quantity is
-  suffixed `_enu`.
+- **CAD** is the design frame the file is written in, suffixed `_cad`.
+  `pos_cad` is a design position, never a place in the world — do not draw it
+  as one.
+- **KA** is a rigid body's own frame, suffixed `_KA`. A rotation reads
+  `R_<from>_to_<to>`, as in a body's `R_KA_to_CAD`.
+- **ENU** is the world: east, north, up, suffixed `_ENU`. A
+  [`Transform`](@ref) maps CAD to ENU at a chosen elevation, azimuth and
+  heading.
 
 Angles in a file are in degrees and diameters in millimetres; angles in the
 structs are in radians and every length is in metres.

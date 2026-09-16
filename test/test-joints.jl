@@ -39,8 +39,8 @@ end
     @test joint.idx == 1
     @test joint.body_a_idx == definition.bodies[:root].idx
     @test joint.body_b_idx == definition.bodies[:tip].idx
-    @test joint.anchor_a_b == [0.1, 0.0, 0.0]
-    @test joint.anchor_b_b == [0.0, 0.0, 0.0]
+    @test joint.anchor_a_KA == [0.1, 0.0, 0.0]
+    @test joint.anchor_b_KA == [0.0, 0.0, 0.0]
     @test joint.damping == 0.05
     @test joint.radius == 0.02
     @test joint.model.shear_coeff ≈ 5 / 6
@@ -78,7 +78,25 @@ end
 
     anchor = definition.points[:tip_anchor]
     @test anchor.body_idx == definition.bodies[:tip].idx
-    @test anchor.anchor_b ≈ [0.2, 0.0, 0.3]
+    @test anchor.anchor_KA ≈ [0.2, 0.0, 0.3]
+end
+
+@testset "a body's Q_b_to_w column is its rotation into the CAD frame" begin
+    yaml = """
+    bodies:
+      headers: [name, mass, pos, inertia_principal, Q_b_to_w]
+      data:
+        - [turned, 1.0, [1.0, 0.0, 0.0], [1.0, 1.0, 1.0],
+           [0.7071067811865476, 0.0, 0.0, 0.7071067811865476]]
+    points:
+      headers: [name, pos_cad, type, body_idx]
+      data:
+        - [rider, [1.0, 0.2, 0.3], BODY_STATIC, turned]
+    """
+    definition = load_yaml(yaml)
+
+    @test definition.bodies[:turned].R_KA_to_CAD ≈ [0 -1 0; 1 0 0; 0 0 1]
+    @test definition.points[:rider].anchor_KA ≈ [0.2, 0.0, 0.3]
 end
 
 @testset "joints load from their two YAML blocks" begin

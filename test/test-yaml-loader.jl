@@ -113,7 +113,7 @@ wing_element_stiffness(diameter_mm) =
     @test transform.azimuth == 0.0
     @test transform.heading == 0.0
     @test transform.turn_rate == 0.0
-    @test transform.base_pos_enu == [0.0, 0.0, 0.0]
+    @test transform.base_pos_ENU == [0.0, 0.0, 0.0]
     @test transform.base_point_idx == definition.points[:ground].idx
     @test transform.wing_idx == wing.idx
     @test isnothing(transform.rot_point_idx)

@@ -115,9 +115,9 @@ mutable struct Joint{M<:AbstractJointModel}
     "raw reference of body B"
     const body_b_ref::NameRef
     "anchor offset from body A's origin, body A frame [m]"
-    const anchor_a_b::KVec3
+    const anchor_a_KA::KVec3
     "anchor offset from body B's origin, body B frame [m]"
-    const anchor_b_b::KVec3
+    const anchor_b_KA::KVec3
     "stiffness model of this joint"
     model::M
     "Rayleigh damping β [s]: every degree of freedom is damped in proportion

@@ -63,7 +63,7 @@ end
     inertia = [2.0 0.0 0.5; 0.0 3.0 0.0; 0.5 0.0 4.0]
     body = Body(:hub; mass=2.0, inertia=inertia, pos_cad=[0.0, 0.0, 1.0])
 
-    rotation = body.R_body_to_principal
+    rotation = body.R_KA_to_principal
     @test rotation * inertia * rotation' ≈ Diagonal(body.inertia_principal)
     @test det(rotation) ≈ 1.0
     @test sum(body.inertia_principal) ≈ sum(diag(inertia))
@@ -122,7 +122,7 @@ end
 
     chained = Transform(:t, 0.1, 0.2, 0.3; rot_point=:kcu, base_transform=:root)
     @test chained.elevation == 0.1
-    @test isnothing(chained.base_pos_enu)
+    @test isnothing(chained.base_pos_ENU)
     @test chained.rot_point_ref == :kcu
 end
 

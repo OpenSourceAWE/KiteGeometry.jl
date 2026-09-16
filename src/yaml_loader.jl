@@ -65,7 +65,7 @@ function load_yaml_points(data)
     for (i, row) in enumerate(yaml_rows(data, "points"))
         push!(points, call_yaml_constructor(Point, row,
             [:name, :pos_cad, :type],
-            [:wing, :transform, :body, :joint, :anchor_b, :extra_mass,
+            [:wing, :transform, :body, :joint, :anchor_KA, :extra_mass,
              :body_frame_damping, :world_frame_damping, :area, :drag_coeff,
              :fix_sphere, :fix_static];
             mappings=Dict(
@@ -76,7 +76,7 @@ function load_yaml_points(data)
                 :transform => row -> yaml_ref(row, :transform_idx),
                 :body => row -> yaml_ref(row, :body_idx),
                 :joint => row -> yaml_ref(row, :joint),
-                :anchor_b => row -> yaml_vec3(row, :anchor_b))))
+                :anchor_KA => row -> yaml_vec3(row, :anchor_b))))
     end
     return points
 end
@@ -237,7 +237,7 @@ function load_yaml_wings(data, dynamics_type, aero_model)
         push!(wings, call_yaml_constructor(Wing, row,
             [:name, :twist_surfaces],
             [:dynamics_type, :aero_model, :transform, :pos_cad, :mass,
-             :com_offset_b, :inertia_principal, :angular_damping,
+             :com_offset_KA, :inertia_principal, :angular_damping,
              :world_frame_damping, :body_frame_damping, :drag_frac,
              :group_points_moment, :principal_frame_method,
              :origin, :z_ref_points, :y_ref_points];
@@ -251,7 +251,7 @@ function load_yaml_wings(data, dynamics_type, aero_model)
                     yaml_symbol(row, :aero_model) : aero_model,
                 :transform => row -> yaml_ref(row, :transform_idx),
                 :pos_cad => row -> yaml_vec3(row, :pos_cad),
-                :com_offset_b => row -> yaml_vec3(row, :com),
+                :com_offset_KA => row -> yaml_vec3(row, :com),
                 :inertia_principal => row -> yaml_vec3(row,
                     :inertia_principal),
                 :principal_frame_method => row -> parse_principal_frame_method(
@@ -277,8 +277,8 @@ function load_yaml_bodies(data)
     for (i, row) in enumerate(yaml_rows(data, "bodies"))
         push!(bodies, call_yaml_constructor(Body, row,
             [:name],
-            [:mass, :pos_cad, :inertia_principal, :inertia, :Q_body_to_cad,
-             :com_offset_b, :type, :transform, :wing, :angular_damping,
+            [:mass, :pos_cad, :inertia_principal, :inertia, :Q_KA_to_CAD,
+             :com_offset_KA, :type, :transform, :wing, :angular_damping,
              :world_frame_damping, :body_frame_damping, :fix_sphere,
              :fix_static, :principal_frame_method];
             mappings=Dict(
@@ -290,8 +290,8 @@ function load_yaml_bodies(data)
                 :inertia_principal => row ->
                     yaml_vec3(row, :inertia_principal),
                 :inertia => row -> yaml_matrix3(row, :inertia),
-                :Q_body_to_cad => row -> yaml_quaternion(row, :Q_b_to_w),
-                :com_offset_b => row -> yaml_vec3(row, :com_offset_b),
+                :Q_KA_to_CAD => row -> yaml_quaternion(row, :Q_b_to_w),
+                :com_offset_KA => row -> yaml_vec3(row, :com_offset_b),
                 :type => row -> parse_optional_dynamics_type(
                     yaml_field(row, :type)),
                 :transform => row -> yaml_ref(row, :transform_idx),
