@@ -9,8 +9,9 @@ material, and nothing that a simulation of it produces.
 
 Each collection mirrors one table of the awesIO structure document, so a system
 that can be written can be read by anything that reads the schema. Every
-collection is a type parameter, so a system whose segments all share one force
-law — or whose joints all share one stiffness model — is concretely typed.
+collection whose members can differ in model — segments, tethers, winches and
+joints — is a type parameter, so a system whose segments all share one force law
+is concretely typed.
 
 # Components
 - [`Point`](@ref): point masses.

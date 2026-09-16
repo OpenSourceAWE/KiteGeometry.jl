@@ -8,7 +8,8 @@
 Build a [`SystemDefinition`](@ref) from an authoring YAML file.
 
 Each top-level block — `points`, `segments`, `pulleys`, `twist_surfaces`,
-`tethers`, `winches`, `wings`, `bodies`, `joints`, `transforms` — is a table
+`tethers`, `winches`, `wings`, `bodies`, `elastic_joints`, `timoshenko_joints`,
+`transforms` — is a table
 written either as `headers` plus `data` rows, or as a list of mappings. Every
 block is optional, and a row's columns are the keyword arguments of the
 component's constructor. An optional `variables` block names values reused

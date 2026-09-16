@@ -62,7 +62,8 @@ end
 """
     mutable struct Body
 
-A rigid body, optionally carrying aerodynamics — a body that does is a wing.
+A rigid body, optionally carrying aerodynamics — a body that does is a wing,
+built by [`Wing`](@ref).
 
 The rigid-body core (`mass`, `inertia_principal`, the frames) is either given
 here or derived by the simulator from the body's points; a wing whose frame is
@@ -191,7 +192,7 @@ end
          body_frame_damping, group_points_moment, z_ref_points, y_ref_points,
          origin, principal_frame_method)
 
-A body carrying aerodynamics, spanning the given twist surfaces.
+Build a [`Body`](@ref) carrying aerodynamics, spanning the given twist surfaces.
 
 `aero_model` names the aerodynamic model the simulator is to build; this
 package only records the name, and defaults it to `:linearized` for a rigid
@@ -208,8 +209,6 @@ function Wing(name, twist_surfaces;
     group_points_moment::Bool=true, z_ref_points=nothing, y_ref_points=nothing,
     origin=nothing, principal_frame_method::PrincipalFrameMethod=EIGEN_DECOMP
 )
-    ref_pair(points) = isnothing(points) ? nothing :
-        (WeightedRefPoints(points[1]), WeightedRefPoints(points[2]))
     isnothing(aero_model) && (aero_model =
         dynamics_type == RIGID_DYNAMICS ? :linearized : :direct)
     return Body(0, name, 0, isnothing(transform) ? 1 : transform, 0, 0,
@@ -221,9 +220,18 @@ function Wing(name, twist_surfaces;
         KVec3(pos_cad), Matrix{SimFloat}(R_body_to_cad),
         Symbol(aero_model), Int64[], name_refs(twist_surfaces),
         SimFloat(drag_frac),
-        group_points_moment, ref_pair(z_ref_points), ref_pair(y_ref_points),
+        group_points_moment, weighted_ref_pair(z_ref_points),
+        weighted_ref_pair(y_ref_points),
         isnothing(origin) ? nothing : WeightedRefPoints(origin))
 end
+
+"""
+    weighted_ref_pair(points) -> Union{Tuple, Nothing}
+
+The two [`WeightedRefPoints`](@ref) of a frame-fitting axis, or `nothing`.
+"""
+weighted_ref_pair(points) = isnothing(points) ? nothing :
+    (WeightedRefPoints(points[1]), WeightedRefPoints(points[2]))
 
 """
     principal_frame(inertia, method=EIGEN_DECOMP)
