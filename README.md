@@ -16,27 +16,12 @@ segment count, KiteViewers a sidecar CSV with neither names nor tethers. State
 is already shared, as `SysState`; the definition is not, so nothing composes and
 no viewer can draw another package's system.
 
-This package holds that definition. The awesIO structure schema is the format it
-follows and the source of truth where the two differ; the field sets here are
-written by hand.
-
-```julia
-using KiteGeometry, KiteUtils
-
-set_data_path("data/2plate_kite")
-definition = load_definition("data/2plate_kite/particle_structural_geometry.yaml";
-                             set=Settings("system.yaml"))
-
-definition.points[:kcu].pos_CAD
-definition.segments[:strut_left].model.unit_stiffness
-```
-
-Nothing in a `SystemDefinition` is written per simulation step, so the same
-definition can be handed to the package that integrates the system and to the
-one that draws it.
+This package is where that definition goes. The awesIO structure schema defines
+it, and the component types are generated from that schema rather than written
+here, so the two cannot drift apart.
 
 See the [documentation](https://OpenSourceAWE.github.io/KiteGeometry.jl/stable)
-for the type, the YAML dialect it is read from, and the frames it uses.
+for more information.
 
 ## License
 

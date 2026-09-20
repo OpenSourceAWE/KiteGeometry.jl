@@ -1,7 +1,5 @@
 [deps]
 KiteGeometry = "941ca69c-4b42-4a27-9601-abc4d37bf99e"
-KiteUtils = "90980105-b163-44e5-ba9f-8b1c83bb0533"
-LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [sources]

@@ -3,4 +3,4 @@ Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 KiteGeometry = "941ca69c-4b42-4a27-9601-abc4d37bf99e"
 
 [sources]
-KiteGeometry = {path = "/home/agent/worktrees/KiteGeometry.jl-21"}
+KiteGeometry = {path = ".."}

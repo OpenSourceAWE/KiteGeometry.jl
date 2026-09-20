@@ -10,8 +10,3 @@ SPDX-License-Identifier = "MIT"
 path = ["CHANGELOG.md", "README.md", "LICENSE", "docs/src/*.md"]
 SPDX-FileCopyrightText = "2026 Bart van de Lint"
 SPDX-License-Identifier = "CC-BY-4.0"
-
-[[annotations]]
-path = ["data/2plate_kite/**"]
-SPDX-FileCopyrightText = "2025 Uwe Fechner, Bart van de Lint"
-SPDX-License-Identifier = "CC-BY-4.0"
