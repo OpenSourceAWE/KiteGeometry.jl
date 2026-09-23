@@ -1,0 +1,20 @@
+name: CI
+on:
+  push:
+    branches:
+      - main
+    tags: '*'
+  pull_request:
+concurrency:
+  # Skip intermediate builds: always.
+  # Cancel intermediate builds: only if it is a pull request build.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+jobs:
+  reuse-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run REUSE lint
+        run: |
+          docker run --rm --volume ${{ github.workspace }}:/data fsfe/reuse lint

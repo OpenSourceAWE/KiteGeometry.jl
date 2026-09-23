@@ -1,0 +1,12 @@
+version = 1
+
+[[annotations]]
+path = ["Manifest*", "Project.toml", ".gitignore", ".copier-answers.yml",
+        "docs/.gitignore", "docs/Project.toml", "test/Project.toml"]
+SPDX-FileCopyrightText = "2026 Bart van de Lint"
+SPDX-License-Identifier = "MIT"
+
+[[annotations]]
+path = ["CHANGELOG.md", "README.md", "LICENSE", "docs/src/*.md"]
+SPDX-FileCopyrightText = "2026 Bart van de Lint"
+SPDX-License-Identifier = "CC-BY-4.0"

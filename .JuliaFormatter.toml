@@ -1,0 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Bart van de Lint
+# SPDX-License-Identifier: MIT
+
+indent = 4
+margin = 92
+normalize_line_endings = "unix"

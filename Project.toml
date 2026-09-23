@@ -1,0 +1,10 @@
+name = "KiteGeometry"
+uuid = "941ca69c-4b42-4a27-9601-abc4d37bf99e"
+authors = ["Bart van de Lint <bart@vandelint.net> and contributors"]
+version = "0.1.0"
+
+[workspace]
+projects = ["test", "docs"]
+
+[compat]
+julia = "1.11, 1.12"

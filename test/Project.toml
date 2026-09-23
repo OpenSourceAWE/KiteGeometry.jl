@@ -1,0 +1,6 @@
+[deps]
+KiteGeometry = "941ca69c-4b42-4a27-9601-abc4d37bf99e"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[sources]
+KiteGeometry = {path = ".."}
