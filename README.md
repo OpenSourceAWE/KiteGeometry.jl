@@ -8,7 +8,8 @@
 [![BestieTemplate](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/JuliaBesties/BestieTemplate.jl/main/docs/src/assets/badge.json)](https://github.com/JuliaBesties/BestieTemplate.jl)
 
 One system definition for airborne wind energy systems — topology, CAD geometry
-and material — shared by the OpenSourceAWE packages.
+and material — shared by the OpenSourceAWE packages, generated from the
+[awesIO](https://github.com/awegroup/awesIO) structure schema.
 
 Every package here describes the same thing and each describes it differently:
 SymbolicAWEModels has a `SystemStructure` and a YAML loader, KiteModels a scalar
@@ -16,9 +17,8 @@ segment count, KiteViewers a sidecar CSV with neither names nor tethers. State
 is already shared, as `SysState`; the definition is not, so nothing composes and
 no viewer can draw another package's system.
 
-This package is where that definition goes. The awesIO structure schema defines
-it, and the component types are generated from that schema rather than written
-here, so the two cannot drift apart.
+This package is where that definition goes. Its component types are not written
+here: they are generated from the awesIO schema, so the two cannot drift apart.
 
 See the [documentation](https://OpenSourceAWE.github.io/KiteGeometry.jl/stable)
 for more information.
