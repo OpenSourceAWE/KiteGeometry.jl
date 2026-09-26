@@ -10,3 +10,8 @@ SPDX-License-Identifier = "MIT"
 path = ["CHANGELOG.md", "README.md", "LICENSE", "docs/src/*.md"]
 SPDX-FileCopyrightText = "2026 Bart van de Lint"
 SPDX-License-Identifier = "CC-BY-4.0"
+
+[[annotations]]
+path = ["src/awesio/structure_schema.yml", "test/data/v3_beam_structure.yml"]
+SPDX-FileCopyrightText = "2025 Airborne Wind Energy Research Group"
+SPDX-License-Identifier = "MIT"
