@@ -7,4 +7,4 @@ version = "0.1.0"
 projects = ["test", "docs"]
 
 [compat]
-julia = "1.11, 1.12"
+julia = "1.11, 1.12, 1.13"
