@@ -18,3 +18,16 @@ jobs:
       - name: Run REUSE lint
         run: |
           docker run --rm --volume ${{ github.workspace }}:/data fsfe/reuse lint
+  generated-types:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: "1.12"
+      - uses: julia-actions/cache@v3
+      - uses: julia-actions/julia-buildpkg@v1
+      - name: Regenerate the component types from the vendored schema
+        run: julia --project src/build.jl
+      - name: Fail where the committed types differ from the schema
+        run: git diff --exit-code src/_structure.jl
