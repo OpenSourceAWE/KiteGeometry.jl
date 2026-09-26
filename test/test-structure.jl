@@ -37,7 +37,8 @@ end
 end
 
 @testset "every reference column names the block it refers into" begin
-    reference_types = (NameRef, Union{Nothing, NameRef}, NTuple{2, NameRef}, Vector{NameRef})
+    reference_types = (NameRef, Union{Nothing, NameRef}, NTuple{2, NameRef},
+                       Vector{NameRef})
     for (block, T) in pairs(BLOCKS), field in fieldnames(T)
         refers = fieldtype(Base.unwrap_unionall(T), field) in reference_types
         @test refers == haskey(REFERENCES, (block, field))

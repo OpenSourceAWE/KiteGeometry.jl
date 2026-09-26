@@ -55,7 +55,9 @@ function resolve(component::Component, block, indices)
 end
 resolve(value, ::Nothing, indices) = value
 resolve(::Nothing, target::Symbol, indices) = nothing
-resolve(refs::Union{Tuple, Vector}, target::Symbol, indices) = resolve.(refs, target, (indices,))
+function resolve(refs::Union{Tuple, Vector}, target::Symbol, indices)
+    return resolve.(refs, target, (indices,))
+end
 function resolve(name::String, target::Symbol, indices)
     haskey(indices[target], name) || throw(ArgumentError("no $target named $name"))
     return indices[target][name]
@@ -81,8 +83,9 @@ function SystemDefinition(document::AbstractDict)
                          for field in fieldnames(Metadata))...)
     components = (block => read_table(BLOCKS[block], document[String(block)])
                   for block in keys(BLOCKS) if haskey(document, String(block)))
-    extras = OrderedDict{String, Any}(name => block for (name, block) in document
-                                      if name != "metadata" && !haskey(BLOCKS, Symbol(name)))
+    extras = OrderedDict{String, Any}(
+        name => block for (name, block) in document
+        if name != "metadata" && !haskey(BLOCKS, Symbol(name)))
     return SystemDefinition(; metadata, extras, components...)
 end
 
@@ -108,7 +111,7 @@ function read_table(T, table)
     rows = T[]
     for row in table["data"]
         length(row) == length(headers) ||
-            throw(ArgumentError("a $T row has $(length(row)) of $(length(headers)) columns"))
+            throw(ArgumentError("a $T row has $(length(row)) of $(length(headers)) cells"))
         extras = OrderedDict{String, Any}(zip(headers[(n + 1):end], row[(n + 1):end]))
         push!(rows, T(; zip(columns, row[1:n])..., extras))
     end

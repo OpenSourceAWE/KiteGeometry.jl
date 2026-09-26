@@ -22,7 +22,7 @@ makedocs(;
         canonical="https://OpenSourceAWE.github.io/KiteGeometry.jl",
         assets=String[],
     ),
-    pages=["Home" => "index.md"],
+    pages=["Home" => "index.md", "System definition" => "structure.md"],
 )
 
 deploydocs(;

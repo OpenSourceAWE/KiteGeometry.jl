@@ -33,4 +33,3 @@ end
 The model registered under `name`, or `PlainTube` for `nothing` or an unregistered name.
 """
 tube_model(name) = get(TUBE_MODELS, name, PlainTube)
-tube_model(::Nothing) = PlainTube
