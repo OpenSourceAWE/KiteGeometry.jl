@@ -20,7 +20,8 @@ const TUBE_MODELS = Dict{String, Type{<:AbstractTubeModel}}()
 """
     register_tube_model!(name, M)
 
-Make a tube whose `model` column reads `name` a `Tube{M}`.
+Make a tube whose `model` column reads `name` a `Tube{M}`. A package registering its models
+calls this from its `__init__`.
 """
 function register_tube_model!(name::AbstractString, M::Type{<:AbstractTubeModel})
     TUBE_MODELS[name] = M

@@ -54,7 +54,11 @@ end
     end
     document["aero_mesh"] = OrderedDict{String, Any}("panels" => 40)
     register_tube_model!("test_beam", TestBeam)
-    system = SystemDefinition(document)
+    system = try
+        SystemDefinition(document)
+    finally
+        delete!(KiteGeometry.TUBE_MODELS, "test_beam")
+    end
     @test system.tubes[1] isa Tube{TestBeam}
     @test system.tubes[2] isa Tube{PlainTube}
     @test collect(keys(system.tubes[1].extras)) == ["model", "colour"]
@@ -78,6 +82,29 @@ end
     @test_throws ArgumentError small_system(;
         tethers=[Tether(; name="main", start_point=3, end_point=2, segments=[1])])
     @test_throws ArgumentError small_system(; wings=[])
+end
+
+@testset "a point count the points disagree with is refused" begin
+    points = small_system().points
+    metadata = Metadata("small", "", "", "1.0.0", "structure_schema.yml", 3, "0"^64)
+    @test_throws ArgumentError SystemDefinition(; metadata, points)
+end
+
+@testset "a system holding names still writes them" begin
+    system = small_system()
+    segments = [Segment(; name="line", points=("anchor", "kite"), l0=100, diameter=0.004,
+                        density=970, unit_stiffness=6e5)]
+    held_names = SystemDefinition(system.metadata, system.points, segments,
+                                  system.stations, system.pulleys, system.tethers,
+                                  system.winches, system.bodies, system.tubes,
+                                  system.extras)
+    @test structure_document(held_names) == structure_document(system)
+end
+
+@testset "rows whose extra columns differ are refused on writing" begin
+    system = small_system()
+    system.points[2].extras["colour"] = "red"
+    @test_throws ArgumentError structure_document(system)
 end
 
 @testset "constructors fill in the defaults" begin

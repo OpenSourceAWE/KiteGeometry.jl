@@ -21,11 +21,15 @@ const REFERENCES = Dict(
 
 A system definition from its components, every reference resolved to the index of the
 component it names. Absent blocks are empty; `extras` holds blocks the schema does not name.
+Refuses a `metadata.n_points` that is not the number of points.
 """
 function SystemDefinition(; metadata::Metadata, extras=OrderedDict{String, Any}(),
                           components...)
     unknown = setdiff(keys(components), keys(BLOCKS))
     isempty(unknown) || throw(ArgumentError("no block named $(join(unknown, ", "))"))
+    n_points = length(get(components, :points, ()))
+    metadata.n_points == n_points ||
+        throw(ArgumentError("metadata.n_points is $(metadata.n_points), not $n_points"))
     blocks = NamedTuple{keys(BLOCKS)}(
         convert(Vector{BLOCKS[block]}, get(components, block, BLOCKS[block][]))
         for block in keys(BLOCKS))
@@ -142,6 +146,10 @@ end
 function write_table(system, block, rows)
     columns = required_columns(BLOCKS[block])
     extra_headers = isempty(rows) ? String[] : collect(keys(first(rows).extras))
+    for row in rows
+        collect(keys(row.extras)) == extra_headers ||
+            throw(ArgumentError("$block rows carry different extra columns"))
+    end
     data = [Any[(document_value(getfield(row, column),
                                 get(REFERENCES, (block, column), nothing), system)
                  for column in columns)..., values(row.extras)...] for row in rows]
@@ -156,6 +164,7 @@ document_value(value::SVector, ::Nothing, system) = collect(value)
 document_value(value::SMatrix, ::Nothing, system) = [collect(row) for row in eachrow(value)]
 document_value(::Nothing, target::Symbol, system) = nothing
 document_value(index::Int, target::Symbol, system) = getfield(system, target)[index].name
+document_value(name::String, target::Symbol, system) = name
 function document_value(refs::Union{Tuple, Vector}, target::Symbol, system)
     return [document_value(ref, target, system) for ref in refs]
 end

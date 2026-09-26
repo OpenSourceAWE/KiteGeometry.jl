@@ -75,7 +75,9 @@ definition(item) = last(split(item["\$ref"], "/"))
 
 """`(header, Julia type, description)` of every required column of `block`."""
 function columns(block, spec)
-    table = spec["allOf"][2]["properties"]
+    parts = filter(part -> haskey(part, "properties"), spec["allOf"])
+    length(parts) == 1 || error("block $block has no single allOf entry with properties")
+    table = only(parts)["properties"]
     headers = table["headers"]["items"]
     items = table["data"]["items"]["items"]
     fields = Tuple{String, String, String}[]
