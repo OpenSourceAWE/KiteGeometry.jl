@@ -18,8 +18,8 @@ using OrderedCollections: OrderedDict
 using StaticArrays: SMatrix, SVector
 using YAML: YAML
 
-export SystemDefinition, Metadata, Point, Segment, Station, Pulley, Tether, Winch, Body,
-       Tube
+export SystemDefinition, Metadata, Point, Segment, Station, Pulley, Tether, Winch, Wing,
+       CanopyFace, Body, Tube
 export DynamicsType, DYNAMIC, STATIC, BODY_STATIC, KINEMATIC
 export NameRef, AbstractTubeModel, PlainTube, register_tube_model!, tube_model
 export load_structure, structure_document

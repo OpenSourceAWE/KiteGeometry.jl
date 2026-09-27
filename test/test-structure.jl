@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Bart van de Lint
 # SPDX-License-Identifier: MIT
 
-using KiteGeometry: BLOCKS, REFERENCES, NameRef
+using KiteGeometry: BLOCKS, REFERENCES, UNITS, NameRef
 using OrderedCollections: OrderedDict
 using StaticArrays: SVector
 using YAML
@@ -33,6 +33,10 @@ end
     @test system.bodies[point.body].name == document["points"]["data"][1][3]
     @test point.pos_ENU isa SVector{3, Float64}
     @test all(tube -> tube isa Tube{PlainTube}, system.tubes)
+    face = system.canopy_faces[1]
+    @test system.wings[face.wing].name == document["canopy_faces"]["data"][1][2]
+    @test system.stations[1].wing == face.wing
+    @test isempty(system.extra_units)
     @test isempty(system.extras)
 end
 
@@ -49,6 +53,7 @@ end
     document = fixture_document()
     tubes = document["tubes"]
     push!(tubes["headers"], "model", "colour")
+    push!(tubes["units"], "-", "-")
     for (i, row) in enumerate(tubes["data"])
         push!(row, isodd(i) ? "test_beam" : "unknown_beam", "red")
     end
@@ -62,6 +67,7 @@ end
     @test system.tubes[1] isa Tube{TestBeam}
     @test system.tubes[2] isa Tube{PlainTube}
     @test collect(keys(system.tubes[1].extras)) == ["model", "colour"]
+    @test system.extra_units["tubes"] == OrderedDict("model" => "-", "colour" => "-")
     @test collect(keys(system.extras)) == ["aero_mesh"]
     written = structure_document(system)
     @test written == document
@@ -81,7 +87,7 @@ end
                         segments=["line"])])
     @test_throws ArgumentError small_system(;
         tethers=[Tether(; name="main", start_point=3, end_point=2, segments=[1])])
-    @test_throws ArgumentError small_system(; wings=[])
+    @test_throws ArgumentError small_system(; rudders=[])
 end
 
 @testset "a point count the points disagree with is refused" begin
@@ -96,7 +102,8 @@ end
                         density=970, unit_stiffness=6e5)]
     held_names = SystemDefinition(system.metadata, system.points, segments,
                                   system.stations, system.pulleys, system.tethers,
-                                  system.winches, system.bodies, system.tubes,
+                                  system.winches, system.wings, system.canopy_faces,
+                                  system.bodies, system.tubes, system.extra_units,
                                   system.extras)
     @test structure_document(held_names) == structure_document(system)
 end
@@ -105,6 +112,14 @@ end
     system = small_system()
     system.points[2].extras["colour"] = "red"
     @test_throws ArgumentError structure_document(system)
+end
+
+@testset "an extra column without a unit is refused on writing" begin
+    system = small_system()
+    foreach(point -> point.extras["colour"] = "red", system.points)
+    @test_throws ArgumentError structure_document(system)
+    system.extra_units["points"] = OrderedDict("colour" => "-")
+    @test structure_document(system)["points"]["units"] == [UNITS.points..., "-"]
 end
 
 @testset "constructors fill in the defaults" begin
@@ -124,5 +139,13 @@ end
     document = fixture_document()
     headers = document["segments"]["headers"]
     headers[3], headers[4] = headers[4], headers[3]
+    @test_throws ArgumentError SystemDefinition(document)
+end
+
+@testset "a table whose units are not the schema's is refused" begin
+    document = fixture_document()
+    document["segments"]["units"][3] = "mm"
+    @test_throws ArgumentError SystemDefinition(document)
+    delete!(document["segments"], "units")
     @test_throws ArgumentError SystemDefinition(document)
 end

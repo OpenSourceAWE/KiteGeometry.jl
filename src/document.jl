@@ -5,6 +5,7 @@
 const REFERENCES = Dict(
     (:points, :body) => :bodies,
     (:segments, :points) => :points,
+    (:stations, :wing) => :wings,
     (:stations, :points) => :points,
     (:pulleys, :segments) => :segments,
     (:tethers, :start_point) => :points,
@@ -12,19 +13,23 @@ const REFERENCES = Dict(
     (:tethers, :segments) => :segments,
     (:winches, :tethers) => :tethers,
     (:winches, :winch_point) => :points,
+    (:canopy_faces, :wing) => :wings,
+    (:canopy_faces, :points) => :points,
     (:tubes, :bodies) => :bodies,
 )
 
 """
     SystemDefinition(; metadata, points, segments, stations, pulleys, tethers, winches,
-                     bodies, tubes, extras)
+                     wings, canopy_faces, bodies, tubes, extra_units, extras)
 
 A system definition from its components, every reference resolved to the index of the
-component it names. Absent blocks are empty; `extras` holds blocks the schema does not name.
-Refuses a `metadata.n_points` that is not the number of points.
+component it names. Absent blocks are empty; `extra_units` holds the unit of each extra
+column by block and header, `extras` the blocks the schema does not name. Refuses a
+`metadata.n_points` that is not the number of points.
 """
-function SystemDefinition(; metadata::Metadata, extras=OrderedDict{String, Any}(),
-                          components...)
+function SystemDefinition(; metadata::Metadata,
+                          extra_units=OrderedDict{String, OrderedDict{String, String}}(),
+                          extras=OrderedDict{String, Any}(), components...)
     unknown = setdiff(keys(components), keys(BLOCKS))
     isempty(unknown) || throw(ArgumentError("no block named $(join(unknown, ", "))"))
     n_points = length(get(components, :points, ()))
@@ -37,7 +42,7 @@ function SystemDefinition(; metadata::Metadata, extras=OrderedDict{String, Any}(
                                        for block in keys(BLOCKS))
     resolved = ([resolve(component, block, indices) for component in blocks[block]]
                 for block in keys(BLOCKS))
-    return SystemDefinition(metadata, resolved..., extras)
+    return SystemDefinition(metadata, resolved..., extra_units, extras)
 end
 
 """The index of each component of `rows` by its name, refusing a name used twice."""
@@ -76,7 +81,8 @@ end
     SystemDefinition(document::AbstractDict)
 
 The system definition a parsed awesIO structure document describes, with the columns and
-blocks the schema does not name kept as `extras`, in the order read.
+blocks the schema does not name kept as `extras`, in the order read, and those columns'
+units as `extra_units`.
 """
 function SystemDefinition(document::AbstractDict)
     for block in REQUIRED_BLOCKS
@@ -85,12 +91,15 @@ function SystemDefinition(document::AbstractDict)
     fields = document["metadata"]
     metadata = Metadata((to_field(fieldtype(Metadata, field), fields[String(field)])
                          for field in fieldnames(Metadata))...)
-    components = (block => read_table(BLOCKS[block], document[String(block)])
-                  for block in keys(BLOCKS) if haskey(document, String(block)))
+    tables = [block => read_table(block, document[String(block)])
+              for block in keys(BLOCKS) if haskey(document, String(block))]
+    components = (block => rows for (block, (rows, _)) in tables)
+    extra_units = OrderedDict{String, OrderedDict{String, String}}(
+        String(block) => units for (block, (_, units)) in tables if !isempty(units))
     extras = OrderedDict{String, Any}(
         name => block for (name, block) in document
         if name != "metadata" && !haskey(BLOCKS, Symbol(name)))
-    return SystemDefinition(; metadata, extras, components...)
+    return SystemDefinition(; metadata, extra_units, extras, components...)
 end
 
 """
@@ -105,13 +114,20 @@ end
 """The names of the columns of `T` that the schema requires, in order."""
 required_columns(T) = filter(!=(:extras), fieldnames(T))
 
-"""The components of type `T` in a `headers`/`data` table."""
-function read_table(T, table)
+"""The components in the `headers`/`units`/`data` table of `block`, and the unit of each
+of its extra columns by header."""
+function read_table(block, table)
+    T = BLOCKS[block]
     headers = table["headers"]
+    units = get(table, "units", nothing)
     columns = required_columns(T)
     n = length(columns)
     length(headers) >= n && Symbol.(headers[1:n]) == collect(columns) ||
-        throw(ArgumentError("$T headers must open with $(join(columns, ", "))"))
+        throw(ArgumentError("$block headers must open with $(join(columns, ", "))"))
+    !isnothing(units) && length(units) == length(headers) ||
+        throw(ArgumentError("$block needs one unit per header"))
+    Tuple(units[1:n]) == UNITS[block] ||
+        throw(ArgumentError("$block units must open with $(join(UNITS[block], ", "))"))
     rows = T[]
     for row in table["data"]
         length(row) == length(headers) ||
@@ -119,7 +135,7 @@ function read_table(T, table)
         extras = OrderedDict{String, Any}(zip(headers[(n + 1):end], row[(n + 1):end]))
         push!(rows, T(; zip(columns, row[1:n])..., extras))
     end
-    return rows
+    return rows, OrderedDict{String, String}(zip(headers[(n + 1):end], units[(n + 1):end]))
 end
 
 """
@@ -142,7 +158,7 @@ function structure_document(system::SystemDefinition)
     return merge!(document, system.extras)
 end
 
-"""The `headers`/`data` table of the components `rows` of `block`."""
+"""The `headers`/`units`/`data` table of the components `rows` of `block`."""
 function write_table(system, block, rows)
     columns = required_columns(BLOCKS[block])
     extra_headers = isempty(rows) ? String[] : collect(keys(first(rows).extras))
@@ -150,11 +166,18 @@ function write_table(system, block, rows)
         collect(keys(row.extras)) == extra_headers ||
             throw(ArgumentError("$block rows carry different extra columns"))
     end
+    units = get(system.extra_units, String(block), OrderedDict{String, String}())
+    for header in extra_headers
+        haskey(units, header) ||
+            throw(ArgumentError("no unit for the extra column $header of $block"))
+    end
     data = [Any[(document_value(getfield(row, column),
                                 get(REFERENCES, (block, column), nothing), system)
                  for column in columns)..., values(row.extras)...] for row in rows]
-    return OrderedDict{String, Any}("headers" => [String.(columns)..., extra_headers...],
-                                    "data" => data)
+    return OrderedDict{String, Any}(
+        "headers" => [String.(columns)..., extra_headers...],
+        "units" => [UNITS[block]..., (units[header] for header in extra_headers)...],
+        "data" => data)
 end
 
 """`value` as a structure document writes it, a reference into `target` by name."""
