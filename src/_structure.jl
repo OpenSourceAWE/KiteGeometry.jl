@@ -49,7 +49,7 @@ struct Metadata
 end
 
 """
-    Point
+    Point{M}
 
 A row of the `points` block. Mass points.
 
@@ -64,9 +64,11 @@ A row of the `points` block. Mass points.
 - `extra_mass::Float64` [kg]: Mass the point carries beyond its segments and canopy faces.
 - `drag_area::Float64` [m^2]: Cross-sectional area the point's drag acts on.
 - `drag_coefficient::Float64` [-]: Drag coefficient referred to `drag_area`.
-- `extras::OrderedDict{String, Any}`: columns the schema does not name, in the order read
+- `model::M`: the model the `model` column names, else `NoModel`
+- `extras::OrderedDict{String, Any}`: columns the schema and the model do not name, in the
+  order read
 """
-struct Point <: Component
+struct Point{M <: AbstractModel} <: Component
     name::String
     type::DynamicsType
     body::Union{Nothing, NameRef}
@@ -74,11 +76,12 @@ struct Point <: Component
     extra_mass::Float64
     drag_area::Float64
     drag_coefficient::Float64
+    model::M
     extras::OrderedDict{String, Any}
 end
 
 """
-    Segment
+    Segment{M}
 
 A row of the `segments` block. Straight elastic elements between two points.
 
@@ -89,20 +92,23 @@ A row of the `segments` block. Straight elastic elements between two points.
 - `density::Float64` [kg/m^3]: Density of the line's material.
 - `unit_stiffness::Union{Float64, String}` [N]: Axial stiffness times unstretched length, or
   the name of a nonlinear law.
-- `extras::OrderedDict{String, Any}`: columns the schema does not name, in the order read
+- `model::M`: the model the `model` column names, else `NoModel`
+- `extras::OrderedDict{String, Any}`: columns the schema and the model do not name, in the
+  order read
 """
-struct Segment <: Component
+struct Segment{M <: AbstractModel} <: Component
     name::String
     points::NTuple{2, NameRef}
     l0::Float64
     diameter::Float64
     density::Float64
     unit_stiffness::Union{Float64, String}
+    model::M
     extras::OrderedDict{String, Any}
 end
 
 """
-    Station
+    Station{M}
 
 A row of the `stations` block. Chordwise sections of a wing. A station's points give the
 local chord, from which a reader derives the section's angle of attack and, where the points
@@ -118,18 +124,21 @@ of its KA frame.
   station. STATIC: the twist is a prescribed control input. KINEMATIC: the twist is
   prescribed by geometry, such as a flap hinged between two bodies.
 - `points::Vector{NameRef}`: The points the section is made of.
-- `extras::OrderedDict{String, Any}`: columns the schema does not name, in the order read
+- `model::M`: the model the `model` column names, else `NoModel`
+- `extras::OrderedDict{String, Any}`: columns the schema and the model do not name, in the
+  order read
 """
-struct Station <: Component
+struct Station{M <: AbstractModel} <: Component
     name::String
     wing::NameRef
     type::DynamicsType
     points::Vector{NameRef}
+    model::M
     extras::OrderedDict{String, Any}
 end
 
 """
-    Pulley
+    Pulley{M}
 
 A row of the `pulleys` block.
 
@@ -139,18 +148,21 @@ A row of the `pulleys` block.
   state.
 - `efficiency::Float64` [-]: Fraction of the line tension the pulley passes on; the rest
   opposes travel.
-- `extras::OrderedDict{String, Any}`: columns the schema does not name, in the order read
+- `model::M`: the model the `model` column names, else `NoModel`
+- `extras::OrderedDict{String, Any}`: columns the schema and the model do not name, in the
+  order read
 """
-struct Pulley <: Component
+struct Pulley{M <: AbstractModel} <: Component
     name::String
     segments::NTuple{2, NameRef}
     type::DynamicsType
     efficiency::Float64
+    model::M
     extras::OrderedDict{String, Any}
 end
 
 """
-    Tether
+    Tether{M}
 
 A row of the `tethers` block. Ordered runs of segments between two points. Material lives on
 the segments; a tether is the grouping a winch reels, and the length it is reeled from is
@@ -161,18 +173,21 @@ its segments' `l0`.
 - `end_point::NameRef`: The point the tether ends at.
 - `segments::Vector{NameRef}`: The tether's segments, in order from `start_point` to
   `end_point`.
-- `extras::OrderedDict{String, Any}`: columns the schema does not name, in the order read
+- `model::M`: the model the `model` column names, else `NoModel`
+- `extras::OrderedDict{String, Any}`: columns the schema and the model do not name, in the
+  order read
 """
-struct Tether <: Component
+struct Tether{M <: AbstractModel} <: Component
     name::String
     start_point::NameRef
     end_point::NameRef
     segments::Vector{NameRef}
+    model::M
     extras::OrderedDict{String, Any}
 end
 
 """
-    Winch
+    Winch{M}
 
 A row of the `winches` block.
 
@@ -181,19 +196,22 @@ A row of the `winches` block.
 - `winch_point::NameRef`: The point the drum sits at.
 - `gear_ratio::Float64` [-]: Gear ratio of the drive to the drum.
 - `drum_radius::Float64` [m]: Radius of the drum.
-- `extras::OrderedDict{String, Any}`: columns the schema does not name, in the order read
+- `model::M`: the model the `model` column names, else `NoModel`
+- `extras::OrderedDict{String, Any}`: columns the schema and the model do not name, in the
+  order read
 """
-struct Winch <: Component
+struct Winch{M <: AbstractModel} <: Component
     name::String
     tethers::Vector{NameRef}
     winch_point::NameRef
     gear_ratio::Float64
     drum_radius::Float64
+    model::M
     extras::OrderedDict{String, Any}
 end
 
 """
-    Wing
+    Wing{M}
 
 A row of the `wings` block. Lifting surfaces, each with the stations that section it and at
 most one canopy, meshed by the `canopy_faces` that name the wing.
@@ -201,16 +219,19 @@ most one canopy, meshed by the `canopy_faces` that name the wing.
 - `name::String`: Unique name of the wing.
 - `canopy_material::Union{Nothing, String}`: The fabric every face of the wing's canopy is
   made of, or null where the wing has no canopy.
-- `extras::OrderedDict{String, Any}`: columns the schema does not name, in the order read
+- `model::M`: the model the `model` column names, else `NoModel`
+- `extras::OrderedDict{String, Any}`: columns the schema and the model do not name, in the
+  order read
 """
-struct Wing <: Component
+struct Wing{M <: AbstractModel} <: Component
     name::String
     canopy_material::Union{Nothing, String}
+    model::M
     extras::OrderedDict{String, Any}
 end
 
 """
-    CanopyFace
+    CanopyFace{M}
 
 A row of the `canopy_faces` block. Triangles and quadrilaterals of fabric spanned between
 points, whose mass a reader shares among the corners. How the fabric carries load, as a
@@ -219,17 +240,20 @@ membrane or as springs along its edges, is the reader's model.
 - `name::String`: Unique name of the face.
 - `wing::NameRef`: The wing whose canopy the face belongs to.
 - `points::Vector{NameRef}`: The face's three or four corners, in order around it.
-- `extras::OrderedDict{String, Any}`: columns the schema does not name, in the order read
+- `model::M`: the model the `model` column names, else `NoModel`
+- `extras::OrderedDict{String, Any}`: columns the schema and the model do not name, in the
+  order read
 """
-struct CanopyFace <: Component
+struct CanopyFace{M <: AbstractModel} <: Component
     name::String
     wing::NameRef
     points::Vector{NameRef}
+    model::M
     extras::OrderedDict{String, Any}
 end
 
 """
-    Body
+    Body{M}
 
 A row of the `bodies` block. Rigid bodies. A body's KA frame is oriented as
 docs/source/conventions.rst defines `_KA` where the body has wing geometry, and as its
@@ -246,15 +270,18 @@ writer likes where it has no leading edge.
   about the body's origin, in its KA axes. Principal moments are the case where the KA axes
   are the principal axes and the tensor is diagonal; a tool that carries no rotational
   inertia writes zeros.
-- `extras::OrderedDict{String, Any}`: columns the schema does not name, in the order read
+- `model::M`: the model the `model` column names, else `NoModel`
+- `extras::OrderedDict{String, Any}`: columns the schema and the model do not name, in the
+  order read
 """
-struct Body <: Component
+struct Body{M <: AbstractModel} <: Component
     name::String
     type::DynamicsType
     pos_ENU::SVector{3, Float64}
     Q_KA_to_ENU::SVector{4, Float64}
     extra_mass::Float64
     extra_inertia_KA::SMatrix{3, 3, Float64, 9}
+    model::M
     extras::OrderedDict{String, Any}
 end
 
@@ -270,14 +297,17 @@ element: only a shape its `law` cannot hold, or a taper, is a chain of tubes.
 - `diameter::Float64` [m]: Diameter, one for the whole element.
 - `pressure::Float64` [Pa]: Inflation pressure.
 - `law::String`: The stiffness law the element's rigidities are derived from.
-- `extras::OrderedDict{String, Any}`: columns the schema does not name, in the order read
+- `model::M`: the model the `model` column names, else `NoModel`
+- `extras::OrderedDict{String, Any}`: columns the schema and the model do not name, in the
+  order read
 """
-struct Tube{M <: AbstractTubeModel} <: Component
+struct Tube{M <: AbstractModel} <: Component
     name::String
     bodies::NTuple{2, NameRef}
     diameter::Float64
     pressure::Float64
     law::String
+    model::M
     extras::OrderedDict{String, Any}
 end
 

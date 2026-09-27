@@ -39,7 +39,6 @@ COLUMN_TYPES = Dict(
     "dynamics_type" => "DynamicsType",
 )
 METADATA_TYPES = Dict("string" => "String", "integer" => "Int")
-MODEL_PARAMETERS = Dict("tubes" => "M <: AbstractTubeModel")
 
 """Julia type name of the rows of `block`: `bodies` gives `Body`, `canopy_faces`
 `CanopyFace`."""
@@ -114,15 +113,15 @@ end
 """Source of the struct holding one row of `block`."""
 function component_source(block, spec)
     fields = columns(block, spec)
-    push!(fields, ("extras", "OrderedDict{String, Any}",
-                   "columns the schema does not name, in the order read", "-"))
+    push!(fields,
+          ("model", "M", "the model the `model` column names, else `NoModel`", "-"),
+          ("extras", "OrderedDict{String, Any}",
+           "columns the schema and the model do not name, in the order read", "-"))
     name = type_name(block)
-    signature = haskey(MODEL_PARAMETERS, block) ? "$name{M}" : name
-    head = haskey(MODEL_PARAMETERS, block) ? "$name{$(MODEL_PARAMETERS[block])}" : name
     description = "A row of the `$block` block. " * get(spec, "description", "")
     body = join(("    $field::$type" for (field, type) in fields), "\n")
-    return docstring(signature, description, fields) *
-           "struct $head <: Component\n$body\nend\n"
+    return docstring("$name{M}", description, fields) *
+           "struct $name{M <: AbstractModel} <: Component\n$body\nend\n"
 end
 
 """Source of `Metadata`, from the schema's `metadata` object."""

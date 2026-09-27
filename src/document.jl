@@ -112,7 +112,7 @@ function load_structure(path)
 end
 
 """The names of the columns of `T` that the schema requires, in order."""
-required_columns(T) = filter(!=(:extras), fieldnames(T))
+required_columns(T) = filter(field -> field ∉ (:model, :extras), fieldnames(T))
 
 """The components in the `headers`/`units`/`data` table of `block`, and the unit of each
 of its extra columns by header."""
@@ -128,14 +128,34 @@ function read_table(block, table)
         throw(ArgumentError("$block needs one unit per header"))
     Tuple(units[1:n]) == UNITS[block] ||
         throw(ArgumentError("$block units must open with $(join(UNITS[block], ", "))"))
-    rows = T[]
     for row in table["data"]
-        length(row) == length(headers) ||
-            throw(ArgumentError("a $T row has $(length(row)) of $(length(headers)) cells"))
-        extras = OrderedDict{String, Any}(zip(headers[(n + 1):end], row[(n + 1):end]))
-        push!(rows, T(; zip(columns, row[1:n])..., extras))
+        length(row) == length(headers) || throw(ArgumentError(
+            "a $block row has $(length(row)) of $(length(headers)) cells"))
     end
+    extra_rows = [OrderedDict{String, Any}(zip(headers[(n + 1):end], row[(n + 1):end]))
+                  for row in table["data"]]
+    models = [model_type(block, get(extras, "model", nothing)) for extras in extra_rows]
+    taken = reduce(union, model_columns.(models); init=String[])
+    rows = [T(; zip(columns, row[1:n])..., model=read_model!(extras, M, taken), extras)
+            for (row, extras, M) in zip(table["data"], extra_rows, models)]
     return rows, OrderedDict{String, String}(zip(headers[(n + 1):end], units[(n + 1):end]))
+end
+
+"""The `M` in a row's `extras`, which lose the columns of every model in `taken` and, where
+`M` is registered, the `model` column. Refuses a cell of another model's column."""
+function read_model!(extras, M, taken)
+    for column in setdiff(taken, model_columns(M))
+        isnothing(extras[column]) ||
+            throw(ArgumentError("a row of model $M has a $column"))
+        delete!(extras, column)
+    end
+    M === NoModel && return NoModel()
+    delete!(extras, "model")
+    for column in model_columns(M)
+        haskey(extras, column) || throw(ArgumentError("model $M needs a $column column"))
+    end
+    return M((to_field(fieldtype(M, field), pop!(extras, String(field)))
+              for field in fieldnames(M))...)
 end
 
 """
@@ -158,26 +178,51 @@ function structure_document(system::SystemDefinition)
     return merge!(document, system.extras)
 end
 
-"""The `headers`/`units`/`data` table of the components `rows` of `block`."""
+"""The `headers`/`units`/`data` table of the components `rows` of `block`: the schema's
+columns, the `model` column and the columns of each row's model, then the extras."""
 function write_table(system, block, rows)
     columns = required_columns(BLOCKS[block])
-    extra_headers = isempty(rows) ? String[] : collect(keys(first(rows).extras))
+    extra_headers = isempty(rows) ? String[] : other_extras(first(rows))
     for row in rows
-        collect(keys(row.extras)) == extra_headers ||
+        other_extras(row) == extra_headers ||
             throw(ArgumentError("$block rows carry different extra columns"))
     end
+    named = any(row -> !isnothing(model_cell(row, block)), rows)
+    taken = reduce(union, (model_columns(typeof(row.model)) for row in rows);
+                   init=String[])
+    model_headers = [(named ? ["model"] : String[])..., taken...]
     units = get(system.extra_units, String(block), OrderedDict{String, String}())
-    for header in extra_headers
+    for header in [model_headers..., extra_headers...]
         haskey(units, header) ||
             throw(ArgumentError("no unit for the extra column $header of $block"))
     end
     data = [Any[(document_value(getfield(row, column),
                                 get(REFERENCES, (block, column), nothing), system)
-                 for column in columns)..., values(row.extras)...] for row in rows]
+                 for column in columns)...,
+                (named ? [model_cell(row, block)] : [])...,
+                (model_value(row.model, column) for column in taken)...,
+                (row.extras[header] for header in extra_headers)...] for row in rows]
     return OrderedDict{String, Any}(
-        "headers" => [String.(columns)..., extra_headers...],
-        "units" => [UNITS[block]..., (units[header] for header in extra_headers)...],
+        "headers" => [String.(columns)..., model_headers..., extra_headers...],
+        "units" => [UNITS[block]...,
+                    (units[header] for header in [model_headers..., extra_headers...])...],
         "data" => data)
+end
+
+"""The headers of a row's extra columns, its `model` column left out."""
+other_extras(row) = filter(!=("model"), collect(keys(row.extras)))
+
+"""The `model` cell of `row`: the name its model is registered under, or the name an
+unregistered model kept in `extras`."""
+function model_cell(row, block)
+    row.model isa NoModel && return get(row.extras, "model", nothing)
+    return model_name(block, typeof(row.model))
+end
+
+"""The cell of `model` in its `column`, `nothing` where the model has no such field."""
+function model_value(model, column)
+    hasfield(typeof(model), Symbol(column)) || return nothing
+    return document_value(getfield(model, Symbol(column)), nothing, nothing)
 end
 
 """`value` as a structure document writes it, a reference into `target` by name."""

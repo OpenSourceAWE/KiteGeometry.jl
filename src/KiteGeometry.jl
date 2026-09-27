@@ -21,7 +21,7 @@ using YAML: YAML
 export SystemDefinition, Metadata, Point, Segment, Station, Pulley, Tether, Winch, Wing,
        CanopyFace, Body, Tube
 export DynamicsType, DYNAMIC, STATIC, BODY_STATIC, KINEMATIC
-export NameRef, AbstractTubeModel, PlainTube, register_tube_model!, tube_model
+export NameRef, AbstractModel, NoModel, register_model!, model_type
 export load_structure, structure_document
 
 """
@@ -39,7 +39,7 @@ Supertype of the row types of the table blocks.
 """
 abstract type Component end
 
-include("tube_models.jl")
+include("models.jl")
 include("_structure.jl")
 include("components.jl")
 include("document.jl")

@@ -6,8 +6,9 @@ SPDX-License-Identifier: CC-BY-4.0
 ### Added
 
 - `SystemDefinition` and its components `Point`, `Segment`, `Station`, `Pulley`,
-  `Tether`, `Winch`, `Wing`, `CanopyFace`, `Body` and `Tube{M}`, generated from the awesIO
+  `Tether`, `Winch`, `Wing`, `CanopyFace`, `Body` and `Tube`, generated from the awesIO
   structure schema 1.0.0; `load_structure` reads a structure document and
-  `structure_document` writes one back, units, extra columns and blocks included. `register_tube_model!` maps a tube's `model`
-  column to `M`.
+  `structure_document` writes one back, units, extra columns and blocks included.
+- Every component `T{M}` carries a `model::M` whose fields it forwards;
+  `register_model!` maps a row's `model` column to `M`, built from its extra columns.
 - Julia 1.13 is supported.

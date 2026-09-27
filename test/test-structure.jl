@@ -6,11 +6,42 @@ using OrderedCollections: OrderedDict
 using StaticArrays: SVector
 using YAML
 
-struct TestBeam <: AbstractTubeModel end
+struct TestBeam <: AbstractModel
+    EA::Float64
+    EI::Float64
+end
+
+struct ShadowingBeam <: AbstractModel
+    diameter::Float64
+end
 
 const FIXTURE = joinpath(@__DIR__, "data", "v3_beam_structure.yml")
 
 fixture_document() = YAML.load_file(FIXTURE; dicttype=OrderedDict{String, Any})
+
+"""`f()` with `TestBeam` registered as the tube model `test_beam`."""
+function with_test_beam(f)
+    register_model!(:tubes, "test_beam", TestBeam)
+    try
+        return f()
+    finally
+        delete!(KiteGeometry.MODELS, (:tubes, "test_beam"))
+    end
+end
+
+"""The fixture with tube columns `model`, `EA`, `EI` and `colour`: odd tubes the registered
+`test_beam`, even ones an unknown model."""
+function modelled_document()
+    document = fixture_document()
+    tubes = document["tubes"]
+    push!(tubes["headers"], "model", "EA", "EI", "colour")
+    push!(tubes["units"], "-", "N", "N*m^2", "-")
+    for (i, row) in enumerate(tubes["data"])
+        cells = isodd(i) ? ("test_beam", 2e5, 40.0) : ("unknown_beam", nothing, nothing)
+        push!(row, cells..., "red")
+    end
+    return document
+end
 
 function small_system(; kwargs...)
     metadata = Metadata("small", "", "", "1.0.0", "structure_schema.yml", 2, "0"^64)
@@ -32,7 +63,7 @@ end
     @test point.type == BODY_STATIC
     @test system.bodies[point.body].name == document["points"]["data"][1][3]
     @test point.pos_ENU isa SVector{3, Float64}
-    @test all(tube -> tube isa Tube{PlainTube}, system.tubes)
+    @test all(tube -> tube isa Tube{NoModel}, system.tubes)
     face = system.canopy_faces[1]
     @test system.wings[face.wing].name == document["canopy_faces"]["data"][1][2]
     @test system.stations[1].wing == face.wing
@@ -50,29 +81,40 @@ end
 end
 
 @testset "extra columns and blocks come back as they were written" begin
-    document = fixture_document()
-    tubes = document["tubes"]
-    push!(tubes["headers"], "model", "colour")
-    push!(tubes["units"], "-", "-")
-    for (i, row) in enumerate(tubes["data"])
-        push!(row, isodd(i) ? "test_beam" : "unknown_beam", "red")
-    end
+    document = modelled_document()
     document["aero_mesh"] = OrderedDict{String, Any}("panels" => 40)
-    register_tube_model!("test_beam", TestBeam)
-    system = try
-        SystemDefinition(document)
-    finally
-        delete!(KiteGeometry.TUBE_MODELS, "test_beam")
-    end
+    system = with_test_beam(() -> SystemDefinition(document))
     @test system.tubes[1] isa Tube{TestBeam}
-    @test system.tubes[2] isa Tube{PlainTube}
-    @test collect(keys(system.tubes[1].extras)) == ["model", "colour"]
-    @test system.extra_units["tubes"] == OrderedDict("model" => "-", "colour" => "-")
+    @test system.tubes[2] isa Tube{NoModel}
+    @test collect(keys(system.tubes[1].extras)) == ["colour"]
+    @test collect(keys(system.tubes[2].extras)) == ["model", "colour"]
+    @test collect(keys(system.extra_units["tubes"])) == ["model", "EA", "EI", "colour"]
     @test collect(keys(system.extras)) == ["aero_mesh"]
-    written = structure_document(system)
+    written = with_test_beam(() -> structure_document(system))
     @test written == document
     @test collect(keys(written)) == collect(keys(document))
-    @test written["tubes"]["headers"] == tubes["headers"]
+end
+
+@testset "a model's columns are its fields, reached through the component" begin
+    system = with_test_beam(() -> SystemDefinition(modelled_document()))
+    tube = system.tubes[1]
+    @test tube.model == TestBeam(2e5, 40.0)
+    @test tube.EA == 2e5
+    @test :EI in propertynames(tube)
+    built = Tube(; name="le", bodies=("a", "b"), diameter=0.1, pressure=3e4,
+                 law="breukels2011", model=TestBeam(1, 2))
+    @test built isa Tube{TestBeam}
+    @test built.EI == 2
+end
+
+@testset "a model whose fields shadow the component's is refused" begin
+    @test_throws ArgumentError register_model!(:tubes, "shadowing", ShadowingBeam)
+end
+
+@testset "a cell in another model's column is refused" begin
+    document = modelled_document()
+    document["tubes"]["data"][2][end - 2] = 1.0
+    @test_throws ArgumentError with_test_beam(() -> SystemDefinition(document))
 end
 
 @testset "names in, indices held" begin
@@ -131,7 +173,7 @@ end
     @test body.Q_KA_to_ENU == [1, 0, 0, 0]
     @test iszero(body.extra_inertia_KA)
     @test Tube(; name="le", bodies=("a", "b"), diameter=0.1, pressure=3e4,
-               law="breukels2011") isa Tube{PlainTube}
+               law="breukels2011") isa Tube{NoModel}
     @test_throws ArgumentError Segment(; name="line", points=("a", "b"))
 end
 

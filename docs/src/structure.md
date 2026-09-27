@@ -35,13 +35,17 @@ DynamicsType
 NameRef
 ```
 
-## Tube models
+## Models
+
+Every component `T{M}` carries a `model::M`: the parameters a tool attaches to a row by
+naming a registered model in its `model` column, one extra column per field of `M`. A
+component reaches its model's fields as its own, so `tube.EA` reads `tube.model.EA`.
 
 ```@docs
-AbstractTubeModel
-PlainTube
-register_tube_model!
-tube_model
+AbstractModel
+NoModel
+register_model!
+model_type
 ```
 
 ## Internals
