@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: 2026 Bart van de Lint
+# SPDX-License-Identifier: MIT
+
+# The awesIO commit src/awesio/structure_schema.yml and test/data/v3_beam_structure.yml
+# are vendored from, unchanged, and src/_structure.jl is generated from.
+repository = "1-Bart-1/awesIO"
+commit = "ac112b0579d2253ea8dc9e51c1948d290cab3f7f"
+awesIO_version = "1.0.0"
