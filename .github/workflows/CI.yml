@@ -14,14 +14,14 @@ jobs:
   reuse-lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Run REUSE lint
         run: |
           docker run --rm --volume ${{ github.workspace }}:/data fsfe/reuse lint
   generated-types:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Fail where the vendored files differ from the recorded awesIO commit
         run: |
           repository=$(sed -n 's/^repository = "\(.*\)"$/\1/p' gen/awesio.toml)
