@@ -40,8 +40,10 @@ NameRef
 Every component `T{M}` carries a `model::M`: the parameters a tool attaches to a row by
 naming a registered model in its `model` column, one extra column per field of `M`, in the
 units the model was registered with. A row whose `model` is absent or unregistered is a
-`NoModel` component and its other extra columns are dropped. A component reaches its
-model's fields as its own, so `tube.EA` reads `tube.model.EA`.
+`NoModel` component. Reading refuses a filled cell in a column neither the schema nor the
+row's model names, an unregistered model's name included; `strict=false` drops those columns
+with a warning instead. A component reaches its model's fields as its own, so `tube.EA`
+reads `tube.model.EA`.
 
 ```@docs
 AbstractModel

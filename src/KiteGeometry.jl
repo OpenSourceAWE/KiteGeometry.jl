@@ -14,7 +14,7 @@ for more information.
 """
 module KiteGeometry
 
-using OrderedCollections: OrderedDict
+using OrderedCollections: OrderedDict, OrderedSet
 using StaticArrays: SMatrix, SVector
 using YAML: YAML
 

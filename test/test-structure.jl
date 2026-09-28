@@ -94,14 +94,28 @@ end
     @test collect(keys(written)) == collect(keys(document))
 end
 
-@testset "an unregistered model is no model, and columns no model names are dropped" begin
+"""The modelled fixture with a `colour` column no model names, and an unregistered model
+named in the second tube."""
+function unread_document()
     document = modelled_document()
     tubes = document["tubes"]
     push!(tubes["headers"], "colour")
     push!(tubes["units"], "-")
     foreach(row -> push!(row, "red"), tubes["data"])
     tubes["data"][2][end - 3] = "unknown_beam"
-    system = with_test_beam(() -> SystemDefinition(document))
+    return document
+end
+
+@testset "a filled column no schema field or registered model names is refused" begin
+    @test_throws "colour, model" with_test_beam(() -> SystemDefinition(unread_document()))
+    document = unread_document()
+    foreach(row -> row[end] = nothing, document["tubes"]["data"])
+    @test_throws "tubes columns model" with_test_beam(() -> SystemDefinition(document))
+end
+
+@testset "strict=false drops those columns with a warning, and the model is no model" begin
+    system = @test_logs (:warn, r"colour, model") with_test_beam(
+        () -> SystemDefinition(unread_document(); strict=false))
     @test system.tubes[1] isa Tube{TestBeam}
     @test system.tubes[2] isa Tube{NoModel}
     @test with_test_beam(() -> structure_document(system)) == modelled_document()

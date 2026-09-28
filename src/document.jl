@@ -76,20 +76,21 @@ function resolve(index::Int, target::Symbol, indices)
 end
 
 """
-    SystemDefinition(document::AbstractDict)
+    SystemDefinition(document::AbstractDict; strict=true)
 
 The system definition a parsed awesIO structure document describes. A row reads the columns
-of the model its `model` column registers and drops the other columns the schema does not
-name; the blocks the schema does not name are kept as `extras`, in the order read.
+of the model its `model` column registers; a filled cell in any other column the schema does
+not name is refused, or with `strict=false` dropped with a warning. The blocks the schema
+does not name are kept as `extras`, in the order read.
 """
-function SystemDefinition(document::AbstractDict)
+function SystemDefinition(document::AbstractDict; strict=true)
     for block in REQUIRED_BLOCKS
         haskey(document, String(block)) || throw(ArgumentError("no $block block"))
     end
     fields = document["metadata"]
     metadata = Metadata((to_field(fieldtype(Metadata, field), fields[String(field)])
                          for field in fieldnames(Metadata))...)
-    tables = (block => read_table(block, document[String(block)])
+    tables = (block => read_table(block, document[String(block)], strict)
               for block in keys(BLOCKS) if haskey(document, String(block)))
     extras = OrderedDict{String, Any}(
         name => block for (name, block) in document
@@ -98,19 +99,21 @@ function SystemDefinition(document::AbstractDict)
 end
 
 """
-    load_structure(path)
+    load_structure(path; strict=true)
 
-The `SystemDefinition` in the awesIO structure document at `path`.
+The `SystemDefinition` in the awesIO structure document at `path`, read as
+`SystemDefinition(document; strict)` reads it.
 """
-function load_structure(path)
-    return SystemDefinition(YAML.load_file(path; dicttype=OrderedDict{String, Any}))
+function load_structure(path; strict=true)
+    return SystemDefinition(YAML.load_file(path; dicttype=OrderedDict{String, Any}); strict)
 end
 
 """The names of the columns of `T` that the schema requires, in order."""
 required_columns(T) = filter(!=(:model), fieldnames(T))
 
-"""The components in the `headers`/`units`/`data` table of `block`."""
-function read_table(block, table)
+"""The components in the `headers`/`units`/`data` table of `block`, refusing a filled
+column they do not read unless `strict` is false, which warns."""
+function read_table(block, table, strict)
     T = BLOCKS[block]
     headers = table["headers"]
     units = get(table, "units", nothing)
@@ -127,9 +130,26 @@ function read_table(block, table)
             "a $block row has $(length(row)) of $(length(headers)) cells"))
     end
     model_column = findfirst(==("model"), headers)
-    return [T(; zip(columns, row[1:n])...,
-              model=read_model(block, headers, units, row, model_column))
-            for row in table["data"]]
+    components = T[]
+    unread = OrderedSet{String}()
+    for row in table["data"]
+        model = read_model(block, headers, units, row, model_column)
+        push!(components, T(; zip(columns, row[1:n])..., model))
+        union!(unread, unread_columns(headers[(n + 1):end], row[(n + 1):end], model))
+    end
+    isempty(unread) && return components
+    message = "$block columns $(join(unread, ", ")) name no field of the schema or of a " *
+              "registered model"
+    strict && throw(ArgumentError(message))
+    @warn "$message; dropping them"
+    return components
+end
+
+"""The `headers` of the filled `cells` that `model` does not read."""
+function unread_columns(headers, cells, model)
+    read = model isa NoModel ? () : ("model", String.(fieldnames(typeof(model)))...)
+    return (header for (header, cell) in zip(headers, cells)
+            if !isnothing(cell) && !(header in read))
 end
 
 """The model of `row` of `block`, read from the columns named after its fields: `NoModel`
