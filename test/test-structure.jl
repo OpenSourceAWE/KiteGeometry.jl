@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Bart van de Lint
 # SPDX-License-Identifier: MIT
 
-using KiteGeometry: BLOCKS, REFERENCES, UNITS, NameRef
+using KiteGeometry: BLOCKS, REFERENCES, NameRef
 using OrderedCollections: OrderedDict
 using StaticArrays: SVector
 using YAML
@@ -9,6 +9,10 @@ using YAML
 struct TestBeam <: AbstractModel
     EA::Float64
     EI::Float64
+end
+
+struct StiffBeam <: AbstractModel
+    EA::Float64
 end
 
 struct ShadowingBeam <: AbstractModel
@@ -21,7 +25,7 @@ fixture_document() = YAML.load_file(FIXTURE; dicttype=OrderedDict{String, Any})
 
 """`f()` with `TestBeam` registered as the tube model `test_beam`."""
 function with_test_beam(f)
-    register_model!(:tubes, "test_beam", TestBeam)
+    register_model!(:tubes, "test_beam", TestBeam, ("N", "N*m^2"))
     try
         return f()
     finally
@@ -29,16 +33,15 @@ function with_test_beam(f)
     end
 end
 
-"""The fixture with tube columns `model`, `EA`, `EI` and `colour`: odd tubes the registered
-`test_beam`, even ones an unknown model."""
+"""The fixture with tube columns `model`, `EA` and `EI`: odd tubes the registered
+`test_beam`, even ones no model."""
 function modelled_document()
     document = fixture_document()
     tubes = document["tubes"]
-    push!(tubes["headers"], "model", "EA", "EI", "colour")
-    push!(tubes["units"], "-", "N", "N*m^2", "-")
+    push!(tubes["headers"], "model", "EA", "EI")
+    push!(tubes["units"], "-", "N", "N*m^2")
     for (i, row) in enumerate(tubes["data"])
-        cells = isodd(i) ? ("test_beam", 2e5, 40.0) : ("unknown_beam", nothing, nothing)
-        push!(row, cells..., "red")
+        push!(row, (isodd(i) ? ("test_beam", 2e5, 40.0) : (nothing, nothing, nothing))...)
     end
     return document
 end
@@ -67,7 +70,6 @@ end
     face = system.canopy_faces[1]
     @test system.wings[face.wing].name == document["canopy_faces"]["data"][1][2]
     @test system.stations[1].wing == face.wing
-    @test isempty(system.extra_units)
     @test isempty(system.extras)
 end
 
@@ -80,19 +82,40 @@ end
     end
 end
 
-@testset "extra columns and blocks come back as they were written" begin
+@testset "model columns and extra blocks come back as they were written" begin
     document = modelled_document()
     document["aero_mesh"] = OrderedDict{String, Any}("panels" => 40)
     system = with_test_beam(() -> SystemDefinition(document))
     @test system.tubes[1] isa Tube{TestBeam}
     @test system.tubes[2] isa Tube{NoModel}
-    @test collect(keys(system.tubes[1].extras)) == ["colour"]
-    @test collect(keys(system.tubes[2].extras)) == ["model", "colour"]
-    @test collect(keys(system.extra_units["tubes"])) == ["model", "EA", "EI", "colour"]
     @test collect(keys(system.extras)) == ["aero_mesh"]
     written = with_test_beam(() -> structure_document(system))
     @test written == document
     @test collect(keys(written)) == collect(keys(document))
+end
+
+@testset "an unregistered model is no model, and columns no model names are dropped" begin
+    document = modelled_document()
+    tubes = document["tubes"]
+    push!(tubes["headers"], "colour")
+    push!(tubes["units"], "-")
+    foreach(row -> push!(row, "red"), tubes["data"])
+    tubes["data"][2][end - 3] = "unknown_beam"
+    system = with_test_beam(() -> SystemDefinition(document))
+    @test system.tubes[1] isa Tube{TestBeam}
+    @test system.tubes[2] isa Tube{NoModel}
+    @test with_test_beam(() -> structure_document(system)) == modelled_document()
+end
+
+@testset "a model column absent or in another unit is refused" begin
+    document = modelled_document()
+    document["tubes"]["units"][end - 1] = "kN"
+    @test_throws ArgumentError with_test_beam(() -> SystemDefinition(document))
+    document = modelled_document()
+    pop!(document["tubes"]["headers"])
+    pop!(document["tubes"]["units"])
+    foreach(pop!, document["tubes"]["data"])
+    @test_throws ArgumentError with_test_beam(() -> SystemDefinition(document))
 end
 
 @testset "a model's columns are its fields, reached through the component" begin
@@ -108,13 +131,11 @@ end
 end
 
 @testset "a model whose fields shadow the component's is refused" begin
-    @test_throws ArgumentError register_model!(:tubes, "shadowing", ShadowingBeam)
+    @test_throws ArgumentError register_model!(:tubes, "shadowing", ShadowingBeam, ("m",))
 end
 
-@testset "a cell in another model's column is refused" begin
-    document = modelled_document()
-    document["tubes"]["data"][2][end - 2] = 1.0
-    @test_throws ArgumentError with_test_beam(() -> SystemDefinition(document))
+@testset "a model registered without one unit per field is refused" begin
+    @test_throws ArgumentError register_model!(:tubes, "test_beam", TestBeam, ("N",))
 end
 
 @testset "names in, indices held" begin
@@ -145,23 +166,23 @@ end
     held_names = SystemDefinition(system.metadata, system.points, segments,
                                   system.stations, system.pulleys, system.tethers,
                                   system.winches, system.wings, system.canopy_faces,
-                                  system.bodies, system.tubes, system.extra_units,
-                                  system.extras)
+                                  system.bodies, system.tubes, system.extras)
     @test structure_document(held_names) == structure_document(system)
 end
 
-@testset "rows whose extra columns differ are refused on writing" begin
-    system = small_system()
-    system.points[2].extras["colour"] = "red"
-    @test_throws ArgumentError structure_document(system)
-end
-
-@testset "an extra column without a unit is refused on writing" begin
-    system = small_system()
-    foreach(point -> point.extras["colour"] = "red", system.points)
-    @test_throws ArgumentError structure_document(system)
-    system.extra_units["points"] = OrderedDict("colour" => "-")
-    @test structure_document(system)["points"]["units"] == [UNITS.points..., "-"]
+@testset "models giving one column two units are refused on writing" begin
+    tubes = [Tube(; name="le", bodies=("a", "b"), diameter=0.1, pressure=3e4,
+                  law="breukels2011", model=TestBeam(1, 2)),
+             Tube(; name="te", bodies=("a", "b"), diameter=0.1, pressure=3e4,
+                  law="breukels2011", model=StiffBeam(3))]
+    system = small_system(; bodies=[Body(; name="a", pos_ENU=[0, 0, 0]),
+                                    Body(; name="b", pos_ENU=[0, 0, 1])], tubes)
+    register_model!(:tubes, "stiff_beam", StiffBeam, ("kN",))
+    try
+        @test_throws ArgumentError with_test_beam(() -> structure_document(system))
+    finally
+        delete!(KiteGeometry.MODELS, (:tubes, "stiff_beam"))
+    end
 end
 
 @testset "constructors fill in the defaults" begin

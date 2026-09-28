@@ -113,10 +113,7 @@ end
 """Source of the struct holding one row of `block`."""
 function component_source(block, spec)
     fields = columns(block, spec)
-    push!(fields,
-          ("model", "M", "the model the `model` column names, else `NoModel`", "-"),
-          ("extras", "OrderedDict{String, Any}",
-           "columns the schema and the model do not name, in the order read", "-"))
+    push!(fields, ("model", "M", "the model the `model` column names, else `NoModel`", "-"))
     name = type_name(block)
     description = "A row of the `$block` block. " * get(spec, "description", "")
     body = join(("    $field::$type" for (field, type) in fields), "\n")
@@ -151,9 +148,7 @@ function system_source(schema, blocks)
     for (block, _) in blocks
         push!(fields, (block, "Vector{$(type_name(block))}", "the rows of `$block`", "-"))
     end
-    push!(fields, ("extra_units", "OrderedDict{String, OrderedDict{String, String}}",
-                   "the unit of each extra column, by block and header", "-"),
-          ("extras", "OrderedDict{String, Any}",
+    push!(fields, ("extras", "OrderedDict{String, Any}",
            "blocks the schema does not name, in the order read", "-"))
     body = join(("    $field::$type" for (field, type) in fields), "\n")
     table = join(("    $block = $(type_name(block)),\n" for (block, _) in blocks))

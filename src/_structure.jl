@@ -65,8 +65,6 @@ A row of the `points` block. Mass points.
 - `drag_area::Float64` [m^2]: Cross-sectional area the point's drag acts on.
 - `drag_coefficient::Float64` [-]: Drag coefficient referred to `drag_area`.
 - `model::M`: the model the `model` column names, else `NoModel`
-- `extras::OrderedDict{String, Any}`: columns the schema and the model do not name, in the
-  order read
 """
 struct Point{M <: AbstractModel} <: Component
     name::String
@@ -77,7 +75,6 @@ struct Point{M <: AbstractModel} <: Component
     drag_area::Float64
     drag_coefficient::Float64
     model::M
-    extras::OrderedDict{String, Any}
 end
 
 """
@@ -93,8 +90,6 @@ A row of the `segments` block. Straight elastic elements between two points.
 - `unit_stiffness::Union{Float64, String}` [N]: Axial stiffness times unstretched length, or
   the name of a nonlinear law.
 - `model::M`: the model the `model` column names, else `NoModel`
-- `extras::OrderedDict{String, Any}`: columns the schema and the model do not name, in the
-  order read
 """
 struct Segment{M <: AbstractModel} <: Component
     name::String
@@ -104,7 +99,6 @@ struct Segment{M <: AbstractModel} <: Component
     density::Float64
     unit_stiffness::Union{Float64, String}
     model::M
-    extras::OrderedDict{String, Any}
 end
 
 """
@@ -125,8 +119,6 @@ of its KA frame.
   prescribed by geometry, such as a flap hinged between two bodies.
 - `points::Vector{NameRef}`: The points the section is made of.
 - `model::M`: the model the `model` column names, else `NoModel`
-- `extras::OrderedDict{String, Any}`: columns the schema and the model do not name, in the
-  order read
 """
 struct Station{M <: AbstractModel} <: Component
     name::String
@@ -134,7 +126,6 @@ struct Station{M <: AbstractModel} <: Component
     type::DynamicsType
     points::Vector{NameRef}
     model::M
-    extras::OrderedDict{String, Any}
 end
 
 """
@@ -149,8 +140,6 @@ A row of the `pulleys` block.
 - `efficiency::Float64` [-]: Fraction of the line tension the pulley passes on; the rest
   opposes travel.
 - `model::M`: the model the `model` column names, else `NoModel`
-- `extras::OrderedDict{String, Any}`: columns the schema and the model do not name, in the
-  order read
 """
 struct Pulley{M <: AbstractModel} <: Component
     name::String
@@ -158,7 +147,6 @@ struct Pulley{M <: AbstractModel} <: Component
     type::DynamicsType
     efficiency::Float64
     model::M
-    extras::OrderedDict{String, Any}
 end
 
 """
@@ -174,8 +162,6 @@ its segments' `l0`.
 - `segments::Vector{NameRef}`: The tether's segments, in order from `start_point` to
   `end_point`.
 - `model::M`: the model the `model` column names, else `NoModel`
-- `extras::OrderedDict{String, Any}`: columns the schema and the model do not name, in the
-  order read
 """
 struct Tether{M <: AbstractModel} <: Component
     name::String
@@ -183,7 +169,6 @@ struct Tether{M <: AbstractModel} <: Component
     end_point::NameRef
     segments::Vector{NameRef}
     model::M
-    extras::OrderedDict{String, Any}
 end
 
 """
@@ -197,8 +182,6 @@ A row of the `winches` block.
 - `gear_ratio::Float64` [-]: Gear ratio of the drive to the drum.
 - `drum_radius::Float64` [m]: Radius of the drum.
 - `model::M`: the model the `model` column names, else `NoModel`
-- `extras::OrderedDict{String, Any}`: columns the schema and the model do not name, in the
-  order read
 """
 struct Winch{M <: AbstractModel} <: Component
     name::String
@@ -207,7 +190,6 @@ struct Winch{M <: AbstractModel} <: Component
     gear_ratio::Float64
     drum_radius::Float64
     model::M
-    extras::OrderedDict{String, Any}
 end
 
 """
@@ -220,14 +202,11 @@ most one canopy, meshed by the `canopy_faces` that name the wing.
 - `canopy_material::Union{Nothing, String}`: The fabric every face of the wing's canopy is
   made of, or null where the wing has no canopy.
 - `model::M`: the model the `model` column names, else `NoModel`
-- `extras::OrderedDict{String, Any}`: columns the schema and the model do not name, in the
-  order read
 """
 struct Wing{M <: AbstractModel} <: Component
     name::String
     canopy_material::Union{Nothing, String}
     model::M
-    extras::OrderedDict{String, Any}
 end
 
 """
@@ -241,15 +220,12 @@ membrane or as springs along its edges, is the reader's model.
 - `wing::NameRef`: The wing whose canopy the face belongs to.
 - `points::Vector{NameRef}`: The face's three or four corners, in order around it.
 - `model::M`: the model the `model` column names, else `NoModel`
-- `extras::OrderedDict{String, Any}`: columns the schema and the model do not name, in the
-  order read
 """
 struct CanopyFace{M <: AbstractModel} <: Component
     name::String
     wing::NameRef
     points::Vector{NameRef}
     model::M
-    extras::OrderedDict{String, Any}
 end
 
 """
@@ -271,8 +247,6 @@ writer likes where it has no leading edge.
   are the principal axes and the tensor is diagonal; a tool that carries no rotational
   inertia writes zeros.
 - `model::M`: the model the `model` column names, else `NoModel`
-- `extras::OrderedDict{String, Any}`: columns the schema and the model do not name, in the
-  order read
 """
 struct Body{M <: AbstractModel} <: Component
     name::String
@@ -282,7 +256,6 @@ struct Body{M <: AbstractModel} <: Component
     extra_mass::Float64
     extra_inertia_KA::SMatrix{3, 3, Float64, 9}
     model::M
-    extras::OrderedDict{String, Any}
 end
 
 """
@@ -298,8 +271,6 @@ element: only a shape its `law` cannot hold, or a taper, is a chain of tubes.
 - `pressure::Float64` [Pa]: Inflation pressure.
 - `law::String`: The stiffness law the element's rigidities are derived from.
 - `model::M`: the model the `model` column names, else `NoModel`
-- `extras::OrderedDict{String, Any}`: columns the schema and the model do not name, in the
-  order read
 """
 struct Tube{M <: AbstractModel} <: Component
     name::String
@@ -308,7 +279,6 @@ struct Tube{M <: AbstractModel} <: Component
     pressure::Float64
     law::String
     model::M
-    extras::OrderedDict{String, Any}
 end
 
 """
@@ -328,8 +298,6 @@ does not name.
 - `canopy_faces::Vector{CanopyFace}`: the rows of `canopy_faces`
 - `bodies::Vector{Body}`: the rows of `bodies`
 - `tubes::Vector{Tube}`: the rows of `tubes`
-- `extra_units::OrderedDict{String, OrderedDict{String, String}}`: the unit of each extra
-  column, by block and header
 - `extras::OrderedDict{String, Any}`: blocks the schema does not name, in the order read
 """
 struct SystemDefinition
@@ -344,7 +312,6 @@ struct SystemDefinition
     canopy_faces::Vector{CanopyFace}
     bodies::Vector{Body}
     tubes::Vector{Tube}
-    extra_units::OrderedDict{String, OrderedDict{String, String}}
     extras::OrderedDict{String, Any}
 end
 

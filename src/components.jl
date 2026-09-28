@@ -8,7 +8,7 @@ const IDENTITY_QUATERNION = SVector(1.0, 0.0, 0.0, 0.0)
 
 The keyword arguments a `T(; kwargs...)` constructor fills in when they are not given.
 """
-defaults(::Type{<:Component}) = (; model=NoModel(), extras=OrderedDict{String, Any}())
+defaults(::Type{<:Component}) = (; model=NoModel())
 function defaults(::Type{<:Point})
     return (; type=DYNAMIC, body=nothing, extra_mass=0.0, drag_area=0.0,
             drag_coefficient=0.0, defaults(Component)...)

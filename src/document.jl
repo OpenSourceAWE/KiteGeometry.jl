@@ -20,16 +20,14 @@ const REFERENCES = Dict(
 
 """
     SystemDefinition(; metadata, points, segments, stations, pulleys, tethers, winches,
-                     wings, canopy_faces, bodies, tubes, extra_units, extras)
+                     wings, canopy_faces, bodies, tubes, extras)
 
 A system definition from its components, every reference resolved to the index of the
-component it names. Absent blocks are empty; `extra_units` holds the unit of each extra
-column by block and header, `extras` the blocks the schema does not name. Refuses a
-`metadata.n_points` that is not the number of points.
+component it names. Absent blocks are empty; `extras` holds the blocks the schema does not
+name. Refuses a `metadata.n_points` that is not the number of points.
 """
-function SystemDefinition(; metadata::Metadata,
-                          extra_units=OrderedDict{String, OrderedDict{String, String}}(),
-                          extras=OrderedDict{String, Any}(), components...)
+function SystemDefinition(; metadata::Metadata, extras=OrderedDict{String, Any}(),
+                          components...)
     unknown = setdiff(keys(components), keys(BLOCKS))
     isempty(unknown) || throw(ArgumentError("no block named $(join(unknown, ", "))"))
     n_points = length(get(components, :points, ()))
@@ -42,7 +40,7 @@ function SystemDefinition(; metadata::Metadata,
                                        for block in keys(BLOCKS))
     resolved = ([resolve(component, block, indices) for component in blocks[block]]
                 for block in keys(BLOCKS))
-    return SystemDefinition(metadata, resolved..., extra_units, extras)
+    return SystemDefinition(metadata, resolved..., extras)
 end
 
 """The index of each component of `rows` by its name, refusing a name used twice."""
@@ -80,9 +78,9 @@ end
 """
     SystemDefinition(document::AbstractDict)
 
-The system definition a parsed awesIO structure document describes, with the columns and
-blocks the schema does not name kept as `extras`, in the order read, and those columns'
-units as `extra_units`.
+The system definition a parsed awesIO structure document describes. A row reads the columns
+of the model its `model` column registers and drops the other columns the schema does not
+name; the blocks the schema does not name are kept as `extras`, in the order read.
 """
 function SystemDefinition(document::AbstractDict)
     for block in REQUIRED_BLOCKS
@@ -91,15 +89,12 @@ function SystemDefinition(document::AbstractDict)
     fields = document["metadata"]
     metadata = Metadata((to_field(fieldtype(Metadata, field), fields[String(field)])
                          for field in fieldnames(Metadata))...)
-    tables = [block => read_table(block, document[String(block)])
-              for block in keys(BLOCKS) if haskey(document, String(block))]
-    components = (block => rows for (block, (rows, _)) in tables)
-    extra_units = OrderedDict{String, OrderedDict{String, String}}(
-        String(block) => units for (block, (_, units)) in tables if !isempty(units))
+    tables = (block => read_table(block, document[String(block)])
+              for block in keys(BLOCKS) if haskey(document, String(block)))
     extras = OrderedDict{String, Any}(
         name => block for (name, block) in document
         if name != "metadata" && !haskey(BLOCKS, Symbol(name)))
-    return SystemDefinition(; metadata, extra_units, extras, components...)
+    return SystemDefinition(; metadata, extras, tables...)
 end
 
 """
@@ -112,10 +107,9 @@ function load_structure(path)
 end
 
 """The names of the columns of `T` that the schema requires, in order."""
-required_columns(T) = filter(field -> field ∉ (:model, :extras), fieldnames(T))
+required_columns(T) = filter(!=(:model), fieldnames(T))
 
-"""The components in the `headers`/`units`/`data` table of `block`, and the unit of each
-of its extra columns by header."""
+"""The components in the `headers`/`units`/`data` table of `block`."""
 function read_table(block, table)
     T = BLOCKS[block]
     headers = table["headers"]
@@ -132,37 +126,37 @@ function read_table(block, table)
         length(row) == length(headers) || throw(ArgumentError(
             "a $block row has $(length(row)) of $(length(headers)) cells"))
     end
-    extra_rows = [OrderedDict{String, Any}(zip(headers[(n + 1):end], row[(n + 1):end]))
-                  for row in table["data"]]
-    models = [model_type(block, get(extras, "model", nothing)) for extras in extra_rows]
-    taken = reduce(union, model_columns.(models); init=String[])
-    rows = [T(; zip(columns, row[1:n])..., model=read_model!(extras, M, taken), extras)
-            for (row, extras, M) in zip(table["data"], extra_rows, models)]
-    return rows, OrderedDict{String, String}(zip(headers[(n + 1):end], units[(n + 1):end]))
+    model_column = findfirst(==("model"), headers)
+    return [T(; zip(columns, row[1:n])...,
+              model=read_model(block, headers, units, row, model_column))
+            for row in table["data"]]
 end
 
-"""The `M` in a row's `extras`, which lose the columns of every model in `taken` and, where
-`M` is registered, the `model` column. Refuses a cell of another model's column."""
-function read_model!(extras, M, taken)
-    for column in setdiff(taken, model_columns(M))
-        isnothing(extras[column]) ||
-            throw(ArgumentError("a row of model $M has a $column"))
-        delete!(extras, column)
-    end
-    M === NoModel && return NoModel()
-    delete!(extras, "model")
-    for column in model_columns(M)
-        haskey(extras, column) || throw(ArgumentError("model $M needs a $column column"))
-    end
-    return M((to_field(fieldtype(M, field), pop!(extras, String(field)))
-              for field in fieldnames(M))...)
+"""The model of `row` of `block`, read from the columns named after its fields: `NoModel`
+where `model_column` is `nothing` or its cell names no registered model."""
+function read_model(block, headers, units, row, model_column)
+    name = isnothing(model_column) ? nothing : row[model_column]
+    model = get(MODELS, (block, name), nothing)
+    isnothing(model) && return NoModel()
+    return model.type((model_field(model.type, field, unit, headers, units, row)
+                       for (field, unit) in zip(fieldnames(model.type), model.units))...)
+end
+
+"""The `field` of the model `M` in `row`, from the column of that name. Refuses a column
+that is absent or not in the registered `unit`."""
+function model_field(M, field, unit, headers, units, row)
+    column = findfirst(==(String(field)), headers)
+    isnothing(column) && throw(ArgumentError("model $M needs a $field column"))
+    units[column] == unit ||
+        throw(ArgumentError("the $field column of model $M must be in $unit"))
+    return to_field(fieldtype(M, field), row[column])
 end
 
 """
     structure_document(system::SystemDefinition)
 
 The awesIO structure document of `system`, as `load_structure` reads it: references by
-name, extra columns after the schema's, extra blocks after the schema's, empty optional
+name, model columns after the schema's, extra blocks after the schema's, empty optional
 blocks left out.
 """
 function structure_document(system::SystemDefinition)
@@ -179,50 +173,36 @@ function structure_document(system::SystemDefinition)
 end
 
 """The `headers`/`units`/`data` table of the components `rows` of `block`: the schema's
-columns, the `model` column and the columns of each row's model, then the extras."""
+columns, then the `model` column and the columns of each row's model where a row has one."""
 function write_table(system, block, rows)
     columns = required_columns(BLOCKS[block])
-    extra_headers = isempty(rows) ? String[] : other_extras(first(rows))
-    for row in rows
-        other_extras(row) == extra_headers ||
-            throw(ArgumentError("$block rows carry different extra columns"))
-    end
-    named = any(row -> !isnothing(model_cell(row, block)), rows)
-    taken = reduce(union, (model_columns(typeof(row.model)) for row in rows);
-                   init=String[])
-    model_headers = [(named ? ["model"] : String[])..., taken...]
-    units = get(system.extra_units, String(block), OrderedDict{String, String}())
-    for header in [model_headers..., extra_headers...]
-        haskey(units, header) ||
-            throw(ArgumentError("no unit for the extra column $header of $block"))
+    registrations = [model_registration(block, typeof(row.model)) for row in rows]
+    model_units = OrderedDict{String, String}()
+    for model in unique(filter(!isnothing, registrations))
+        model_units["model"] = "-"
+        for (field, unit) in zip(fieldnames(model.type), model.units)
+            get!(model_units, String(field), unit) == unit || throw(ArgumentError(
+                "two $block models give the column $field different units"))
+        end
     end
     data = [Any[(document_value(getfield(row, column),
                                 get(REFERENCES, (block, column), nothing), system)
                  for column in columns)...,
-                (named ? [model_cell(row, block)] : [])...,
-                (model_value(row.model, column) for column in taken)...,
-                (row.extras[header] for header in extra_headers)...] for row in rows]
+                (model_cell(row.model, registration, header)
+                 for header in keys(model_units))...]
+            for (row, registration) in zip(rows, registrations)]
     return OrderedDict{String, Any}(
-        "headers" => [String.(columns)..., model_headers..., extra_headers...],
-        "units" => [UNITS[block]...,
-                    (units[header] for header in [model_headers..., extra_headers...])...],
+        "headers" => [String.(columns)..., keys(model_units)...],
+        "units" => [UNITS[block]..., values(model_units)...],
         "data" => data)
 end
 
-"""The headers of a row's extra columns, its `model` column left out."""
-other_extras(row) = filter(!=("model"), collect(keys(row.extras)))
-
-"""The `model` cell of `row`: the name its model is registered under, or the name an
-unregistered model kept in `extras`."""
-function model_cell(row, block)
-    row.model isa NoModel && return get(row.extras, "model", nothing)
-    return model_name(block, typeof(row.model))
-end
-
-"""The cell of `model` in its `column`, `nothing` where the model has no such field."""
-function model_value(model, column)
-    hasfield(typeof(model), Symbol(column)) || return nothing
-    return document_value(getfield(model, Symbol(column)), nothing, nothing)
+"""The cell of `model`, registered as `registration`, in the model column `header`: the
+registered name for `model`, else the field of that name, `nothing` where it has none."""
+function model_cell(model, registration, header)
+    header == "model" && return isnothing(registration) ? nothing : registration.name
+    hasfield(typeof(model), Symbol(header)) || return nothing
+    return document_value(getfield(model, Symbol(header)), nothing, nothing)
 end
 
 """`value` as a structure document writes it, a reference into `target` by name."""
