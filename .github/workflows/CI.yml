@@ -18,3 +18,25 @@ jobs:
       - name: Run REUSE lint
         run: |
           docker run --rm --volume ${{ github.workspace }}:/data fsfe/reuse lint
+  generated-types:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Fail where the vendored files differ from the recorded awesIO commit
+        run: |
+          repository=$(sed -n 's/^repository = "\(.*\)"$/\1/p' gen/awesio.toml)
+          commit=$(sed -n 's/^commit = "\(.*\)"$/\1/p' gen/awesio.toml)
+          upstream="https://raw.githubusercontent.com/$repository/$commit"
+          curl -fsSL "$upstream/src/awesio/schemas/structure_schema.yml" |
+            cmp - src/awesio/structure_schema.yml
+          curl -fsSL "$upstream/examples/structure/v3_beam_structure.yml" |
+            cmp - test/data/v3_beam_structure.yml
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: "1.12"
+      - uses: julia-actions/cache@v3
+      - uses: julia-actions/julia-buildpkg@v1
+      - name: Regenerate the component types from the vendored schema
+        run: julia --project src/build.jl
+      - name: Fail where the committed types differ from the schema
+        run: git diff --exit-code src/_structure.jl
