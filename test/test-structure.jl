@@ -1,7 +1,8 @@
 # SPDX-FileCopyrightText: 2026 Bart van de Lint
 # SPDX-License-Identifier: MIT
 
-using KiteGeometry: BLOCKS, REFERENCES, NameRef
+using KiteGeometry: BLOCKS, REFERENCES, NameRef, connectivity_sha
+using JSON
 using OrderedCollections: OrderedDict
 using StaticArrays: SVector
 using YAML
@@ -20,6 +21,7 @@ struct ShadowingBeam <: AbstractModel
 end
 
 const FIXTURE = joinpath(@__DIR__, "data", "v3_beam_structure.yml")
+const FIXTURES = (FIXTURE, joinpath(@__DIR__, "data", "v3_psm_structure.yml"))
 
 fixture_document() = YAML.load_file(FIXTURE; dicttype=OrderedDict{String, Any})
 
@@ -71,6 +73,59 @@ end
     @test system.wings[face.wing].name == document["canopy_faces"]["data"][1][2]
     @test system.stations[1].wing == face.wing
     @test isempty(system.extras)
+end
+
+@testset "both awesIO V3 documents write back equal, through YAML and JSON as well" begin
+    for path in FIXTURES
+        document = YAML.load_file(path; dicttype=OrderedDict{String, Any})
+        system = load_structure(path)
+        @test structure_document(system) == document
+        @test structure_document(from_yaml(to_yaml(system))) == document
+        @test structure_document(from_json(to_json(system))) == document
+        @test structure_document(KiteGeometry.definition(to_json(system))) == document
+    end
+end
+
+@testset "connectivity_sha hashes the schema's worked examples" begin
+    @test connectivity_sha((8, [(1, 2), (2, 3), (3, 4), (4, 5), (4, 7)])) ==
+          "d98529e23af6047ce9f49f172743d5dcef053f6a768a3b53de6d47260afd60b7"
+    @test connectivity_sha((3, [(1, 2), (2, 3)]), (2, [(1, 2)]), (1, [[1, 2, 3]])) ==
+          "1f9a31aca7b6d655aaae4f5de9872d3fd489f907f90316e8f33e3125b1fd18ea"
+end
+
+@testset "the writer gives the connectivity of the system's own tables" begin
+    document = structure_document(small_system())
+    @test document["metadata"]["connectivity_sha"] ==
+          "d515a8af37debb0d04e7718442eac3160b21b2aac4546bba68e5aefcab5c68da"
+    @test structure_document(SystemDefinition(document)) == document
+end
+
+@testset "a connectivity_sha that does not describe the document is refused" begin
+    document = fixture_document()
+    document["metadata"]["connectivity_sha"] = "0"^64
+    @test_throws "connectivity_sha" SystemDefinition(document)
+    document = fixture_document()
+    reverse!(document["points"]["data"])
+    @test_throws "connectivity_sha" SystemDefinition(document)
+end
+
+"""The fixture as written against awesIO `version`."""
+function versioned_document(version)
+    document = fixture_document()
+    document["metadata"]["awesIO_version"] = version
+    return document
+end
+
+@testset "another major awesIO version is refused, another minor warns" begin
+    @test_throws "0.1.0" SystemDefinition(versioned_document("0.1.0"))
+    @test_throws "2.0.0" KiteGeometry.definition(JSON.json(versioned_document("2.0.0")))
+    system = @test_logs (:warn, r"1.1.0") SystemDefinition(versioned_document("1.1.0"))
+    @test system.metadata.awesIO_version == "1.1.0"
+    @test_logs SystemDefinition(versioned_document("1.0.3"))
+    @test_throws ArgumentError SystemDefinition(versioned_document(1.0))
+    document = fixture_document()
+    delete!(document["metadata"], "awesIO_version")
+    @test_throws ArgumentError SystemDefinition(document)
 end
 
 @testset "every reference column names the block it refers into" begin
@@ -182,6 +237,9 @@ end
                                   system.winches, system.wings, system.canopy_faces,
                                   system.bodies, system.tubes, system.extras)
     @test structure_document(held_names) == structure_document(system)
+    held_names.segments[1] = Segment(; name="line", points=("anchor", "nowhere"), l0=100,
+                                     diameter=0.004, density=970, unit_stiffness=6e5)
+    @test_throws "no points named nowhere" structure_document(held_names)
 end
 
 @testset "models giving one column two units are refused on writing" begin

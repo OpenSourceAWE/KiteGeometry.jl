@@ -18,6 +18,19 @@ load_structure
 structure_document
 ```
 
+## YAML and JSON
+
+A document is read and written in either encoding, through `SystemDefinition(document)` and `structure_document`, whose docstrings say which `awesIO_version` and `connectivity_sha` each accepts and writes. What a round trip of a real system still loses is listed in [1-Bart-1/awesIO#3](https://github.com/1-Bart-1/awesIO/issues/3).
+
+```@docs
+from_yaml
+to_yaml
+from_json
+to_json
+KiteGeometry.definition
+connectivity_sha
+```
+
 ## Components
 
 ```@docs

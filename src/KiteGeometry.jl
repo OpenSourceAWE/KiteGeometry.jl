@@ -14,7 +14,9 @@ for more information.
 """
 module KiteGeometry
 
+using JSON: JSON
 using OrderedCollections: OrderedDict, OrderedSet
+using SHA: sha256
 using StaticArrays: SMatrix, SVector
 using YAML: YAML
 
@@ -22,7 +24,9 @@ export SystemDefinition, Metadata, Point, Segment, Station, Pulley, Tether, Winc
        CanopyFace, Body, Tube
 export DynamicsType, DYNAMIC, STATIC, BODY_STATIC, KINEMATIC
 export NameRef, AbstractModel, NoModel, register_model!, model_type
-export load_structure, structure_document
+export load_structure, structure_document, connectivity_sha
+export from_yaml, to_yaml, from_json, to_json
+public definition
 
 """
     NameRef
