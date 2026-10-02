@@ -122,6 +122,10 @@ end
     system = @test_logs (:warn, r"1.1.0") SystemDefinition(versioned_document("1.1.0"))
     @test system.metadata.awesIO_version == "1.1.0"
     @test_logs SystemDefinition(versioned_document("1.0.3"))
+    @test_throws ArgumentError SystemDefinition(versioned_document(1.0))
+    document = fixture_document()
+    delete!(document["metadata"], "awesIO_version")
+    @test_throws ArgumentError SystemDefinition(document)
 end
 
 @testset "every reference column names the block it refers into" begin
@@ -233,6 +237,9 @@ end
                                   system.winches, system.wings, system.canopy_faces,
                                   system.bodies, system.tubes, system.extras)
     @test structure_document(held_names) == structure_document(system)
+    held_names.segments[1] = Segment(; name="line", points=("anchor", "nowhere"), l0=100,
+                                     diameter=0.004, density=970, unit_stiffness=6e5)
+    @test_throws "no points named nowhere" structure_document(held_names)
 end
 
 @testset "models giving one column two units are refused on writing" begin

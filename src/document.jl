@@ -90,7 +90,7 @@ function SystemDefinition(document::AbstractDict; strict=true)
         haskey(document, String(block)) || throw(ArgumentError("no $block block"))
     end
     fields = document["metadata"]
-    check_version(fields["awesIO_version"])
+    check_version(get(fields, "awesIO_version", nothing))
     metadata = Metadata((to_field(fieldtype(Metadata, field), fields[String(field)])
                          for field in fieldnames(Metadata))...)
     tables = (block => read_table(block, document[String(block)], strict)
@@ -106,9 +106,10 @@ function SystemDefinition(document::AbstractDict; strict=true)
     return system
 end
 
-"""Refuses an `awesIO_version` of another major version than `AWESIO_VERSION`, and warns
-on another minor version."""
+"""Applies the `awesIO_version` rule of `SystemDefinition(document)` to `version`."""
 function check_version(version)
+    version isa AbstractString || throw(ArgumentError(
+        "awesIO_version must be a quoted version string, not $(repr(version))"))
     written, ours = VersionNumber(version), VersionNumber(AWESIO_VERSION)
     written.major == ours.major || throw(ArgumentError(
         "awesIO $version is a major version a reader of awesIO $AWESIO_VERSION refuses"))
@@ -150,12 +151,17 @@ end
 
 """The one-based row numbers each component of `block` refers to in `column`."""
 function row_numbers(system, block, column)
-    rows = getfield(system, REFERENCES[(block, column)])
-    return [row_number.(getfield(component, column), (rows,))
+    target = REFERENCES[(block, column)]
+    rows = getfield(system, target)
+    return [row_number.(getfield(component, column), (rows,), target)
             for component in getfield(system, block)]
 end
-row_number(index::Int, rows) = index
-row_number(name::String, rows) = findfirst(row -> row.name == name, rows)
+row_number(index::Int, rows, target) = index
+function row_number(name::String, rows, target)
+    index = findfirst(row -> row.name == name, rows)
+    isnothing(index) && throw(ArgumentError("no $target named $name"))
+    return index
+end
 
 """
     load_structure(path; strict=true)
@@ -274,9 +280,10 @@ end
 """
     structure_document(system::SystemDefinition)
 
-The awesIO structure document of `system`, as `SystemDefinition` reads it: written against
-`AWESIO_VERSION` with the `connectivity_sha` of its own tables, references by name, model
-columns after the schema's, extra blocks after the schema's, empty optional blocks left out.
+The awesIO structure document of `system`, as `SystemDefinition` reads it: references by
+name, model columns after the schema's, extra blocks after the schema's, empty optional
+blocks left out. Its `awesIO_version` is `AWESIO_VERSION` and its `connectivity_sha` that of
+`system`'s own tables, whatever `system.metadata` holds.
 """
 function structure_document(system::SystemDefinition)
     metadata = OrderedDict{String, Any}(String(field) => getfield(system.metadata, field)

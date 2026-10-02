@@ -20,7 +20,7 @@ structure_document
 
 ## YAML and JSON
 
-A document is read and written in either encoding, both through `SystemDefinition(document)`. Reading refuses a document of another major `awesIO_version` than the vendored schema's and warns on another minor one; it refuses a `connectivity_sha` that does not describe the document's own tables, and writing gives the `connectivity_sha` of the system's own. What a round trip of a real system still loses is listed in [1-Bart-1/awesIO#3](https://github.com/1-Bart-1/awesIO/issues/3).
+A document is read and written in either encoding, through `SystemDefinition(document)` and `structure_document`, whose docstrings say which `awesIO_version` and `connectivity_sha` each accepts and writes. What a round trip of a real system still loses is listed in [1-Bart-1/awesIO#3](https://github.com/1-Bart-1/awesIO/issues/3).
 
 ```@docs
 from_yaml
