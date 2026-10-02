@@ -167,11 +167,17 @@ function system_source(schema, blocks)
            "const REQUIRED_BLOCKS = ($required)\n"
 end
 
+"""Source of `AWESIO_VERSION`, the awesIO version gen/awesio.toml records."""
+function version_source()
+    return "\"\"\"The awesIO version of the vendored schema.\"\"\"\n" *
+           "const AWESIO_VERSION = $(repr(AWESIO["awesIO_version"]))\n"
+end
+
 """The source of `_structure.jl` for `schema`."""
 function structure_source(schema)
     properties = schema["properties"]
     blocks = [(name, spec) for (name, spec) in properties if name != "metadata"]
-    parts = [HEADER, enum_source(schema["definitions"]["dynamics_type"]),
+    parts = [HEADER, version_source(), enum_source(schema["definitions"]["dynamics_type"]),
              metadata_source(properties["metadata"]),
              (component_source(block, spec) for (block, spec) in blocks)...,
              system_source(schema, blocks)]
