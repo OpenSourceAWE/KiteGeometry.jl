@@ -29,8 +29,9 @@ jobs:
           upstream="https://raw.githubusercontent.com/$repository/$commit"
           curl -fsSL "$upstream/src/awesio/schemas/structure_schema.yml" |
             cmp - src/awesio/structure_schema.yml
-          curl -fsSL "$upstream/examples/structure/v3_beam_structure.yml" |
-            cmp - test/data/v3_beam_structure.yml
+          for example in v3_beam_structure.yml v3_psm_structure.yml; do
+            curl -fsSL "$upstream/examples/structure/$example" | cmp - "test/data/$example"
+          done
       - uses: julia-actions/setup-julia@v3
         with:
           version: "1.12"
