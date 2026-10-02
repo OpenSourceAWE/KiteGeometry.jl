@@ -81,13 +81,16 @@ end
 The system definition a parsed awesIO structure document describes. A row reads the columns
 of the model its `model` column registers; a filled cell in any other column the schema does
 not name is refused, or with `strict=false` dropped with a warning. The blocks the schema
-does not name are kept as `extras`, in the order read.
+does not name are kept as `extras`, in the order read. Refuses another major
+`awesIO_version` than `AWESIO_VERSION`, warning on another minor one, and a
+`connectivity_sha` that does not describe the document's own tables.
 """
 function SystemDefinition(document::AbstractDict; strict=true)
     for block in REQUIRED_BLOCKS
         haskey(document, String(block)) || throw(ArgumentError("no $block block"))
     end
     fields = document["metadata"]
+    check_version(fields["awesIO_version"])
     metadata = Metadata((to_field(fieldtype(Metadata, field), fields[String(field)])
                          for field in fieldnames(Metadata))...)
     tables = (block => read_table(block, document[String(block)], strict)
@@ -95,18 +98,114 @@ function SystemDefinition(document::AbstractDict; strict=true)
     extras = OrderedDict{String, Any}(
         name => block for (name, block) in document
         if name != "metadata" && !haskey(BLOCKS, Symbol(name)))
-    return SystemDefinition(; metadata, extras, tables...)
+    system = SystemDefinition(; metadata, extras, tables...)
+    sha = connectivity_sha(system)
+    metadata.connectivity_sha == sha || throw(ArgumentError(
+        "connectivity_sha $(metadata.connectivity_sha) does not describe the document's " *
+        "points, segments, bodies, tubes and canopy faces, whose is $sha"))
+    return system
 end
+
+"""Refuses an `awesIO_version` of another major version than `AWESIO_VERSION`, and warns
+on another minor version."""
+function check_version(version)
+    written, ours = VersionNumber(version), VersionNumber(AWESIO_VERSION)
+    written.major == ours.major || throw(ArgumentError(
+        "awesIO $version is a major version a reader of awesIO $AWESIO_VERSION refuses"))
+    written.minor == ours.minor ||
+        @warn "Reading an awesIO $version document as awesIO $AWESIO_VERSION"
+    return nothing
+end
+
+"""
+    connectivity_sha(sections...)
+
+Lowercase hex SHA-256 of the structure schema's connectivity preimage of `sections`, each a
+count and its elements, each element the one-based row numbers it joins.
+"""
+function connectivity_sha(sections...)
+    preimage = IOBuffer()
+    for (count, elements) in sections
+        print(preimage, count, ';')
+        for element in elements
+            join(preimage, element, ',')
+            print(preimage, ';')
+        end
+    end
+    return bytes2hex(sha256(take!(preimage)))
+end
+
+"""
+    connectivity_sha(system::SystemDefinition)
+
+The `connectivity_sha` of the points and segments, bodies and tubes, and canopy faces of
+`system`.
+"""
+function connectivity_sha(system::SystemDefinition)
+    return connectivity_sha(
+        (length(system.points), row_numbers(system, :segments, :points)),
+        (length(system.bodies), row_numbers(system, :tubes, :bodies)),
+        (length(system.canopy_faces), row_numbers(system, :canopy_faces, :points)))
+end
+
+"""The one-based row numbers each component of `block` refers to in `column`."""
+function row_numbers(system, block, column)
+    rows = getfield(system, REFERENCES[(block, column)])
+    return [row_number.(getfield(component, column), (rows,))
+            for component in getfield(system, block)]
+end
+row_number(index::Int, rows) = index
+row_number(name::String, rows) = findfirst(row -> row.name == name, rows)
 
 """
     load_structure(path; strict=true)
 
-The `SystemDefinition` in the awesIO structure document at `path`, read as
+The `SystemDefinition` in the YAML structure document at `path`, read as `from_yaml` reads
+it.
+"""
+load_structure(path; strict=true) = from_yaml(read(path, String); strict)
+
+"""
+    from_yaml(text; strict=true)
+
+The `SystemDefinition` in the YAML structure document `text`, read as
 `SystemDefinition(document; strict)` reads it.
 """
-function load_structure(path; strict=true)
-    return SystemDefinition(YAML.load_file(path; dicttype=OrderedDict{String, Any}); strict)
+function from_yaml(text::AbstractString; strict=true)
+    return SystemDefinition(YAML.load(text; dicttype=OrderedDict{String, Any}); strict)
 end
+
+"""
+    from_json(text; strict=true)
+
+The `SystemDefinition` in the JSON structure document `text`, read as
+`SystemDefinition(document; strict)` reads it.
+"""
+function from_json(text::AbstractString; strict=true)
+    return SystemDefinition(JSON.parse(text; dicttype=OrderedDict{String, Any}); strict)
+end
+
+"""
+    definition(topology::AbstractString; strict=true)
+
+The `SystemDefinition` in the JSON structure document a log carries under the key
+`topology`, read as `from_json` reads it.
+"""
+definition(topology::AbstractString; strict=true) = from_json(topology; strict)
+
+"""
+    to_yaml(system::SystemDefinition)
+
+`structure_document(system)` as YAML text.
+"""
+to_yaml(system::SystemDefinition) = YAML.write(structure_document(system))
+
+"""
+    to_json(system::SystemDefinition)
+
+`structure_document(system)` as JSON text.
+"""
+to_json(system::SystemDefinition) = JSON.json(structure_document(system); pretty=true)
 
 """The names of the columns of `T` that the schema requires, in order."""
 required_columns(T) = filter(!=(:model), fieldnames(T))
@@ -175,15 +274,16 @@ end
 """
     structure_document(system::SystemDefinition)
 
-The awesIO structure document of `system`, as `load_structure` reads it: references by
-name, model columns after the schema's, extra blocks after the schema's, empty optional
-blocks left out.
+The awesIO structure document of `system`, as `SystemDefinition` reads it: written against
+`AWESIO_VERSION` with the `connectivity_sha` of its own tables, references by name, model
+columns after the schema's, extra blocks after the schema's, empty optional blocks left out.
 """
 function structure_document(system::SystemDefinition)
-    metadata = system.metadata
-    document = OrderedDict{String, Any}(
-        "metadata" => OrderedDict{String, Any}(String(field) => getfield(metadata, field)
-                                               for field in fieldnames(Metadata)))
+    metadata = OrderedDict{String, Any}(String(field) => getfield(system.metadata, field)
+                                        for field in fieldnames(Metadata))
+    metadata["awesIO_version"] = AWESIO_VERSION
+    metadata["connectivity_sha"] = connectivity_sha(system)
+    document = OrderedDict{String, Any}("metadata" => metadata)
     for block in keys(BLOCKS)
         rows = getfield(system, block)
         block in REQUIRED_BLOCKS || !isempty(rows) || continue
