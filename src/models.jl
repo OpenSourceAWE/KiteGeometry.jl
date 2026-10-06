@@ -72,3 +72,18 @@ end
 function Base.propertynames(component::Component)
     return (fieldnames(typeof(component))..., fieldnames(typeof(component.model))...)
 end
+
+"""
+    SegmentSpring <: AbstractModel
+
+The spring of a segment besides its `unit_stiffness`: its damping and how it carries
+compression. Registered as the segment model `spring`.
+"""
+struct SegmentSpring <: AbstractModel
+    "damping per unit length [N*s]"
+    unit_damping::Float64
+    "compressive over tensile stiffness [-]; 0 for a segment that goes slack"
+    compression_frac::Float64
+    "fraction of `unit_damping` still acting under compression [-]"
+    compression_damping_frac::Float64
+end

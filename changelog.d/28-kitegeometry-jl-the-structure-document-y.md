@@ -1,8 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 Bart van de Lint
-SPDX-License-Identifier: MIT
--->
-
 ### Added
 
 - `to_yaml`/`from_yaml` and `to_json`/`from_json` write and read a structure document as text, and `KiteGeometry.definition` reads the `topology` string a log carries.

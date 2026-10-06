@@ -1,8 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 Bart van de Lint
-SPDX-License-Identifier: MIT
--->
-
 ### Added
 
 - `SystemDefinition` and its components `Point`, `Segment`, `Station`, `Pulley`,

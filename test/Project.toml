@@ -1,6 +1,8 @@
 [deps]
 JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
+JSONSchema = "7d188eb4-7ad8-530c-ae41-71a32a6d4692"
 KiteGeometry = "941ca69c-4b42-4a27-9601-abc4d37bf99e"
+KiteUtils = "90980105-b163-44e5-ba9f-8b1c83bb0533"
 OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
@@ -8,6 +10,8 @@ YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
 
 [compat]
 JSON = "1"
+JSONSchema = "1.5"
+KiteUtils = "0.13.1"
 OrderedCollections = "1.6, 2"
 StaticArrays = "1.9"
 YAML = "0.4.12"
