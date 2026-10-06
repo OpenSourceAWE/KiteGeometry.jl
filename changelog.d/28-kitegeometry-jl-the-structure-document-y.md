@@ -1,6 +1,6 @@
 <!--
 SPDX-FileCopyrightText: 2026 Bart van de Lint
-SPDX-License-Identifier: CC-BY-4.0
+SPDX-License-Identifier: MIT
 -->
 
 ### Added
