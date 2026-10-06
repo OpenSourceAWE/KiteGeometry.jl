@@ -15,6 +15,8 @@ for more information.
 module KiteGeometry
 
 using JSON: JSON
+using KiteUtils: Settings, wrap2pi
+using LinearAlgebra: Diagonal, I, cross, dot, norm, normalize
 using OrderedCollections: OrderedDict, OrderedSet
 using SHA: sha256
 using StaticArrays: SMatrix, SVector
@@ -23,8 +25,8 @@ using YAML: YAML
 export SystemDefinition, Metadata, Point, Segment, Station, Pulley, Tether, Winch, Wing,
        CanopyFace, Body, Tube
 export DynamicsType, DYNAMIC, STATIC, BODY_STATIC, KINEMATIC
-export NameRef, AbstractModel, NoModel, register_model!, model_type
-export load_structure, structure_document, connectivity_sha
+export NameRef, AbstractModel, NoModel, SegmentSpring, register_model!, model_type
+export load_structure, load_authoring, structure_document, connectivity_sha
 export from_yaml, to_yaml, from_json, to_json
 public definition
 
@@ -47,5 +49,12 @@ include("models.jl")
 include("_structure.jl")
 include("components.jl")
 include("document.jl")
+include("placement.jl")
+include("authoring.jl")
+
+function __init__()
+    register_model!(:segments, "spring", SegmentSpring, ("N*s", "-", "-"))
+    return nothing
+end
 
 end
