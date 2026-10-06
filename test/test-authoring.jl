@@ -7,10 +7,10 @@ using KiteUtils: Settings, set_data_path
 using OrderedCollections: OrderedDict
 using YAML
 
-const KITE = joinpath(@__DIR__, "data", "2plate_kite")
-const AUTHORING_SYSTEMS = filter(endswith("_structural_geometry.yaml"), readdir(KITE))
-const SCHEMA = Schema(YAML.load_file(joinpath(pkgdir(KiteGeometry), "src", "awesio",
-                                               "structure_schema.yml")))
+KITE = joinpath(@__DIR__, "data", "2plate_kite")
+AUTHORING_SYSTEMS = filter(endswith("_structural_geometry.yaml"), readdir(KITE))
+SCHEMA = Schema(YAML.load_file(joinpath(pkgdir(KiteGeometry), "src", "awesio",
+                                         "structure_schema.yml")))
 
 """The settings the 2-plate kite is authored against."""
 function kite_settings()
@@ -101,11 +101,13 @@ function load_edited(edit)
 end
 
 @testset "what a SystemDefinition cannot hold is refused" begin
-    @test_throws ArgumentError load_edited() do data
+    tube_rider = @test_throws ArgumentError load_edited() do data
         push!(data["points"]["headers"], "tube")
         foreach(row -> push!(row, "strut"), data["points"]["data"])
     end
-    @test_throws ArgumentError load_edited() do data
+    @test occursin("rides a tube", tube_rider.value.msg)
+    chained = @test_throws ArgumentError load_edited() do data
         only(data["transforms"]["data"])["base_transform_idx"] = "main_transform"
     end
+    @test occursin("chained to another", chained.value.msg)
 end

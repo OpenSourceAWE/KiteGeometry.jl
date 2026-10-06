@@ -128,9 +128,6 @@ function calc_R_t_to_w(wing_pos)
     return hcat(cross(y, z), y, z)
 end
 
-"""`angle` [rad] wrapped into [-π, π)."""
-wrap_to_pi(angle) = mod(angle + π, 2π) - π
-
 """Heading [rad] of the body frame `R_b_to_w` at `wing_pos`: its x axis in the tangent
 plane, from the elevation direction towards the azimuthal one."""
 function calc_heading(R_b_to_w, wing_pos)
@@ -616,7 +613,7 @@ function apply_heading!(placement::Placement, transform, members)
                first(wing_frame(placement.pos, frame))
     base = transform.base_pos
     rel_pos = placement.body_pos[reference] - base
-    delta = wrap_to_pi(transform.heading - calc_heading(R_b_to_w, rel_pos))
+    delta = wrap2pi(transform.heading - calc_heading(R_b_to_w, rel_pos))
     k = normalize(rel_pos)
     move_members!(placement, members,
                   position -> base + rotate_v_around_k(position - base, k, delta),

@@ -15,7 +15,7 @@ for more information.
 module KiteGeometry
 
 using JSON: JSON
-using KiteUtils: Settings
+using KiteUtils: Settings, wrap2pi
 using LinearAlgebra: Diagonal, I, cross, dot, norm, normalize
 using OrderedCollections: OrderedDict, OrderedSet
 using SHA: sha256
