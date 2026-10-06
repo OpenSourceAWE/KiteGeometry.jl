@@ -82,6 +82,7 @@ end
         system = load_kite(file)
         document = JSON.parse(to_json(system))
         @test isnothing(validate(SCHEMA, document))
+        @test length(system.canopy_faces) == 2
         @test structure_document(from_yaml(to_yaml(system))) == structure_document(system)
     end
 end
@@ -126,7 +127,13 @@ end
     @test occursin("chained to another", chained.value.msg)
 end
 
-@testset "V3Kite's particle wing gets the canopy faces of awesIO's V3 PSM document" begin
+@testset "a wing has the canopy faces its authoring YAML states and no others" begin
+    system = load_edited(data -> delete!(data, "canopy_faces"))
+    @test isempty(system.canopy_faces)
+    @test !isempty(system.stations)
+end
+
+@testset "V3Kite's PSM fixture states the canopy faces of awesIO's V3 PSM document" begin
     v3_psm = joinpath(@__DIR__, "data", "v3_psm")
     system = load_authoring(joinpath(v3_psm, "struc_geometry.yaml");
                             set=kite_settings(v3_psm))

@@ -5,4 +5,4 @@ SPDX-License-Identifier: CC-BY-4.0
 
 ### Added
 
-- `load_authoring` derives each wing's `canopy_faces`: one face between each pair of neighbouring stations, in station order, so the written document and its `connectivity_sha` carry them.
+- `load_authoring` reads an authoring YAML's `canopy_faces` table (`name, wing, points`, by name or index), so the written document and its `connectivity_sha` carry the canopy it states.

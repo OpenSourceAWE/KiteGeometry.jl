@@ -33,7 +33,7 @@ connectivity_sha
 
 ## SymbolicAWEModels' authoring YAML
 
-SymbolicAWEModels authors a system in design coordinates: points at `pos_cad`, tethers by their segment count and stretched length, `variables` shared between rows, and `transforms` that turn the whole to an elevation, azimuth and heading. `load_authoring` converts that dialect into a placed `SystemDefinition`, so `structure_document` writes it as the full-form document. Values a row leaves out — segment material, every winch's gear ratio and drum radius — come from KiteUtils `Settings`. The authoring YAML has no canopy, so each wing gets one: a face between each pair of neighbouring stations, its corners the first station's points and then the second's in reverse.
+SymbolicAWEModels authors a system in design coordinates: points at `pos_cad`, tethers by their segment count and stretched length, `variables` shared between rows, and `transforms` that turn the whole to an elevation, azimuth and heading. `load_authoring` converts that dialect into a placed `SystemDefinition`, so `structure_document` writes it as the full-form document. Values a row leaves out — segment material, every winch's gear ratio and drum radius — come from KiteUtils `Settings`. A `canopy_faces` table with the schema's own columns states each wing's canopy, its wing and corners by name or index; the loader derives none.
 
 ```@docs
 load_authoring
