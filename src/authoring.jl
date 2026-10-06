@@ -512,6 +512,14 @@ function read_stations(data, wings, authored)
     end
 end
 
+"""The canopy faces of the `canopy_faces` block, their wing and corners by name or
+index."""
+function read_canopy_faces(data)
+    return CanopyFace[CanopyFace(; name=yaml_row_name(row, i), wing=yaml_to_ref(row.wing),
+                                 points=yaml_to_ref.(row.points))
+                      for (i, row) in enumerate(table_rows(data, "canopy_faces"))]
+end
+
 """What a tether row gives of the length it starts at, refusing the removed
 `init_unstretched_length`."""
 function tether_init(row, name)
@@ -696,6 +704,7 @@ function load_authoring(path; set::Settings, name=first(splitext(basename(path))
                              stations=read_stations(data, wings, authored_wings),
                              pulleys=read_pulleys(data), tethers,
                              winches=read_winches(data, set), wings,
+                             canopy_faces=read_canopy_faces(data),
                              bodies=[wing_bodies; bodies], tubes=read_tubes(data))
     placement = design_pose(draft, set, point_wings, point_transforms, authored_wings,
                             authored_bodies, inits, read_transforms(data))
