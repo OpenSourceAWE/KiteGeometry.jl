@@ -84,8 +84,28 @@ end
 @testset "the tether is placed at its stretched length, its points evenly along it" begin
     system = load_kite("particle_structural_geometry.yaml")
     tether = only(system.tethers)
-    ends = system.points[tether.start_point].pos_ENU, system.points[tether.end_point].pos_ENU
-    @test hypot((ends[1] - ends[2])...) ≈ 20.0
+    start_pos = system.points[tether.start_point].pos_ENU
+    end_pos = system.points[tether.end_point].pos_ENU
+    @test hypot((start_pos - end_pos)...) ≈ 20.0
     lengths = [system.segments[index].l0 for index in tether.segments]
     @test all(≈(20.0 / 6), lengths)
+end
+
+"""The rigid 2-plate kite with `edit` applied to its parsed authoring YAML, loaded."""
+function load_edited(edit)
+    data = YAML.load_file(joinpath(KITE, "rigid_structural_geometry.yaml"))
+    edit(data)
+    path = joinpath(mktempdir(), "edited.yaml")
+    YAML.write_file(path, data)
+    return load_authoring(path; set=kite_settings())
+end
+
+@testset "what a SystemDefinition cannot hold is refused" begin
+    @test_throws ArgumentError load_edited() do data
+        push!(data["points"]["headers"], "tube")
+        foreach(row -> push!(row, "strut"), data["points"]["data"])
+    end
+    @test_throws ArgumentError load_edited() do data
+        only(data["transforms"]["data"])["base_transform_idx"] = "main_transform"
+    end
 end

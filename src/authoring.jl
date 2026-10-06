@@ -282,7 +282,8 @@ function yaml_ref_points(value)
     total > 0 || throw(ArgumentError("reference point weights sum to $total"))
     isapprox(total, 1.0; atol=1e-6) ||
         @warn "Reference point weights sum to $total, normalizing to 1.0"
-    return [yaml_to_ref(ref) => weight / total for ((ref, _), weight) in zip(value, weights)]
+    return [yaml_to_ref(ref) => weight / total
+            for ((ref, _), weight) in zip(value, weights)]
 end
 
 """The pair of reference points in `field` of a wing row, or `nothing`."""
@@ -305,7 +306,8 @@ end
 
 """`component` with the fields `changes` names replaced."""
 function with_fields(component::T; changes...) where {T <: Component}
-    return T((get(changes, field, getfield(component, field)) for field in fieldnames(T))...)
+    return T((get(changes, field, getfield(component, field))
+              for field in fieldnames(T))...)
 end
 
 # ==================== MATERIAL ==================== #
@@ -375,7 +377,7 @@ end
 
 # ==================== BLOCKS ==================== #
 
-"""The components named `ref` in `rows`: by name, or by its one-based index."""
+"""The component `ref` names in `rows`: by name, or by its one-based index."""
 function find_row(rows, ref, block)
     ref isa Int && return rows[ref]
     index = findfirst(row -> row.name == ref, rows)
@@ -479,10 +481,12 @@ function read_wings(data)
         origin = yaml_field(row, :origin_idx)
         push!(wings, Wing(; name, canopy_material=nothing))
         push!(authored, AuthoringWing(
-            dynamics == "PARTICLE_DYNAMICS", yaml_to_ref.(something(yaml_field(row, :stations), [])),
+            dynamics == "PARTICLE_DYNAMICS",
+            yaml_to_ref.(something(yaml_field(row, :stations), [])),
             yaml_ref(row, :transform_idx),
             isnothing(origin) ? nothing : yaml_ref_points(origin),
-            yaml_ref_point_pair(row, :z_ref_points), yaml_ref_point_pair(row, :y_ref_points),
+            yaml_ref_point_pair(row, :z_ref_points),
+            yaml_ref_point_pair(row, :y_ref_points),
             yaml_vec3(row, :pos_cad), something(yaml_float(row, :extra_mass), 0.0),
             yaml_vec3(row, :com), yaml_unit_inertia(row)))
     end
@@ -581,8 +585,9 @@ function expand_tether!(points, segments, point_transforms, name, start_point, e
     end
     segment_names = ["$(name)_seg_$i" for i in 1:n]
     for i in 1:n
-        push!(segments, spring_segment(segment_names[i], (point_names[i], point_names[i + 1]),
-                                       set; l0, spring...))
+        push!(segments, spring_segment(segment_names[i],
+                                       (point_names[i], point_names[i + 1]), set;
+                                       l0, spring...))
     end
     return Tether(; name, start_point, end_point, segments=segment_names)
 end
@@ -685,8 +690,8 @@ function load_authoring(path; set::Settings, name=first(splitext(basename(path))
                         extra_mass=authored.particle ? 0.0 : authored.extra_mass,
                         extra_inertia_KA=zero(Mat3))
                    for (wing, authored) in zip(wings, authored_wings)]
-    metadata = Metadata(name, "", "", AWESIO_VERSION, "structure_schema.yml", length(points),
-                        "")
+    metadata = Metadata(name, "", "", AWESIO_VERSION, "structure_schema.yml",
+                        length(points), "")
     draft = SystemDefinition(; metadata, points, segments,
                              stations=read_stations(data, wings, authored_wings),
                              pulleys=read_pulleys(data), tethers,
@@ -719,7 +724,8 @@ function authored_frame(authored, point_names)
 end
 
 """
-    wing_body_pose(draft, authored, members, point_names) -> (origin, R, com_offset, inertia)
+    wing_body_pose(draft, authored, members, point_names)
+        -> (origin, R, com_offset, inertia)
 
 The design pose of a wing's body: its origin [m], its rotation into the world, the centre of
 its own mass in its frame [m], and its own inertia about that centre in its axes [kg*m²],
@@ -788,7 +794,8 @@ function design_pose(draft, set, point_wings, point_transforms, authored_wings,
         transform.elevation, transform.azimuth, transform.heading, transform.base_pos,
         resolve_index(transform.base_point, point_names, :points),
         resolve_index(transform.wing, wing_names, :wings),
-        resolve_index(transform.rot_point, point_names, :points)) for transform in transforms]
+        resolve_index(transform.rot_point, point_names, :points))
+        for transform in transforms]
     placement = Placement(draft, pos, [segment.l0 for segment in draft.segments], body_pos,
                           body_R, com_offset, anchor,
                           resolve_index.(point_transforms, (transform_names,), :transforms),
@@ -818,7 +825,10 @@ function wing_mass!(draft, wing, authored, members, set)
         own_mass = sum(draft.points[index].extra_mass for index in point_idxs; init=0.0) +
                    sum(draft.bodies[index].extra_mass for index in body_idxs; init=0.0)
         own_mass > 0 && return nothing
-        set.mass > 0 || (@warn "Wing $name (PARTICLE_DYNAMICS) has zero mass."; return nothing)
+        if set.mass <= 0
+            @warn "Wing $name (PARTICLE_DYNAMICS) has zero mass."
+            return nothing
+        end
     else
         iszero(authored.extra_mass) && set.mass > 0 && all(iszero, masses) || return nothing
     end
@@ -832,8 +842,8 @@ end
 """
     particle_wing_parts(draft, wing, members) -> (point_idxs, body_idxs)
 
-The points of particle `wing` — its stations' points, else its frame points `members` — and
-the other bodies sharing a tube-connected group with the bodies those points ride.
+The points of particle `wing` — its stations' points, else its frame points `members` —
+and the other bodies sharing a tube-connected group with the bodies those points ride.
 """
 function particle_wing_parts(draft, wing, members)
     point_idxs = Set{Int}()
@@ -887,8 +897,8 @@ function placed_definition(placement::Placement)
                 for (index, segment) in enumerate(system.segments)]
     bodies = map(enumerate(system.bodies)) do (index, body)
         R = placement.body_R[index]
-        with_fields(body; pos_ENU=placement.body_pos[index] + R * placement.com_offset[index],
-                    Q_KA_to_ENU=rotation_matrix_to_quaternion(R))
+        mass_centre = placement.body_pos[index] + R * placement.com_offset[index]
+        with_fields(body; pos_ENU=mass_centre, Q_KA_to_ENU=rotation_matrix_to_quaternion(R))
     end
     return SystemDefinition(metadata, points, segments, system.stations, system.pulleys,
                             system.tethers, system.winches, system.wings,

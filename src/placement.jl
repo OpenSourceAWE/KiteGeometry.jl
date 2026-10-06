@@ -36,7 +36,8 @@ struct WingFrame
     y_ref_points::NTuple{2, RefPoints}
 end
 
-"""Stretched length [m], force [N] and stretch fraction a tether starts at, each optional."""
+"""Stretched length [m], force [N] and stretch fraction a tether starts at, each
+optional."""
 const TetherInit = @NamedTuple{stretched_length::Union{Nothing, Float64},
                                force::Union{Nothing, Float64},
                                stretch_frac::Union{Nothing, Float64}}
