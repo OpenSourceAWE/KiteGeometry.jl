@@ -512,6 +512,24 @@ function read_stations(data, wings, authored)
     end
 end
 
+"""One canopy face per pair of neighbouring stations of each wing, in station order, its
+corners the first station's points and then the second's in reverse."""
+function derive_canopy_faces(wings, stations)
+    faces = CanopyFace[]
+    for (index, wing) in enumerate(wings)
+        own = filter(station -> station.wing in (index, wing.name), stations)
+        for (station, next) in zip(own, own[2:end])
+            points = [station.points; reverse(next.points)]
+            length(points) in 3:4 || throw(ArgumentError(
+                "stations $(station.name) and $(next.name) of wing $(wing.name) have " *
+                "$(length(points)) points between them, not the 3 or 4 a canopy face has"))
+            push!(faces, CanopyFace(; name="canopy_$(length(faces) + 1)", wing=wing.name,
+                                    points))
+        end
+    end
+    return faces
+end
+
 """What a tether row gives of the length it starts at, refusing the removed
 `init_unstretched_length`."""
 function tether_init(row, name)
@@ -669,8 +687,9 @@ end
 The `SystemDefinition` SymbolicAWEModels' authoring YAML at `path` describes, placed:
 design positions moved by its tethers' stretched lengths and its `transforms`, so every
 `pos_ENU` and `Q_KA_to_ENU` is the initial pose. `set` gives what a row leaves out:
-segment material, and every winch's gear ratio and drum radius. `name` is the metadata
-name, the file's by default; `ignore_l0` makes every rest length the placed length.
+segment material, and every winch's gear ratio and drum radius. Each wing gets a canopy
+face between each pair of its neighbouring stations. `name` is the metadata name, the
+file's by default; `ignore_l0` makes every rest length the placed length.
 """
 function load_authoring(path; set::Settings, name=first(splitext(basename(path))),
                         ignore_l0=false)
@@ -692,10 +711,11 @@ function load_authoring(path; set::Settings, name=first(splitext(basename(path))
                    for (wing, authored) in zip(wings, authored_wings)]
     metadata = Metadata(name, "", "", AWESIO_VERSION, "structure_schema.yml",
                         length(points), "")
-    draft = SystemDefinition(; metadata, points, segments,
-                             stations=read_stations(data, wings, authored_wings),
+    stations = read_stations(data, wings, authored_wings)
+    draft = SystemDefinition(; metadata, points, segments, stations,
                              pulleys=read_pulleys(data), tethers,
                              winches=read_winches(data, set), wings,
+                             canopy_faces=derive_canopy_faces(wings, stations),
                              bodies=[wing_bodies; bodies], tubes=read_tubes(data))
     placement = design_pose(draft, set, point_wings, point_transforms, authored_wings,
                             authored_bodies, inits, read_transforms(data))

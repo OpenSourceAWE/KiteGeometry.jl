@@ -35,12 +35,25 @@ function column(table, header)
     return [row[index] for row in table["data"]]
 end
 
+"""`system` with the canopy faces of `other`."""
+function with_canopy_of(system, other)
+    fields = (field == :canopy_faces ? other.canopy_faces : getfield(system, field)
+              for field in fieldnames(SystemDefinition))
+    return SystemDefinition(fields...)
+end
+
 @testset "the rigid 2-plate kite loads as SAM's golden document describes it" begin
-    golden = YAML.load_file(joinpath(@__DIR__, "data", "2plate_kite_structure.yml");
-                            dicttype=OrderedDict{String, Any})
-    document = structure_document(load_kite("rigid_structural_geometry.yaml"))
+    golden_path = joinpath(@__DIR__, "data", "2plate_kite_structure.yml")
+    golden = YAML.load_file(golden_path; dicttype=OrderedDict{String, Any})
+    system = load_kite("rigid_structural_geometry.yaml")
+    document = structure_document(system)
     @test document["metadata"]["n_points"] == golden["metadata"]["n_points"]
-    @test document["metadata"]["connectivity_sha"] == golden["metadata"]["connectivity_sha"]
+    @test column(document["canopy_faces"], "points") ==
+          [["le_left", "te_left", "te_center", "le_center"],
+           ["le_center", "te_center", "te_right", "le_right"]]
+    golden_system = load_structure(golden_path; strict=false)
+    @test document["metadata"]["connectivity_sha"] ==
+          connectivity_sha(with_canopy_of(golden_system, system))
     unread = String[]
     for (block, expected) in golden
         block == "metadata" && continue
@@ -110,4 +123,19 @@ end
         only(data["transforms"]["data"])["base_transform_idx"] = "main_transform"
     end
     @test occursin("chained to another", chained.value.msg)
+end
+
+@testset "V3Kite's particle wing gets the canopy faces of awesIO's V3 PSM document" begin
+    set_data_path(joinpath(@__DIR__, "data", "v3_psm"))
+    system = load_authoring(joinpath(@__DIR__, "data", "v3_psm", "struc_geometry.yaml");
+                            set=Settings("system.yaml"))
+    document = structure_document(system)
+    golden = YAML.load_file(joinpath(@__DIR__, "data", "v3_psm_structure.yml"))
+    faces, expected = document["canopy_faces"], golden["canopy_faces"]
+    @test column(faces, "name") == column(expected, "name")
+    @test column(faces, "points") == column(expected, "points")
+    @test unique(column(faces, "wing")) == column(document["wings"], "name")
+    @test unique(column(expected, "wing")) == column(golden["wings"], "name")
+    @test isnothing(only(system.wings).canopy_material)
+    @test isnothing(validate(SCHEMA, JSON.parse(to_json(system))))
 end
