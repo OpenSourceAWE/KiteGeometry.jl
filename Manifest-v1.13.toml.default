@@ -2,7 +2,7 @@
 
 julia_version = "1.13.0"
 manifest_format = "2.1"
-project_hash = "08cfaa716fac729121da0ec62018c31225d7bd41"
+project_hash = "6038544916fc797362e2367e8e518541642eb5bb"
 
 [[deps.ANSIColoredPrinters]]
 git-tree-sha1 = "574baf8110975760d391c710b6341da1afa48d8c"
@@ -133,7 +133,7 @@ uuid = "ac6e5ff7-fb65-4e79-a425-ec3bc9c03011"
 version = "1.12.0"
 
 [[deps.KiteGeometry]]
-deps = ["OrderedCollections", "StaticArrays", "YAML"]
+deps = ["JSON", "OrderedCollections", "SHA", "StaticArrays", "YAML"]
 path = "."
 uuid = "941ca69c-4b42-4a27-9601-abc4d37bf99e"
 version = "0.1.0"

@@ -6,6 +6,9 @@
 # 1-Bart-1/awesIO@ac112b0579d2253ea8dc9e51c1948d290cab3f7f
 # Update gen/awesio.toml and the vendored schema instead
 
+"""The awesIO version of the vendored schema."""
+const AWESIO_VERSION = "1.0.0"
+
 """
     DynamicsType
 
