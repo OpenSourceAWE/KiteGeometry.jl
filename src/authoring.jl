@@ -515,9 +515,11 @@ end
 """One canopy face per pair of neighbouring stations of each wing, in station order, its
 corners the first station's points and then the second's in reverse."""
 function derive_canopy_faces(wings, stations)
+    wing_indices = name_indices(wings, :wings)
     faces = CanopyFace[]
     for (index, wing) in enumerate(wings)
-        own = filter(station -> station.wing in (index, wing.name), stations)
+        own = filter(station -> resolve_index(station.wing, wing_indices, :wings) == index,
+                     stations)
         for (station, next) in zip(own, own[2:end])
             points = [station.points; reverse(next.points)]
             length(points) in 3:4 || throw(ArgumentError(

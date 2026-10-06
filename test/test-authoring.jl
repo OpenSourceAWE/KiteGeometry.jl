@@ -12,9 +12,9 @@ AUTHORING_SYSTEMS = filter(endswith("_structural_geometry.yaml"), readdir(KITE))
 SCHEMA = Schema(YAML.load_file(joinpath(pkgdir(KiteGeometry), "src", "awesio",
                                          "structure_schema.yml")))
 
-"""The settings the 2-plate kite is authored against."""
-function kite_settings()
-    set_data_path(KITE)
+"""The settings the kite in `directory` is authored against."""
+function kite_settings(directory=KITE)
+    set_data_path(directory)
     return Settings("system.yaml")
 end
 
@@ -37,9 +37,10 @@ end
 
 """`system` with the canopy faces of `other`."""
 function with_canopy_of(system, other)
-    fields = (field == :canopy_faces ? other.canopy_faces : getfield(system, field)
-              for field in fieldnames(SystemDefinition))
-    return SystemDefinition(fields...)
+    blocks = NamedTuple(block => getfield(system, block)
+                        for block in keys(KiteGeometry.BLOCKS) if block != :canopy_faces)
+    return SystemDefinition(; system.metadata, system.extras, blocks...,
+                            canopy_faces=other.canopy_faces)
 end
 
 @testset "the rigid 2-plate kite loads as SAM's golden document describes it" begin
@@ -126,9 +127,9 @@ end
 end
 
 @testset "V3Kite's particle wing gets the canopy faces of awesIO's V3 PSM document" begin
-    set_data_path(joinpath(@__DIR__, "data", "v3_psm"))
-    system = load_authoring(joinpath(@__DIR__, "data", "v3_psm", "struc_geometry.yaml");
-                            set=Settings("system.yaml"))
+    v3_psm = joinpath(@__DIR__, "data", "v3_psm")
+    system = load_authoring(joinpath(v3_psm, "struc_geometry.yaml");
+                            set=kite_settings(v3_psm))
     document = structure_document(system)
     golden = YAML.load_file(joinpath(@__DIR__, "data", "v3_psm_structure.yml"))
     faces, expected = document["canopy_faces"], golden["canopy_faces"]
