@@ -257,10 +257,11 @@ function unread_columns(headers, cells, model)
             if !isnothing(cell) && !(header in read))
 end
 
-"""The model of `row` of `block`, read from the columns named after its fields: `NoModel`
-where `model_column` is `nothing` or its cell names no registered model."""
+"""The model of `row` of `block`, read from the columns named after its fields: the one its
+`model` cell names, the block's default model where `model_column` is `nothing`,
+and `NoModel` where that names no registered model."""
 function read_model(block, headers, units, row, model_column)
-    name = isnothing(model_column) ? nothing : row[model_column]
+    name = isnothing(model_column) ? default_model(block) : row[model_column]
     model = get(MODELS, (block, name), nothing)
     isnothing(model) && return NoModel()
     return model.type((model_field(model.type, field, unit, headers, units, row)

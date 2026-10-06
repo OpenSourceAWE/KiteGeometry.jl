@@ -199,6 +199,24 @@ end
     @test built.EI == 2
 end
 
+@testset "a table without a model column reads the block's default model" begin
+    document = fixture_document()
+    tubes = document["tubes"]
+    push!(tubes["headers"], "EA", "EI")
+    push!(tubes["units"], "N", "N*m^2")
+    foreach(row -> push!(row, 2e5, 40.0), tubes["data"])
+    register_model!(:tubes, "test_beam", TestBeam, ("N", "N*m^2"); default=true)
+    try
+        system = SystemDefinition(document)
+        @test all(tube -> tube.model == TestBeam(2e5, 40.0), system.tubes)
+        written = structure_document(system)["tubes"]
+        @test unique(row[end - 2] for row in written["data"]) == ["test_beam"]
+    finally
+        delete!(KiteGeometry.MODELS, (:tubes, "test_beam"))
+        delete!(KiteGeometry.DEFAULT_MODELS, :tubes)
+    end
+end
+
 @testset "a model whose fields shadow the component's is refused" begin
     @test_throws ArgumentError register_model!(:tubes, "shadowing", ShadowingBeam, ("m",))
 end

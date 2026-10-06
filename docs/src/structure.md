@@ -33,7 +33,7 @@ connectivity_sha
 
 ## SymbolicAWEModels' authoring YAML
 
-SymbolicAWEModels authors a system in design coordinates: points at `pos_cad`, tethers by their segment count and stretched length, `variables` shared between rows, and `transforms` that turn the whole to an elevation, azimuth and heading. `load_authoring` converts that dialect into a placed `SystemDefinition`, so `structure_document` writes it as the full-form document. Values a row leaves out — segment material, every winch's gear ratio and drum radius — come from KiteUtils `Settings`. A `canopy_faces` table with the schema's own columns states each wing's canopy: a face's wing, and its corners by name or index.
+SymbolicAWEModels authors a system in design coordinates: points at `pos_cad`, tethers by their segment count and stretched length, `variables` shared between rows, and `transforms` that turn the whole to an elevation, azimuth and heading. `load_authoring` converts that dialect into a placed `SystemDefinition`, so `structure_document` writes it as the full-form document. Values a row leaves out — segment material, every winch's gear ratio and drum radius — come from KiteUtils `Settings`. A `canopy_faces` table with the schema's own columns states each wing's canopy: a face's wing, and its corners by name or index. A filled cell that neither the loader nor the row's model reads is refused, as `load_structure` refuses one, naming the block and its columns; a row's `idx`, where it has one, must be its position. A column a dict row leaves out is an unset cell, which a model field holds only where it admits `nothing`.
 
 ```@docs
 load_authoring
@@ -60,8 +60,10 @@ NameRef
 
 Every component `T{M}` carries a `model::M`: the parameters a tool attaches to a row by
 naming a registered model in its `model` column, one extra column per field of `M`, in the
-units the model was registered with. A row whose `model` is absent or unregistered is a
-`NoModel` component. Reading refuses a filled cell in a column neither the schema nor the
+units the model was registered with. A table without a `model` column reads the model
+registered for its block with `default=true`, and the writer names it in the `model` column.
+A row whose `model` cell is unset or names no registered model, or whose table has no
+`model` column and whose block no default, is a `NoModel` component. Reading refuses a filled cell in a column neither the schema nor the
 row's model names, an unregistered model's name included; `strict=false` drops those columns
 with a warning instead. A component reaches its model's fields as its own, so `tube.EA`
 reads `tube.model.EA`.

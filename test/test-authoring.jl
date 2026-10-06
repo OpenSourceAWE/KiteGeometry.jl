@@ -12,6 +12,70 @@ AUTHORING_SYSTEMS = filter(endswith("_structural_geometry.yaml"), readdir(KITE))
 SCHEMA = Schema(YAML.load_file(joinpath(pkgdir(KiteGeometry), "src", "awesio",
                                          "structure_schema.yml")))
 
+"""SAM's point columns, as a stand-in for the default point model SAM registers."""
+struct SamPoint <: AbstractModel
+    body_frame_damping::Float64
+    world_frame_damping::Float64
+end
+
+"""`SamPoint` with the tube a point rides."""
+struct RidingPoint <: AbstractModel
+    body_frame_damping::Float64
+    world_frame_damping::Float64
+    tube::Union{Nothing, String}
+end
+
+"""SAM's station columns."""
+struct SamStation <: AbstractModel
+    moment_frac::Float64
+    damping::Float64
+end
+
+"""SAM's wing columns, each optional."""
+struct SamWing <: AbstractModel
+    aero_z_offset::Union{Nothing, Float64}
+    aero_scale_chord::Union{Nothing, Float64}
+end
+
+"""SAM's Timoshenko beam, a tube model chosen by name."""
+struct Timoshenko <: AbstractModel
+    EI::Float64
+    GJ::Float64
+    shear_coeff::Float64
+end
+
+SAM_MODELS = [(:points, "sam_point", SamPoint, ("N*s/m", "N*s/m"), true),
+              (:stations, "sam_station", SamStation, ("-", "N*m*s"), true),
+              (:wings, "sam_wing", SamWing, ("m", "-"), true),
+              (:tubes, "timoshenko", Timoshenko, ("N*m^2", "N*m^2", "-"), false)]
+
+"""Take back the model registered for `block` under `name`."""
+function unregister_model!(block, name)
+    delete!(KiteGeometry.MODELS, (block, name))
+    get(KiteGeometry.DEFAULT_MODELS, block, nothing) == name &&
+        delete!(KiteGeometry.DEFAULT_MODELS, block)
+end
+
+"""Register the stand-ins `models` for SAM's models."""
+function register_sam_models!(models=SAM_MODELS)
+    for (block, name, M, units, default) in models
+        register_model!(block, name, M, units; default)
+    end
+end
+
+"""`f()` with the stand-ins for SAM's models on `blocks` taken back."""
+function without_sam_models(f, blocks...)
+    models = [model for model in SAM_MODELS if first(model) in blocks]
+    foreach(model -> unregister_model!(model[1], model[2]), models)
+    try
+        return f()
+    finally
+        register_sam_models!(models)
+    end
+end
+
+register_sam_models!()
+
 """The settings the kite in `directory` is authored against."""
 function kite_settings(directory=KITE)
     set_data_path(directory)
@@ -52,7 +116,8 @@ end
     @test column(document["canopy_faces"], "points") ==
           [["le_left", "te_left", "te_center", "le_center"],
            ["le_center", "te_center", "te_right", "le_right"]]
-    golden_system = load_structure(golden_path; strict=false)
+    golden_system = without_sam_models(() -> load_structure(golden_path; strict=false),
+                                       :points, :stations, :wings)
     @test document["metadata"]["connectivity_sha"] ==
           connectivity_sha(with_canopy_of(golden_system, system))
     unread = String[]
@@ -72,7 +137,6 @@ end
         end
     end
     @test sort(unread) == ["bodies.apparent_mass", "bodies.wing", "points.wing",
-                           "stations.damping", "stations.moment_frac",
                            "stations.stiffness", "winches.model", "wings.aero"]
 end
 
@@ -115,16 +179,88 @@ function load_edited(edit)
     return load_authoring(path; set=kite_settings())
 end
 
-@testset "what a SystemDefinition cannot hold is refused" begin
-    tube_rider = @test_throws ArgumentError load_edited() do data
-        push!(data["points"]["headers"], "tube")
-        foreach(row -> push!(row, "strut"), data["points"]["data"])
+"""`data` with two bodies and the `timoshenko` tube `strut` between them."""
+function add_timoshenko_tube!(data)
+    data["bodies"] = Dict("headers" => ["name", "extra_mass", "pos", "inertia_principal"],
+                          "data" => [["strut_a", 1.0, [0.0, 0.0, 1.0], [1.0, 1.0, 1.0]],
+                                     ["strut_b", 1.0, [0.0, 1.0, 1.0], [1.0, 1.0, 1.0]]])
+    data["tubes"] = Dict("headers" => ["name", "bodies", "diameter", "pressure", "law",
+                                       "model", "EI", "GJ", "shear_coeff"],
+                         "data" => [["strut", ["strut_a", "strut_b"], 0.1, 0.3,
+                                     "breukels2011", "timoshenko", 120.0, 80.0, 0.85]])
+    return data
+end
+
+"""`data` with a `tube` column, every point riding `strut`."""
+function add_riders!(data)
+    push!(data["points"]["headers"], "tube")
+    foreach(row -> push!(row, "strut"), data["points"]["data"])
+    return data
+end
+
+@testset "SAM's columns read into the models it registers and are written back" begin
+    authored = YAML.load_file(joinpath(KITE, "rigid_structural_geometry.yaml"))["points"]
+    system = load_edited(add_timoshenko_tube!)
+    @test system.points[1] isa Point{SamPoint}
+    @test only(system.tubes).model == Timoshenko(120.0, 80.0, 0.85)
+    document = JSON.parse(to_json(system))
+    @test isnothing(validate(SCHEMA, document))
+    damping = column(authored, "body_frame_damping")
+    @test column(document["points"], "body_frame_damping")[eachindex(damping)] == damping
+    @test column(document["points"], "model")[eachindex(damping)] == fill("sam_point",
+                                                                            length(damping))
+    tubes = document["tubes"]
+    @test [column(tubes, header) for header in ("model", "EI", "GJ", "shear_coeff")] ==
+          [["timoshenko"], [120.0], [80.0], [0.85]]
+end
+
+@testset "a column neither the loader nor a registered model reads is refused" begin
+    @test_throws "points columns body_frame_damping, world_frame_damping are read by " *
+                 "neither the loader nor a registered model" without_sam_models(:points) do
+        load_kite("rigid_structural_geometry.yaml")
     end
-    @test occursin("rides a tube", tube_rider.value.msg)
+    @test_throws "tubes columns model, EI, GJ, shear_coeff" without_sam_models(:tubes) do
+        load_edited(add_timoshenko_tube!)
+    end
+    @test_throws "points columns tube" load_edited(add_riders!)
+    @test_throws "points columns colour" load_edited() do data
+        push!(data["points"]["headers"], "colour")
+        foreach(row -> push!(row, "red"), data["points"]["data"])
+    end
+end
+
+@testset "a point rides a tube where its default model reads the tube column" begin
+    system = without_sam_models(:points) do
+        register_model!(:points, "riding_point", RidingPoint, ("N*s/m", "N*s/m", "-");
+                        default=true)
+        try
+            return load_edited(data -> add_riders!(add_timoshenko_tube!(data)))
+        finally
+            unregister_model!(:points, "riding_point")
+        end
+    end
+    @test system.points[1].tube == "strut"
+end
+
+@testset "a block takes one default model" begin
+    @test_throws "points already reads the default model sam_point" register_model!(
+        :points, "riding_point", RidingPoint, ("N*s/m", "N*s/m", "-"); default=true)
+    @test !haskey(KiteGeometry.MODELS, (:points, "riding_point"))
+end
+
+@testset "a chained transform is refused whatever is registered" begin
     chained = @test_throws ArgumentError load_edited() do data
         only(data["transforms"]["data"])["base_transform_idx"] = "main_transform"
     end
     @test occursin("chained to another", chained.value.msg)
+end
+
+@testset "an idx column repeats the row's position" begin
+    @test_throws "row 2 is numbered `idx` 7" load_edited() do data
+        pulleys = data["pulleys"]
+        push!(pulleys["headers"], "idx")
+        pulleys["data"] = [[row; idx] for (row, idx) in zip(pulleys["data"], (1, 7))]
+    end
 end
 
 @testset "a wing has the canopy faces its authoring YAML states and no others" begin
@@ -147,3 +283,5 @@ end
     @test isnothing(only(system.wings).canopy_material)
     @test isnothing(validate(SCHEMA, JSON.parse(to_json(system))))
 end
+
+foreach(model -> unregister_model!(model[1], model[2]), SAM_MODELS)
