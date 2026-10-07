@@ -255,6 +255,18 @@ end
     @test occursin("chained to another", chained.value.msg)
 end
 
+@testset "a block nothing reads is refused, an empty one is not" begin
+    @test_throws "blocks groups, twist are read by nothing" load_edited() do data
+        data["twist"] = Dict("headers" => ["gamma"], "data" => [[0.1]])
+        data["groups"] = Dict("headers" => ["idx", "point_idxs"], "data" => [[1, [1, 2]]])
+    end
+    system = load_edited() do data
+        data["groups"] = Dict("headers" => ["idx", "point_idxs"], "data" => nothing)
+        data["twist"] = nothing
+    end
+    @test !isempty(system.points)
+end
+
 @testset "an idx column repeats the row's position" begin
     @test_throws "row 2 is numbered `idx` 7" load_edited() do data
         pulleys = data["pulleys"]

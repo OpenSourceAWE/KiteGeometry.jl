@@ -5,3 +5,4 @@
 ### Changed
 
 - BREAKING: `load_authoring` refuses a filled cell that neither the loader nor the row's registered model reads, naming the block and its columns, where it used to drop it silently; a point's `tube` is read by a point model that has a `tube` field, and an `idx` column must repeat the row's position.
+- BREAKING: `load_authoring` refuses a block it does not read that holds rows, such as a filled `groups` table, where it used to skip it; an empty one still loads.

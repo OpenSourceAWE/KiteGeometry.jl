@@ -738,6 +738,14 @@ end
 
 # ==================== LOAD ==================== #
 
+"""The blocks `load_authoring` reads, beside `variables`."""
+const AUTHORING_BLOCKS = ("points", "segments", "pulleys", "tethers", "winches", "stations",
+                          "wings", "canopy_faces", "transforms", "bodies", "tubes")
+
+"""Whether the block `table` holds anything: a row, or a value that is no table."""
+holds_rows(table) = !isnothing(table) &&
+    !(table isa AbstractDict && isempty(something(get(table, "data", nothing), ())))
+
 """
     load_authoring(path; set::Settings, name, ignore_l0=false)
 
@@ -746,6 +754,7 @@ design positions moved by its tethers' stretched lengths and its `transforms`, s
 `pos_ENU` and `Q_KA_to_ENU` is the initial pose. `set` gives what a row leaves out:
 segment material, and every winch's gear ratio and drum radius. `name` is the metadata
 name, the file's by default; `ignore_l0` makes every rest length the placed length.
+Refuses a block it does not read that holds rows.
 """
 function load_authoring(path; set::Settings, name=first(splitext(basename(path))),
                         ignore_l0=false)
@@ -755,6 +764,10 @@ function load_authoring(path; set::Settings, name=first(splitext(basename(path))
             "the `$key` block was removed; define shared properties as a mapping under " *
             "`variables` and name its fields as columns"))
     end
+    unread = sort!([key for (key, table) in data
+                    if !(key in AUTHORING_BLOCKS) && holds_rows(table)])
+    isempty(unread) || throw(ArgumentError(
+        "blocks $(join(unread, ", ")) are read by nothing"))
     points, point_wings, point_transforms = read_points(data)
     segments = read_segments(data, set)
     tethers, inits = read_tethers!(points, segments, point_transforms, data, set)
