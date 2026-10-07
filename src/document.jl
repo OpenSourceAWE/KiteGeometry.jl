@@ -238,7 +238,10 @@ function read_table(block, table, strict)
     components = T[]
     unread = OrderedSet{String}()
     for row in table["data"]
-        model = read_model(block, headers, units, row, model_column)
+        name = isnothing(model_column) ? missing : row[model_column]
+        model = row_model(block, name) do M, field, unit
+            model_field(M, field, unit, headers, units, row)
+        end
         push!(components, T(; zip(columns, row[1:n])..., model))
         union!(unread, unread_columns(headers[(n + 1):end], row[(n + 1):end], model))
     end
@@ -255,16 +258,6 @@ function unread_columns(headers, cells, model)
     read = model isa NoModel ? () : ("model", String.(fieldnames(typeof(model)))...)
     return (header for (header, cell) in zip(headers, cells)
             if !isnothing(cell) && !(header in read))
-end
-
-"""The model of `row` of `block`, read from the columns named after its fields: `NoModel`
-where `model_column` is `nothing` or its cell names no registered model."""
-function read_model(block, headers, units, row, model_column)
-    name = isnothing(model_column) ? nothing : row[model_column]
-    model = get(MODELS, (block, name), nothing)
-    isnothing(model) && return NoModel()
-    return model.type((model_field(model.type, field, unit, headers, units, row)
-                       for (field, unit) in zip(fieldnames(model.type), model.units))...)
 end
 
 """The `field` of the model `M` in `row`, from the column of that name. Refuses a column

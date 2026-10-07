@@ -7,6 +7,8 @@ using OrderedCollections: OrderedDict
 using StaticArrays: SVector
 using YAML
 
+include("models.jl")
+
 struct TestBeam <: AbstractModel
     EA::Float64
     EI::Float64
@@ -31,7 +33,7 @@ function with_test_beam(f)
     try
         return f()
     finally
-        delete!(KiteGeometry.MODELS, (:tubes, "test_beam"))
+        unregister_model!(:tubes, "test_beam")
     end
 end
 
@@ -199,6 +201,23 @@ end
     @test built.EI == 2
 end
 
+@testset "a table without a model column reads the block's default model" begin
+    document = fixture_document()
+    tubes = document["tubes"]
+    push!(tubes["headers"], "EA", "EI")
+    push!(tubes["units"], "N", "N*m^2")
+    foreach(row -> push!(row, 2e5, 40.0), tubes["data"])
+    register_model!(:tubes, "test_beam", TestBeam, ("N", "N*m^2"); default=true)
+    try
+        system = SystemDefinition(document)
+        @test all(tube -> tube.model == TestBeam(2e5, 40.0), system.tubes)
+        written = structure_document(system)["tubes"]
+        @test unique(row[end - 2] for row in written["data"]) == ["test_beam"]
+    finally
+        unregister_model!(:tubes, "test_beam")
+    end
+end
+
 @testset "a model whose fields shadow the component's is refused" begin
     @test_throws ArgumentError register_model!(:tubes, "shadowing", ShadowingBeam, ("m",))
 end
@@ -253,7 +272,7 @@ end
     try
         @test_throws ArgumentError with_test_beam(() -> structure_document(system))
     finally
-        delete!(KiteGeometry.MODELS, (:tubes, "stiff_beam"))
+        unregister_model!(:tubes, "stiff_beam")
     end
 end
 

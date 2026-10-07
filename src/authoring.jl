@@ -218,12 +218,6 @@ function parse_table(table)::Vector{NamedTuple}
     end
 end
 
-"""The rows of block `key` of `data`, none where it is absent or empty."""
-function table_rows(data, key)
-    haskey(data, key) && !isnothing(get(data[key], "data", nothing)) || return NamedTuple[]
-    return parse_table(data[key])
-end
-
 """
     yaml_unset(value) -> Bool
 
@@ -258,8 +252,13 @@ yaml_ref(row, field) = yaml_to_ref(yaml_field(row, field))
 yaml_to_ref(value) = yaml_unset(value) ? nothing :
                      value isa Integer ? Int(value) : String(value)
 
-"""Name of a row: its `name` field, else its one-based index `i`."""
-yaml_row_name(row, i) = string(something(yaml_field(row, :name), i))
+"""Name of a row: its `name` field, else its one-based index `i`, which an `idx` field must
+repeat."""
+function yaml_row_name(row, i)
+    idx = yaml_field(row, :idx)
+    isnothing(idx) || idx == i || throw(ArgumentError("row $i is numbered `idx` $idx"))
+    return string(something(yaml_field(row, :name), i))
+end
 
 """The dynamics type a cell names, refusing the removed `WING`."""
 function parse_dynamics_type(text)
@@ -310,6 +309,54 @@ function with_fields(component::T; changes...) where {T <: Component}
               for field in fieldnames(T))...)
 end
 
+"""
+    read_rows(data, block, columns; modelled=true) -> [(row, model)]
+
+The rows of `block` of `data`, none where it is absent or empty, each with the model it
+reads ([`authoring_model`](@ref)) where `modelled`, else `NoModel`. Refuses a filled cell in
+a column that neither the loader, which reads `columns` and `idx`, nor that model reads.
+"""
+function read_rows(data, block, columns; modelled=true)
+    table = get(data, String(block), nothing)
+    rows = isnothing(table) || isnothing(get(table, "data", nothing)) ? NamedTuple[] :
+           parse_table(table)
+    models = [modelled ? authoring_model(block, row) : NoModel() for row in rows]
+    unread = OrderedSet{String}()
+    read_columns = (:idx, columns...)
+    for (row, model) in zip(rows, models)
+        headers = [String(column) for column in keys(row) if !(column in read_columns)]
+        union!(unread, unread_columns(headers, [yaml_field(row, Symbol(header))
+                                                for header in headers], model))
+    end
+    isempty(unread) || throw(ArgumentError(
+        "$block columns $(join(unread, ", ")) are read by neither the loader nor a " *
+        "registered model"))
+    return collect(zip(rows, models))
+end
+
+"""
+    authoring_model(block, row)
+
+The model of `row` of `block`: the one its `model` cell names, else, where the row has no
+`model` column, the block's default, built from the columns named after its fields;
+`NoModel` where that names no registered model. An absent column is an unset cell, refused
+for a field that cannot hold `nothing`.
+"""
+function authoring_model(block, row)
+    name = hasfield(typeof(row), :model) ? yaml_field(row, :model) : missing
+    return row_model(block, name) do M, field, _
+        model_value(M, field, yaml_field(row, field))
+    end
+end
+
+"""`value` as `field` of model `M`, refusing `nothing` where the field cannot hold it."""
+function model_value(M, field, value)
+    T = fieldtype(M, field)
+    isnothing(value) && !(Nothing <: T) &&
+        throw(ArgumentError("model $M needs its $field column filled"))
+    return to_field(T, value)
+end
+
 # ==================== MATERIAL ==================== #
 
 """
@@ -352,6 +399,10 @@ function resolve_material(label, set::Settings; diameter=NaN, unit_stiffness=NaN
     return Float64(diameter), unit_stiffness, Float64(unit_damping), Float64(density)
 end
 
+"""The columns [`material`](@ref) reads."""
+const MATERIAL_COLUMNS = (:diameter_mm, :unit_stiffness, :unit_damping, :density,
+                          :youngs_modulus, :damping_per_stiffness)
+
 """The material columns of a segment or tether row, `NaN` where a column is unset."""
 function material(row)
     diameter_mm = yaml_float(row, :diameter_mm)
@@ -360,8 +411,7 @@ function material(row)
             unit_stiffness=stiffness isa AbstractString ? String(stiffness) :
                            something(yaml_float(row, :unit_stiffness), NaN),
             (field => something(yaml_float(row, field), NaN)
-             for field in (:unit_damping, :density, :youngs_modulus,
-                           :damping_per_stiffness))...)
+             for field in MATERIAL_COLUMNS[3:end])...)
 end
 
 """A segment with its spring resolved from `materials` ([`resolve_material`](@ref)) and
@@ -390,13 +440,13 @@ function read_points(data)
     points = Point[]
     point_wings = Union{Nothing, NameRef}[]
     point_transforms = Union{Nothing, NameRef}[]
-    for (i, row) in enumerate(table_rows(data, "points"))
+    columns = (:name, :type, :wing_idx, :body_idx, :body, :pos_cad, :extra_mass, :area,
+               :drag_coeff, :transform_idx)
+    for (i, (row, model)) in enumerate(read_rows(data, :points, columns))
         name = yaml_row_name(row, i)
         type = parse_dynamics_type(row.type)
         wing = yaml_ref(row, :wing_idx)
         body = something(yaml_ref(row, :body_idx), yaml_ref(row, :body), Some(nothing))
-        isnothing(yaml_field(row, :tube)) || throw(ArgumentError(
-            "point $name rides a tube, which a SystemDefinition does not carry"))
         if type == BODY_STATIC
             isnothing(body) && isnothing(wing) && throw(ArgumentError(
                 "point $name: BODY_STATIC requires a `body` or a `wing` to ride"))
@@ -407,7 +457,8 @@ function read_points(data)
         push!(points, Point(; name, type, body, pos_ENU=yaml_vec3(row, :pos_cad),
                             extra_mass=something(yaml_float(row, :extra_mass), 0.0),
                             drag_area=something(yaml_float(row, :area), 0.0),
-                            drag_coefficient=something(yaml_float(row, :drag_coeff), 0.0)))
+                            drag_coefficient=something(yaml_float(row, :drag_coeff), 0.0),
+                            model))
         push!(point_wings, wing)
         push!(point_transforms, yaml_ref(row, :transform_idx))
     end
@@ -416,7 +467,10 @@ end
 
 """The segments of the `segments` block, their springs resolved against `set`."""
 function read_segments(data, set)
-    return map(enumerate(table_rows(data, "segments"))) do (i, row)
+    columns = (:name, :type, :point_i, :point_j, :l0, :compression_frac,
+               :compression_damping_frac, MATERIAL_COLUMNS...)
+    rows = read_rows(data, :segments, columns; modelled=false)
+    return map(enumerate(rows)) do (i, (row, _))
         isnothing(yaml_field(row, :type)) || throw(ArgumentError(
             "the segment `type` column was removed; delete it"))
         spring_segment(yaml_row_name(row, i),
@@ -431,11 +485,12 @@ end
 
 """The pulleys of the `pulleys` block."""
 function read_pulleys(data)
+    rows = read_rows(data, :pulleys, (:name, :segment_i, :segment_j, :type, :efficiency))
     return Pulley[Pulley(; name=yaml_row_name(row, i),
                          segments=(yaml_to_ref(row.segment_i), yaml_to_ref(row.segment_j)),
                          type=parse_dynamics_type(row.type),
-                         efficiency=something(yaml_float(row, :efficiency), 0.95))
-                  for (i, row) in enumerate(table_rows(data, "pulleys"))]
+                         efficiency=something(yaml_float(row, :efficiency), 0.95), model)
+                  for (i, (row, model)) in enumerate(rows)]
 end
 
 """Reference points as a row writes them: a weight per point reference."""
@@ -464,7 +519,9 @@ end
 function read_wings(data)
     wings = Wing[]
     authored = AuthoringWing[]
-    for (i, row) in enumerate(table_rows(data, "wings"))
+    columns = (:name, :dynamics_type, :type, :mass, :stations, :transform_idx, :origin_idx,
+               :z_ref_points, :y_ref_points, :pos_cad, :extra_mass, :com, :unit_inertia)
+    for (i, (row, model)) in enumerate(read_rows(data, :wings, columns))
         name = yaml_row_name(row, i)
         dynamics = yaml_field(row, :dynamics_type)
         if isnothing(dynamics)
@@ -479,7 +536,7 @@ function read_wings(data)
         isnothing(yaml_field(row, :mass)) || throw(ArgumentError(
             "wing $name: the `mass` column was renamed to `extra_mass`"))
         origin = yaml_field(row, :origin_idx)
-        push!(wings, Wing(; name, canopy_material=nothing))
+        push!(wings, Wing(; name, canopy_material=nothing, model))
         push!(authored, AuthoringWing(
             dynamics == "PARTICLE_DYNAMICS",
             yaml_to_ref.(something(yaml_field(row, :stations), [])),
@@ -496,7 +553,8 @@ end
 """The stations of the `stations` block, each on the wing it names or the wing listing
 it among its `stations`."""
 function read_stations(data, wings, authored)
-    return map(enumerate(table_rows(data, "stations"))) do (i, row)
+    rows = read_rows(data, :stations, (:name, :wing, :type, :points, :point_idxs))
+    return map(enumerate(rows)) do (i, (row, model))
         name = yaml_row_name(row, i)
         wing = yaml_ref(row, :wing)
         if isnothing(wing)
@@ -508,16 +566,17 @@ function read_stations(data, wings, authored)
         end
         points = something(yaml_field(row, :points), yaml_field(row, :point_idxs), [])
         Station(; name, wing, type=parse_dynamics_type(row.type),
-                points=yaml_to_ref.(points))
+                points=yaml_to_ref.(points), model)
     end
 end
 
 """The canopy faces of the `canopy_faces` block, their wing and corners by name or
 index."""
 function read_canopy_faces(data)
+    rows = read_rows(data, :canopy_faces, (:name, :wing, :points))
     return CanopyFace[CanopyFace(; name=yaml_row_name(row, i), wing=yaml_to_ref(row.wing),
-                                 points=yaml_to_ref.(row.points))
-                      for (i, row) in enumerate(table_rows(data, "canopy_faces"))]
+                                 points=yaml_to_ref.(row.points), model)
+                      for (i, (row, model)) in enumerate(rows)]
 end
 
 """What a tether row gives of the length it starts at, refusing the removed
@@ -543,7 +602,11 @@ straight line between its ends, to `points` and `segments`, its material resolve
 function read_tethers!(points, segments, point_transforms, data, set)
     tethers = Tether[]
     inits = TetherInit[]
-    for (i, row) in enumerate(table_rows(data, "tethers"))
+    columns = (:name, :segment_idxs, :start_point, :end_point, :n_segments,
+               :init_unstretched_length, :init_stretched_length, :init_tether_force,
+               :init_stretch_frac, :compression_frac, :compression_damping_frac,
+               MATERIAL_COLUMNS...)
+    for (i, (row, model)) in enumerate(read_rows(data, :tethers, columns))
         name = yaml_row_name(row, i)
         push!(inits, tether_init(row, name))
         segment_refs = yaml_field(row, :segment_idxs)
@@ -553,12 +616,13 @@ function read_tethers!(points, segments, point_transforms, data, set)
                                     find_row(segments, first(refs), "segments").points[1])
             end_point = something(yaml_ref(row, :end_point),
                                   find_row(segments, last(refs), "segments").points[2])
-            push!(tethers, Tether(; name, start_point, end_point, segments=refs))
+            push!(tethers, Tether(; name, start_point, end_point, segments=refs, model))
             continue
         end
         start_point, end_point = yaml_to_ref(row.start_point), yaml_to_ref(row.end_point)
         push!(tethers, expand_tether!(points, segments, point_transforms, name, start_point,
                                       end_point, Int(row.n_segments), last(inits), set;
+                                      model,
                                       compression_frac=something(
                                           yaml_float(row, :compression_frac), 0.1),
                                       compression_damping_frac=something(
@@ -570,9 +634,10 @@ end
 
 """The tether `name` of `n` segments from `start_point` to `end_point`, its `n - 1` inner
 points `<name>_point_<i>` added to `points` on the straight line between them, in the
-transform of whichever end has one, and its segments `<name>_seg_<i>` to `segments`."""
+transform of whichever end has one, and its segments `<name>_seg_<i>` to `segments`; the
+tether carries `model`."""
 function expand_tether!(points, segments, point_transforms, name, start_point, end_point,
-                        n, init, set; spring...)
+                        n, init, set; model, spring...)
     ends = [start_point, end_point]
     indices = [ref isa Int ? ref : findfirst(point -> point.name == ref, points)
                for ref in ends]
@@ -597,21 +662,25 @@ function expand_tether!(points, segments, point_transforms, name, start_point, e
                                        (point_names[i], point_names[i + 1]), set;
                                        l0, spring...))
     end
-    return Tether(; name, start_point, end_point, segments=segment_names)
+    return Tether(; name, start_point, end_point, segments=segment_names, model)
 end
 
 """The winches of the `winches` block, with `set`'s gear ratio and drum radius."""
 function read_winches(data, set)
+    rows = read_rows(data, :winches, (:name, :tether_idxs, :winch_point))
     return Winch[Winch(; name=yaml_row_name(row, i), tethers=yaml_to_ref.(row.tether_idxs),
                        winch_point=yaml_to_ref(row.winch_point), gear_ratio=set.gear_ratio,
-                       drum_radius=set.drum_radius)
-                 for (i, row) in enumerate(table_rows(data, "winches"))]
+                       drum_radius=set.drum_radius, model)
+                 for (i, (row, model)) in enumerate(rows)]
 end
 
 """The transforms of the `transforms` block, their angles in radians and references
 unresolved, refusing one chained to another."""
 function read_transforms(data)
-    return map(enumerate(table_rows(data, "transforms"))) do (i, row)
+    columns = (:name, :elevation, :azimuth, :heading, :base_pos, :base_point_idx,
+               :base_transform_idx, :wing_idx, :rot_point_idx)
+    rows = read_rows(data, :transforms, columns; modelled=false)
+    return map(enumerate(rows)) do (i, (row, _))
         name = yaml_row_name(row, i)
         isnothing(yaml_field(row, :base_transform_idx)) || throw(ArgumentError(
             "transform $name is chained to another, which this loader does not place"))
@@ -627,7 +696,9 @@ the centre of its own mass in its frame [m]."""
 function read_bodies(data)
     bodies = Body[]
     authored = @NamedTuple{transform::Union{Nothing, NameRef}, com_offset::Vec3}[]
-    for (i, row) in enumerate(table_rows(data, "bodies"))
+    columns = (:name, :mass, :extra_mass, :pos, :inertia, :inertia_principal, :type,
+               :Q_b_to_w, :transform_idx, :com_offset_b)
+    for (i, (row, model)) in enumerate(read_rows(data, :bodies, columns))
         name = yaml_row_name(row, i)
         isnothing(yaml_field(row, :mass)) || throw(ArgumentError(
             "body $name: the `mass` column was renamed to `extra_mass`"))
@@ -646,30 +717,39 @@ function read_bodies(data)
                            Q_KA_to_ENU=something(yaml_field(row, :Q_b_to_w),
                                                  IDENTITY_QUATERNION),
                            extra_inertia_KA=isnothing(inertia) ? Mat3(Diagonal(principal)) :
-                                            to_field(Mat3, inertia)))
+                                            to_field(Mat3, inertia), model))
         push!(authored, (; transform=yaml_ref(row, :transform_idx),
                          com_offset=something(yaml_vec3(row, :com_offset_b), zero(Vec3))))
     end
     return bodies, authored
 end
 
-"""The tubes of the `tubes` block, each with the registered model its `model` column
-names, built from the columns named after its fields."""
+"""The tubes of the `tubes` block."""
 function read_tubes(data)
-    return map(enumerate(table_rows(data, "tubes"))) do (i, row)
+    rows = read_rows(data, :tubes, (:name, :bodies, :diameter, :pressure, :law))
+    return map(enumerate(rows)) do (i, (row, model))
         name = yaml_row_name(row, i)
         bodies = yaml_field(row, :bodies)
         (isnothing(bodies) || length(bodies) != 2) && throw(ArgumentError(
             "tube $name: `bodies` must name the two bodies it joins"))
-        M = model_type(:tubes, yaml_field(row, :model))
-        model = M((to_field(fieldtype(M, field), getfield(row, field))
-                   for field in fieldnames(M))...)
         Tube(; name, bodies=yaml_to_ref.(bodies), diameter=yaml_float(row, :diameter),
              pressure=yaml_float(row, :pressure), law=String(row.law), model)
     end
 end
 
 # ==================== LOAD ==================== #
+
+"""The blocks `load_authoring` reads."""
+const AUTHORING_BLOCKS = ("variables", "points", "segments", "pulleys", "tethers",
+                          "winches", "stations", "wings", "canopy_faces", "transforms",
+                          "bodies", "tubes")
+
+"""Whether the block `table` holds anything: any value but a table without rows."""
+function holds_rows(table)
+    isnothing(table) && return false
+    table isa AbstractDict && haskey(table, "headers") || return true
+    return !isempty(something(get(table, "data", nothing), ()))
+end
 
 """
     load_authoring(path; set::Settings, name, ignore_l0=false)
@@ -679,6 +759,7 @@ design positions moved by its tethers' stretched lengths and its `transforms`, s
 `pos_ENU` and `Q_KA_to_ENU` is the initial pose. `set` gives what a row leaves out:
 segment material, and every winch's gear ratio and drum radius. `name` is the metadata
 name, the file's by default; `ignore_l0` makes every rest length the placed length.
+Refuses a block it does not read, other than a table without rows.
 """
 function load_authoring(path; set::Settings, name=first(splitext(basename(path))),
                         ignore_l0=false)
@@ -688,6 +769,10 @@ function load_authoring(path; set::Settings, name=first(splitext(basename(path))
             "the `$key` block was removed; define shared properties as a mapping under " *
             "`variables` and name its fields as columns"))
     end
+    unread = sort!([key for (key, table) in data
+                    if !(key in AUTHORING_BLOCKS) && holds_rows(table)])
+    isempty(unread) || throw(ArgumentError(
+        "blocks $(join(unread, ", ")) are read by nothing"))
     points, point_wings, point_transforms = read_points(data)
     segments = read_segments(data, set)
     tethers, inits = read_tethers!(points, segments, point_transforms, data, set)

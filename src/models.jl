@@ -20,23 +20,49 @@ struct NoModel <: AbstractModel end
 const MODELS = Dict{Tuple{Symbol, String},
                     @NamedTuple{type::Type{<:AbstractModel}, units::Vector{String}}}()
 
+"""The name of the model each block's rows read where its table has no `model` column."""
+const DEFAULT_MODELS = Dict{Symbol, String}()
+
 """
-    register_model!(block, name, M, units)
+    register_model!(block, name, M, units; default=false)
 
 Make a row of `block` whose `model` column reads `name` carry an `M`, built from the columns
-named after the fields of `M`, whose `units` are given in field order. Refuses an `M` with a
-field the component already has. A package registering its models calls this from its
-`__init__`.
+named after the fields of `M`, whose `units` are given in field order. With `default`, the
+rows of a `block` table without a `model` column carry an `M` too. Refuses an `M` with a
+field the component already has, and a second default for `block`. A package registering its
+models calls this from its `__init__`.
 """
 function register_model!(block::Symbol, name::AbstractString, M::Type{<:AbstractModel},
-                         units)
+                         units; default=false)
     clashes = intersect(fieldnames(M), fieldnames(BLOCKS[block]))
     isempty(clashes) ||
         throw(ArgumentError("$M shadows the $block fields $(join(clashes, ", "))"))
     length(units) == fieldcount(M) ||
         throw(ArgumentError("$M needs one unit per field"))
+    default && get(DEFAULT_MODELS, block, name) != name && throw(ArgumentError(
+        "$block already reads the default model $(DEFAULT_MODELS[block])"))
     MODELS[(block, name)] = (; type=M, units=collect(String, units))
+    default && (DEFAULT_MODELS[block] = name)
     return M
+end
+
+"""The name of the model the rows of a `block` table without a `model` column read, or
+`nothing`."""
+default_model(block) = get(DEFAULT_MODELS, block, nothing)
+
+"""
+    row_model(field_value, block, name)
+
+The model of a row of `block`: the one registered under `name`, under the block's default
+where `name` is `missing` for a table without a `model` column, and `NoModel` where that
+names no registered model. Each field of its type `M` is `field_value(M, field, unit)`.
+"""
+function row_model(field_value, block, name)
+    model = get(MODELS, (block, coalesce(name, default_model(block))), nothing)
+    isnothing(model) && return NoModel()
+    M = model.type
+    return M((field_value(M, field, unit)
+              for (field, unit) in zip(fieldnames(M), model.units))...)
 end
 
 """
