@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: 2025 Bart van de Lint, Jelle Poland
-# SPDX-License-Identifier: LGPL-3.0-only
+# SPDX-License-Identifier: MIT
 
 const Vec3 = SVector{3, Float64}
 const Mat3 = SMatrix{3, 3, Float64, 9}

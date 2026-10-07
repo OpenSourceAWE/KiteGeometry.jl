@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: 2025 Bart van de Lint, Jelle Poland
-# SPDX-License-Identifier: LGPL-3.0-only
+# SPDX-License-Identifier: MIT
 
 # ==================== VARIABLES ==================== #
 
