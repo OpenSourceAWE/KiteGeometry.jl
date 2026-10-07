@@ -754,7 +754,7 @@ end
 """
     load_authoring(path; set::Settings, name, ignore_l0=false)
 
-The `SystemDefinition` SymbolicAWEModels' authoring YAML at `path` describes, placed:
+The `SystemDefinition` the authoring YAML at `path` describes, placed:
 design positions moved by its tethers' stretched lengths and its `transforms`, so every
 `pos_ENU` and `Q_KA_to_ENU` is the initial pose. `set` gives what a row leaves out:
 segment material, and every winch's gear ratio and drum radius. `name` is the metadata
