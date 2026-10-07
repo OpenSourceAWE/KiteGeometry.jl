@@ -322,9 +322,9 @@ function read_rows(data, block, columns; modelled=true)
            parse_table(table)
     models = [modelled ? authoring_model(block, row) : NoModel() for row in rows]
     unread = OrderedSet{String}()
-    read = (:idx, columns...)
+    read_columns = (:idx, columns...)
     for (row, model) in zip(rows, models)
-        headers = [String(column) for column in keys(row) if !(column in read)]
+        headers = [String(column) for column in keys(row) if !(column in read_columns)]
         union!(unread, unread_columns(headers, [yaml_field(row, Symbol(header))
                                                 for header in headers], model))
     end
@@ -343,9 +343,10 @@ The model of `row` of `block`: the one its `model` cell names, else, where the r
 for a field that cannot hold `nothing`.
 """
 function authoring_model(block, row)
-    name = hasfield(typeof(row), :model) ? yaml_field(row, :model) : default_model(block)
-    M = model_type(block, name)
-    return M((model_value(M, field, yaml_field(row, field)) for field in fieldnames(M))...)
+    name = hasfield(typeof(row), :model) ? yaml_field(row, :model) : missing
+    return row_model(block, name) do M, field, _
+        model_value(M, field, yaml_field(row, field))
+    end
 end
 
 """`value` as `field` of model `M`, refusing `nothing` where the field cannot hold it."""
@@ -620,8 +621,8 @@ function read_tethers!(points, segments, point_transforms, data, set)
         end
         start_point, end_point = yaml_to_ref(row.start_point), yaml_to_ref(row.end_point)
         push!(tethers, expand_tether!(points, segments, point_transforms, name, start_point,
-                                      end_point, Int(row.n_segments), last(inits), model,
-                                      set;
+                                      end_point, Int(row.n_segments), last(inits), set;
+                                      model,
                                       compression_frac=something(
                                           yaml_float(row, :compression_frac), 0.1),
                                       compression_damping_frac=something(
@@ -636,7 +637,7 @@ points `<name>_point_<i>` added to `points` on the straight line between them, i
 transform of whichever end has one, and its segments `<name>_seg_<i>` to `segments`; the
 tether carries `model`."""
 function expand_tether!(points, segments, point_transforms, name, start_point, end_point,
-                        n, init, model, set; spring...)
+                        n, init, set; model, spring...)
     ends = [start_point, end_point]
     indices = [ref isa Int ? ref : findfirst(point -> point.name == ref, points)
                for ref in ends]
@@ -738,13 +739,17 @@ end
 
 # ==================== LOAD ==================== #
 
-"""The blocks `load_authoring` reads, beside `variables`."""
-const AUTHORING_BLOCKS = ("points", "segments", "pulleys", "tethers", "winches", "stations",
-                          "wings", "canopy_faces", "transforms", "bodies", "tubes")
+"""The blocks `load_authoring` reads."""
+const AUTHORING_BLOCKS = ("variables", "points", "segments", "pulleys", "tethers",
+                          "winches", "stations", "wings", "canopy_faces", "transforms",
+                          "bodies", "tubes")
 
-"""Whether the block `table` holds anything: a row, or a value that is no table."""
-holds_rows(table) = !isnothing(table) &&
-    !(table isa AbstractDict && isempty(something(get(table, "data", nothing), ())))
+"""Whether the block `table` holds anything: any value but a table without rows."""
+function holds_rows(table)
+    isnothing(table) && return false
+    table isa AbstractDict && haskey(table, "headers") || return true
+    return !isempty(something(get(table, "data", nothing), ()))
+end
 
 """
     load_authoring(path; set::Settings, name, ignore_l0=false)
@@ -754,7 +759,7 @@ design positions moved by its tethers' stretched lengths and its `transforms`, s
 `pos_ENU` and `Q_KA_to_ENU` is the initial pose. `set` gives what a row leaves out:
 segment material, and every winch's gear ratio and drum radius. `name` is the metadata
 name, the file's by default; `ignore_l0` makes every rest length the placed length.
-Refuses a block it does not read that holds rows.
+Refuses a block it does not read, other than a table without rows.
 """
 function load_authoring(path; set::Settings, name=first(splitext(basename(path))),
                         ignore_l0=false)

@@ -51,6 +51,21 @@ end
 default_model(block) = get(DEFAULT_MODELS, block, nothing)
 
 """
+    row_model(field_value, block, name)
+
+The model of a row of `block`: the one registered under `name`, under the block's default
+where `name` is `missing` for a table without a `model` column, and `NoModel` where that
+names no registered model. Each field of its type `M` is `field_value(M, field, unit)`.
+"""
+function row_model(field_value, block, name)
+    model = get(MODELS, (block, coalesce(name, default_model(block))), nothing)
+    isnothing(model) && return NoModel()
+    M = model.type
+    return M((field_value(M, field, unit)
+              for (field, unit) in zip(fieldnames(M), model.units))...)
+end
+
+"""
     model_type(block, name)
 
 The model registered for `block` under `name`, or `NoModel` for `nothing` or an unregistered

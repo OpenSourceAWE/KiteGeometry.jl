@@ -63,9 +63,9 @@ naming a registered model in its `model` column, one extra column per field of `
 units the model was registered with. A table without a `model` column reads the model
 registered for its block with `default=true`, and the writer names it in the `model` column.
 A row whose `model` cell is unset or names no registered model, or whose table has no
-`model` column and whose block no default, is a `NoModel` component. Reading refuses a filled cell in a column neither the schema nor the
-row's model names, an unregistered model's name included; `strict=false` drops those columns
-with a warning instead. A component reaches its model's fields as its own, so `tube.EA`
+`model` column and whose block has no default, is a `NoModel` component. Reading refuses a
+filled cell in a column neither the schema nor the row's model names, an unregistered
+model's name included; `strict=false` drops those columns with a warning instead. A component reaches its model's fields as its own, so `tube.EA`
 reads `tube.model.EA`.
 
 ```@docs

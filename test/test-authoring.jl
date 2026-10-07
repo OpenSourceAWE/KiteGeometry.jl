@@ -7,6 +7,8 @@ using KiteUtils: Settings, set_data_path
 using OrderedCollections: OrderedDict
 using YAML
 
+include("models.jl")
+
 KITE = joinpath(@__DIR__, "data", "2plate_kite")
 AUTHORING_SYSTEMS = filter(endswith("_structural_geometry.yaml"), readdir(KITE))
 SCHEMA = Schema(YAML.load_file(joinpath(pkgdir(KiteGeometry), "src", "awesio",
@@ -48,13 +50,6 @@ SAM_MODELS = [(:points, "sam_point", SamPoint, ("N*s/m", "N*s/m"), true),
               (:stations, "sam_station", SamStation, ("-", "N*m*s"), true),
               (:wings, "sam_wing", SamWing, ("m", "-"), true),
               (:tubes, "timoshenko", Timoshenko, ("N*m^2", "N*m^2", "-"), false)]
-
-"""Take back the model registered for `block` under `name`."""
-function unregister_model!(block, name)
-    delete!(KiteGeometry.MODELS, (block, name))
-    get(KiteGeometry.DEFAULT_MODELS, block, nothing) == name &&
-        delete!(KiteGeometry.DEFAULT_MODELS, block)
-end
 
 """Register the stand-ins `models` for SAM's models."""
 function register_sam_models!(models=SAM_MODELS)
@@ -259,6 +254,9 @@ end
     @test_throws "blocks groups, twist are read by nothing" load_edited() do data
         data["twist"] = Dict("headers" => ["gamma"], "data" => [[0.1]])
         data["groups"] = Dict("headers" => ["idx", "point_idxs"], "data" => [[1, [1, 2]]])
+    end
+    @test_throws "blocks metadata are read by nothing" load_edited() do data
+        data["metadata"] = Dict("author" => "x")
     end
     system = load_edited() do data
         data["groups"] = Dict("headers" => ["idx", "point_idxs"], "data" => nothing)

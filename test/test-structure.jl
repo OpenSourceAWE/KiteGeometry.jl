@@ -7,6 +7,8 @@ using OrderedCollections: OrderedDict
 using StaticArrays: SVector
 using YAML
 
+include("models.jl")
+
 struct TestBeam <: AbstractModel
     EA::Float64
     EI::Float64
@@ -31,7 +33,7 @@ function with_test_beam(f)
     try
         return f()
     finally
-        delete!(KiteGeometry.MODELS, (:tubes, "test_beam"))
+        unregister_model!(:tubes, "test_beam")
     end
 end
 
@@ -212,8 +214,7 @@ end
         written = structure_document(system)["tubes"]
         @test unique(row[end - 2] for row in written["data"]) == ["test_beam"]
     finally
-        delete!(KiteGeometry.MODELS, (:tubes, "test_beam"))
-        delete!(KiteGeometry.DEFAULT_MODELS, :tubes)
+        unregister_model!(:tubes, "test_beam")
     end
 end
 
@@ -271,7 +272,7 @@ end
     try
         @test_throws ArgumentError with_test_beam(() -> structure_document(system))
     finally
-        delete!(KiteGeometry.MODELS, (:tubes, "stiff_beam"))
+        unregister_model!(:tubes, "stiff_beam")
     end
 end
 
