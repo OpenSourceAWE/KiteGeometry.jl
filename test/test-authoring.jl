@@ -269,6 +269,21 @@ function add_riders!(data)
     return data
 end
 
+@testset "materials of one law and different parameters get distinct names" begin
+    materials = KiteGeometry.MaterialTable(Material[], Dict{String, Any}())
+    names = [KiteGeometry.line_material!(materials, "line", density, "rope")
+             for density in (970.0, 1100.0, 970.0)]
+    @test names == ["rope", "rope_2", "rope"]
+    @test KiteGeometry.line_material!(materials, "rope", 970.0, 1.0e9) == "rope_3"
+end
+
+@testset "a breukels2011 tube's material is its own copy of SAM's constants" begin
+    system = load_edited(add_timoshenko_tube!)
+    parameters = system.materials[only(system.tubes).material].parameters
+    @test parameters == KiteGeometry.BREUKELS2011
+    @test parameters !== KiteGeometry.BREUKELS2011
+end
+
 @testset "SAM's columns read into the models it registers and are written back" begin
     authored = YAML.load_file(joinpath(KITE, "rigid_structural_geometry.yaml"))["points"]
     system = load_edited(add_timoshenko_tube!)

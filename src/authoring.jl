@@ -142,16 +142,15 @@ function yaml_variables(data)
 end
 
 """
-    resolve_yaml_variables(data) -> data
+    resolve_yaml_variables(data, variables=yaml_variables(data)) -> data
 
 Apply an optional top-level `variables` block to the rest of the YAML tree and
 drop the block. A variable holding a number, string or list replaces any cell
 written as its name; a variable holding a mapping is a multi-variable and fills
 the columns it names at once. Variables may refer to other variables.
 """
-function resolve_yaml_variables(data)
+function resolve_yaml_variables(data, variables=yaml_variables(data))
     haskey(data, "variables") || return data
-    variables = yaml_variables(data)
     check_variable_names(data, variables)
 
     multi_variables = Dict{String, Any}()
@@ -433,28 +432,35 @@ const BREUKELS2011 = OrderedDict{String, Any}(
     "C18" => 358.05, "C19" => 0.0918)
 
 """
-    Materials
+    MaterialTable
 
 The materials a load has named so far, and the variables of its YAML they may be named
 after.
 """
-struct Materials
+struct MaterialTable
     rows::Vector{Material}
     variables::Dict{String, Any}
 end
 
 """
-    material!(materials::Materials, name, law, parameters)
+    material!(materials::MaterialTable, name, law, parameters)
 
-The name of the material of `law` and `parameters` among `materials`, added as `name` where
-none has them.
+The name of the material of `law` and `parameters` among `materials`, added where none has
+them as `name`, or as `name_2`, `name_3`, … where another material holds that name.
 """
-function material!(materials::Materials, name, law, parameters)
+function material!(materials::MaterialTable, name, law, parameters)
     for row in materials.rows
         row.law == law && row.parameters == parameters && return row.name
     end
-    push!(materials.rows, Material(; name, law, parameters))
-    return name
+    taken = Set(row.name for row in materials.rows)
+    unique_name = name
+    n = 1
+    while unique_name in taken
+        n += 1
+        unique_name = "$(name)_$n"
+    end
+    push!(materials.rows, Material(; name=unique_name, law, parameters))
+    return unique_name
 end
 
 """The name of the first multi-variable among `variables` whose fields hold `parameters`,
@@ -801,7 +807,7 @@ function read_tubes(data, materials)
         (isnothing(bodies) || length(bodies) != 2) && throw(ArgumentError(
             "tube $name: `bodies` must name the two bodies it joins"))
         law = String(row.law)
-        parameters = law == "breukels2011" ? BREUKELS2011 : OrderedDict{String, Any}()
+        parameters = law == "breukels2011" ? copy(BREUKELS2011) : OrderedDict{String, Any}()
         Tube(; name, bodies=yaml_to_ref.(bodies), diameter=yaml_float(row, :diameter),
              pressure=yaml_float(row, :pressure),
              material=material!(materials, law, law, parameters), model)
@@ -837,7 +843,8 @@ placed length. Refuses a block it does not read, other than a table without rows
 function load_authoring(path; set::Settings, name=first(splitext(basename(path))),
                         ignore_l0=false)
     authored = YAML.load_file(path)
-    data = resolve_yaml_variables(authored)
+    variables = yaml_variables(authored)
+    data = resolve_yaml_variables(authored, variables)
     for key in ("materials", "elements", "segment_properties")
         haskey(data, key) && throw(ArgumentError(
             "the `$key` block was removed; define shared properties as a mapping under " *
@@ -847,7 +854,7 @@ function load_authoring(path; set::Settings, name=first(splitext(basename(path))
                     if !(key in AUTHORING_BLOCKS) && holds_rows(table)])
     isempty(unread) || throw(ArgumentError(
         "blocks $(join(unread, ", ")) are read by nothing"))
-    materials = Materials(Material[], yaml_variables(authored))
+    materials = MaterialTable(Material[], variables)
     points, point_wings, point_transforms = read_points(data)
     segments = read_segments(data, set, materials)
     tethers, inits = read_tethers!(points, segments, point_transforms, data, set, materials)
