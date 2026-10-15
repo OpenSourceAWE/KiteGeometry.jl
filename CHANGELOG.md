@@ -5,6 +5,12 @@ SPDX-License-Identifier: MIT
 
 # Changelog
 
+## KiteGeometry v0.1.1 2026-10-15
+
+### Added
+
+- `save_log(logger, system, name)` saves a KiteUtils log with the `SystemDefinition` `system` in its metadata under `topology`, and `KiteGeometry.definition(log)` reads it back from a log `load_log` loaded.
+
 ## KiteGeometry v0.1.0 09-10-2026
 
 ### Added

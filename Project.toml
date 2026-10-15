@@ -1,7 +1,7 @@
 name = "KiteGeometry"
 uuid = "941ca69c-4b42-4a27-9601-abc4d37bf99e"
 authors = ["Bart van de Lint <bart@vandelint.net> and contributors"]
-version = "0.1.0"
+version = "0.1.1"
 
 [workspace]
 projects = ["test", "docs"]
