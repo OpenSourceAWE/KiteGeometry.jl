@@ -22,9 +22,8 @@ using SHA: sha256
 using StaticArrays: SMatrix, SVector
 using YAML: YAML
 
-export SystemDefinition, Metadata, Point, Segment, Station, Pulley, Tether, Winch, Wing,
-       CanopyFace, Body, Tube
-export DynamicsType, DYNAMIC, STATIC, BODY_STATIC, KINEMATIC
+export SystemDefinition, Metadata, Material, Point, Segment, SpanwiseStation, Pulley, Tether,
+       Winch, Wing, CanopyFace, Body, Tube, pos_KA
 export NameRef, AbstractModel, NoModel, SegmentSpring, register_model!, model_type
 export load_structure, load_authoring, structure_document, connectivity_sha
 export from_yaml, to_yaml, from_json, to_json

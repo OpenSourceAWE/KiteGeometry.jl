@@ -65,6 +65,14 @@ function row_model(field_value, block, name)
               for (field, unit) in zip(fieldnames(M), model.units))...)
 end
 
+"""`value` as `field` of model `M`, refusing `nothing` where the field cannot hold it."""
+function model_value(M, field, value)
+    T = fieldtype(M, field)
+    isnothing(value) && !(Nothing <: T) &&
+        throw(ArgumentError("model $M needs its $field column filled"))
+    return to_field(T, value)
+end
+
 """
     model_type(block, name)
 
