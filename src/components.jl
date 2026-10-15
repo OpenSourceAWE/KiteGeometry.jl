@@ -51,3 +51,7 @@ end
 to_field(T::Type{<:Tuple}, value::AbstractVector) = convert(T, Tuple(value))
 to_field(T::Type{<:SMatrix}, rows::AbstractVector) = T(permutedims(reduce(hcat, rows)))
 to_field(::Type{Union{Float64, String}}, value::Real) = Float64(value)
+to_field(::Type{Union{Nothing, Float64, Vector{Float64}}}, value::Real) = Float64(value)
+function to_field(::Type{Union{Nothing, Float64, Vector{Float64}}}, value::AbstractVector)
+    return Vector{Float64}(value)
+end
