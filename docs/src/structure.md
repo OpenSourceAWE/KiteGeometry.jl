@@ -27,8 +27,16 @@ from_yaml
 to_yaml
 from_json
 to_json
-KiteGeometry.definition
 connectivity_sha
+```
+
+## Logs
+
+A KiteUtils log carries a system definition as JSON in its metadata under the key `topology`. Saving a log with the definition writes it there, and `KiteGeometry.definition` reads it back from the loaded log or from the string itself.
+
+```@docs
+KiteGeometry.KiteUtils.save_log(::KiteGeometry.Logger, ::SystemDefinition)
+KiteGeometry.definition
 ```
 
 ## SymbolicAWEModels' authoring YAML

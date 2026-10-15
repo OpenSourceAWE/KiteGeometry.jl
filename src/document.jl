@@ -200,6 +200,27 @@ The `SystemDefinition` in the JSON structure document a log carries under the ke
 definition(topology::AbstractString; strict=true) = from_json(topology; strict)
 
 """
+    definition(log::SysLog; strict=true)
+
+The `SystemDefinition` a log loaded by `load_log` carries under its metadata key
+`topology`.
+"""
+definition(log::SysLog; strict=true) = definition(log.metadata["topology"]; strict)
+
+"""
+    save_log(logger::Logger, system::SystemDefinition, name="sim_log", compress=true;
+             metadata=Dict{String, String}(), kwargs...)
+
+`save_log(logger, name, compress; metadata, kwargs...)` with `system` added to
+`metadata` as JSON under the key `topology`, which `KiteGeometry.definition` reads back.
+"""
+function KiteUtils.save_log(logger::Logger, system::SystemDefinition, name="sim_log",
+                            compress=true; metadata=Dict{String, String}(), kwargs...)
+    metadata = merge(metadata, Dict("topology" => to_json(system)))
+    return save_log(logger, name, compress; metadata, kwargs...)
+end
+
+"""
     to_yaml(system::SystemDefinition)
 
 `structure_document(system)` as YAML text.
