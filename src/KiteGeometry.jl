@@ -15,15 +15,15 @@ for more information.
 module KiteGeometry
 
 using JSON: JSON
-using KiteUtils: KiteUtils, Logger, Settings, SysLog, save_log, wrap2pi
+using KiteUtils: KiteUtils, Logger, Settings, SysLog, save_log
 using LinearAlgebra: Diagonal, I, cross, dot, norm, normalize
 using OrderedCollections: OrderedDict, OrderedSet
 using SHA: sha256
 using StaticArrays: SMatrix, SVector
 using YAML: YAML
 
-export SystemDefinition, Metadata, Material, Point, Segment, SpanwiseStation, Pulley, Tether,
-       Winch, Wing, CanopyFace, Body, Tube, pos_KA
+export SystemDefinition, Metadata, Material, Point, Segment, SpanwiseStation, Pulley,
+       Tether, Winch, Wing, CanopyFace, Body, Tube, pos_KA
 export NameRef, AbstractModel, NoModel, SegmentSpring, register_model!, model_type
 export load_structure, load_authoring, structure_document, connectivity_sha
 export from_yaml, to_yaml, from_json, to_json

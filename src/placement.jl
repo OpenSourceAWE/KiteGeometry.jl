@@ -10,18 +10,12 @@ const RefPoints = Vector{Pair{Int, Float64}}
 """
     PlacedTransform
 
-A transform of the authoring YAML, its references resolved: the elevation, azimuth and
-heading [rad] its components are turned to about `base_pos`, where its `base_point` is
-moved first, and the wing body (`wing`) or point (`rot_point`) it turns, 0 for neither.
+A transform of the authoring YAML, its reference resolved: the position [m] its
+`base_point` is moved to, its components with it.
 """
 struct PlacedTransform
-    elevation::Float64
-    azimuth::Float64
-    heading::Float64
     base_pos::Vec3
     base_point::Int
-    wing::Int
-    rot_point::Int
 end
 
 """
@@ -71,8 +65,10 @@ struct Placement
     point_wing::Vector{Int}
     "whether each point is a member of a station"
     wing_node::Vector{Bool}
-    "the frame points of each particle wing's body, `nothing` for any other body"
-    frames::Vector{Union{Nothing, WingFrame}}
+    "whether each body is clamped to the world"
+    static_body::Vector{Bool}
+    "whether each wing is a particle wing"
+    particle_wing::Vector{Bool}
     tether_init::Vector{TetherInit}
     transforms::Vector{PlacedTransform}
 end
@@ -110,50 +106,6 @@ function rotation_matrix_to_quaternion(R)
                    (R[2, 3] + R[3, 2]) / S, S / 4)
 end
 
-"""`v` rotated about the axis `k` by `θ` [rad], by Rodrigues' formula."""
-function rotate_v_around_k(v, k, θ)
-    k = normalize(k)
-    return v * cos(θ) + cross(k, v) * sin(θ) + k * dot(k, v) * (1 - cos(θ))
-end
-
-"""Each column of `R` rotated about the axis `k` by `θ` [rad]."""
-rotate_frame(R, k, θ) = hcat((rotate_v_around_k(R[:, i], k, θ) for i in 1:3)...)
-
-"""Rotation from the tether frame at `wing_pos` into the world: z radial, y azimuthal and
-level, x towards rising elevation."""
-function calc_R_t_to_w(wing_pos)
-    z = normalize(wing_pos)
-    y = abs(wing_pos[1]) < 1e-6 && abs(wing_pos[2]) < 1e-6 ? Vec3(0, 1, 0) :
-        normalize(Vec3(-wing_pos[2], wing_pos[1], 0))
-    return hcat(cross(y, z), y, z)
-end
-
-"""Heading [rad] of the body frame `R_b_to_w` at `wing_pos`: its x axis in the tangent
-plane, from the elevation direction towards the azimuthal one."""
-function calc_heading(R_b_to_w, wing_pos)
-    e_x_t = calc_R_t_to_w(wing_pos)' * R_b_to_w[:, 1]
-    return atan(e_x_t[2], e_x_t[1])
-end
-
-"""Unit vector from a transform's base towards where its elevation and azimuth put what it
-turns."""
-function radial_direction(transform::PlacedTransform)
-    elevation, azimuth = transform.elevation, transform.azimuth
-    return Vec3(cos(elevation) * cos(azimuth), -cos(elevation) * sin(azimuth),
-                sin(elevation))
-end
-
-"""Axis and angle [rad] of the smallest rotation taking the unit vector `from` onto `to`."""
-function min_rotation(from, to)
-    cosang = clamp(dot(from, to), -1.0, 1.0)
-    cosang > 1 - 1e-12 && return Vec3(0, 0, 1), 0.0
-    if cosang < -1 + 1e-12
-        reference = abs(from[1]) < 0.9 ? Vec3(1, 0, 0) : Vec3(0, 1, 0)
-        return normalize(cross(from, reference)), Float64(π)
-    end
-    return normalize(cross(from, to)), acos(cosang)
-end
-
 # ==================== WING FRAMES ==================== #
 
 """Weighted position of the reference points `refs` among the positions `pos`."""
@@ -176,10 +128,11 @@ end
 """
     place!(placement::Placement; ignore_l0=false)
 
-Place the system by its tethers' lengths and its transforms, from the design pose
-`placement` holds: tethers to their stretched lengths, every unset rest length to the
-length it then has, tether and pulley rest lengths shared out, the transforms applied, and
-each body's points carried with it. `ignore_l0` makes every rest length the placed length.
+Place the system by its tethers' lengths and its transforms' base positions, from the
+design pose `placement` holds: tethers to their stretched lengths, every unset rest length
+to the length it then has, tether and pulley rest lengths shared out, each transform's
+members shifted to its base position, and each body's points carried with it. `ignore_l0`
+makes every rest length the placed length.
 """
 function place!(placement::Placement; ignore_l0=false)
     apply_tether_init_stretched_lens!(placement)
@@ -284,18 +237,18 @@ function connected_body_groups(n_bodies, tubes)
 end
 
 """The bodies that translate with `seeds`: the seeds and every body reached from them over
-tubes, stopping at `STATIC` bodies."""
-function translated_body_idxs(seeds, bodies, body_neighbors)
+tubes, stopping at the bodies `static_body` clamps."""
+function translated_body_idxs(seeds, static_body, body_neighbors)
     moved = Set{Int}()
     queue = Int[]
     for seed in seeds
-        (seed in moved || bodies[seed].type == STATIC) && continue
+        (seed in moved || static_body[seed]) && continue
         push!(moved, seed)
         push!(queue, seed)
     end
     while !isempty(queue)
         for neighbor in get(body_neighbors, pop!(queue), Int[])
-            (neighbor in moved || bodies[neighbor].type == STATIC) && continue
+            (neighbor in moved || static_body[neighbor]) && continue
             push!(moved, neighbor)
             push!(queue, neighbor)
         end
@@ -309,14 +262,14 @@ function rigid_point_siblings(placement::Placement, root)
     (; system, point_wing, wing_node) = placement
     siblings = Dict{Int, Set{Int}}()
     for wing in eachindex(system.wings)
-        system.bodies[wing].type == KINEMATIC && continue
+        placement.particle_wing[wing] && continue
         members = Set(index for index in eachindex(system.points)
                       if wing_node[index] && point_wing[index] == wing)
         foreach(member -> siblings[member] = members, members)
     end
     body_members = Dict{Int, Set{Int}}()
     for (index, point) in enumerate(system.points)
-        (point.type == BODY_STATIC || wing_node[index]) || continue
+        (!isnothing(point.body) || wing_node[index]) || continue
         for body in anchor_body_idxs(placement, index)
             push!(get!(body_members, root[body], Set{Int}()), index)
         end
@@ -430,7 +383,7 @@ function apply_cluster_init_stretched_len!(placement::Placement, cluster, downst
     for index in moved
         union!(seeds, anchor_body_idxs(placement, index))
     end
-    for body in translated_body_idxs(seeds, system.bodies, body_neighbors)
+    for body in translated_body_idxs(seeds, placement.static_body, body_neighbors)
         placement.body_pos[body] += delta
     end
     for snap in snaps
@@ -448,7 +401,7 @@ end
     apply_tether_init_stretched_lens!(placement::Placement)
 
 Move every tether given a stretched length to it, from the endpoint on the boundary —
-a `STATIC` or winch point, or one carried only by `STATIC` bodies. Tethers whose reach
+a fixed or winch point, or one carried only by `STATIC` bodies. Tethers whose reach
 overlaps are placed together at their mean length. Refuses a tether with neither endpoint
 on the boundary, and skips one with both, warning.
 """
@@ -459,10 +412,10 @@ function apply_tether_init_stretched_lens!(placement::Placement)
     isempty(specified) && return nothing
     boundary = Set{Int}(winch.winch_point for winch in system.winches)
     for (index, point) in enumerate(system.points)
-        point.type == STATIC && push!(boundary, index)
-        point.type == BODY_STATIC || continue
+        point.fixed && push!(boundary, index)
+        isnothing(point.body) && continue
         carriers = anchor_body_idxs(placement, index)
-        !isempty(carriers) && all(body -> system.bodies[body].type == STATIC, carriers) &&
+        !isempty(carriers) && all(body -> placement.static_body[body], carriers) &&
             push!(boundary, index)
     end
     anchored = filter(specified) do index
@@ -475,7 +428,7 @@ function apply_tether_init_stretched_lens!(placement::Placement)
     for index in anchored
         tether = system.tethers[index]
         isnothing(first(tether_anchor_free(tether, boundary))) && throw(ArgumentError(
-            "tether $(tether.name) has neither endpoint on a STATIC or winch point, so " *
+            "tether $(tether.name) has neither endpoint on a fixed or winch point, so " *
             "it cannot be placed at its stretched length"))
     end
     rigid_siblings = rigid_point_siblings(
@@ -521,23 +474,31 @@ function init_unstretched_len(placement::Placement, index)
     force >= 0 || throw(ArgumentError(
         "tether $(tether.name): init_tether_force $force N is negative"))
     force == 0 && return stretched
-    stiffness = tether_unit_stiffness(tether, segments)
+    stiffness = tether_unit_stiffness(tether, segments, placement.system.materials)
     force < stiffness || throw(ArgumentError(
         "tether $(tether.name): init_tether_force $force N is not below its " *
         "unit_stiffness $stiffness N"))
     return stretched * (1 - force / stiffness)
 end
 
-"""The `unit_stiffness` [N] all segments of `tether` share, refusing a nonlinear law or
-segments that differ."""
-function tether_unit_stiffness(tether, segments)
-    stiffnesses = [segments[index].unit_stiffness for index in tether.segments]
-    all(stiffness -> stiffness isa Float64, stiffnesses) || throw(ArgumentError(
-        "tether $(tether.name): init_tether_force needs a linear unit_stiffness; use " *
-        "init_stretch_frac"))
+"""The axial stiffness times rest length [N] all segments of `tether` share, from their
+`linear` `materials` and diameters, refusing another law or segments that differ."""
+function tether_unit_stiffness(tether, segments, materials)
+    stiffnesses = [unit_stiffness(segments[index], materials, tether)
+                   for index in tether.segments]
     all(≈(first(stiffnesses)), stiffnesses) || throw(ArgumentError(
         "tether $(tether.name): its segments differ in unit_stiffness ($stiffnesses)"))
     return first(stiffnesses)
+end
+
+"""Axial stiffness times rest length [N] of `segment` of `tether`, from its `linear`
+material among `materials` and its diameter."""
+function unit_stiffness(segment, materials, tether)
+    material = materials[segment.material]
+    material.law == "linear" || throw(ArgumentError(
+        "tether $(tether.name): init_tether_force needs a linear material; use " *
+        "init_stretch_frac"))
+    return material.parameters["youngs_modulus"] * π * (segment.diameter / 2)^2
 end
 
 """Share each tether's rest length ([`init_unstretched_len`](@ref)) equally over its
@@ -555,77 +516,18 @@ end
 
 # ==================== TRANSFORMS ==================== #
 
-"""Move `point_set` and `body_set` (indices) by `move` of a position and `turn` of a body
-rotation."""
-function move_members!(placement::Placement, members, move, turn=identity)
-    point_set, body_set = members
-    placement.pos[point_set] .= move.(placement.pos[point_set])
-    placement.body_pos[body_set] .= move.(placement.body_pos[body_set])
-    placement.body_R[body_set] .= turn.(placement.body_R[body_set])
-    return nothing
-end
-
 """
     apply_transforms!(placement::Placement)
 
-Apply each transform to the points and bodies it moves: translate them so its base point
-lands on `base_pos`, turn them by the smallest rotation about the base that puts what it
-turns at its elevation and azimuth, then about that radial to its heading. Particle wing
-bodies are then fitted to their frame points.
+Move the points and bodies of each transform so its base point lands on its `base_pos`.
 """
 function apply_transforms!(placement::Placement)
     for (index, transform) in enumerate(placement.transforms)
-        members = (findall(==(index), placement.point_transform),
-                   findall(==(index), placement.body_transform))
-        base = transform.base_pos
-        shift = base - placement.pos[transform.base_point]
-        move_members!(placement, members, position -> position + shift)
-
-        rel_pos = rot_position(placement, transform) - base
-        norm(rel_pos) < 1e-6 && throw(ArgumentError(
-            "transform $index turns a position on its base $base, so elevation and " *
-            "azimuth are undefined there"))
-        axis, angle = min_rotation(normalize(rel_pos), radial_direction(transform))
-        move_members!(placement, members,
-                      position -> base + rotate_v_around_k(position - base, axis, angle),
-                      R -> rotate_frame(R, axis, angle))
-        apply_heading!(placement, transform, members)
-    end
-    fit_wing_frames!(placement)
-    return nothing
-end
-
-"""Position of what `transform` turns: its wing body's origin or its point."""
-function rot_position(placement::Placement, transform::PlacedTransform)
-    transform.wing != 0 && return placement.body_pos[transform.wing]
-    return placement.pos[transform.rot_point]
-end
-
-"""Turn the `members` of `transform` about the radial through its reference body until
-that body has the transform's heading. A transform moving no body keeps its heading."""
-function apply_heading!(placement::Placement, transform, members)
-    _, body_set = members
-    reference = transform.wing != 0 ? transform.wing :
-                isempty(body_set) ? nothing : first(body_set)
-    isnothing(reference) && return nothing
-    frame = placement.frames[reference]
-    R_b_to_w = isnothing(frame) ? placement.body_R[reference] :
-               first(wing_frame(placement.pos, frame))
-    base = transform.base_pos
-    rel_pos = placement.body_pos[reference] - base
-    delta = wrap2pi(transform.heading - calc_heading(R_b_to_w, rel_pos))
-    k = normalize(rel_pos)
-    move_members!(placement, members,
-                  position -> base + rotate_v_around_k(position - base, k, delta),
-                  R -> rotate_frame(R, k, delta))
-    return nothing
-end
-
-"""Fit every particle wing body to its frame points where they now are."""
-function fit_wing_frames!(placement::Placement)
-    for (body, frame) in enumerate(placement.frames)
-        isnothing(frame) && continue
-        placement.body_R[body], placement.body_pos[body] = wing_frame(placement.pos, frame)
+        shift = transform.base_pos - placement.pos[transform.base_point]
+        points = findall(==(index), placement.point_transform)
+        bodies = findall(==(index), placement.body_transform)
+        placement.pos[points] .+= (shift,)
+        placement.body_pos[bodies] .+= (shift,)
     end
     return nothing
 end

@@ -353,7 +353,7 @@ const UNITS = (
     tubes = ("-", "-"),
 )
 
-"""The unit of each optional column of each table block, by header."""
+"""The unit of each optional column of each table block, by name."""
 const OPTIONAL_UNITS = (
     materials = (;),
     points = (extra_mass = "kg",),

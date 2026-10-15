@@ -174,7 +174,7 @@ function system_source(schema, blocks)
            "const BLOCKS = (\n$table)\n\n" *
            "\"\"\"The unit of each required column of each table block, in order.\"\"\"\n" *
            "const UNITS = (\n$units)\n\n" *
-           "\"\"\"The unit of each optional column of each table block, by header.\"\"\"\n" *
+           "\"\"\"The unit of each optional column of each table block, by name.\"\"\"\n" *
            "const OPTIONAL_UNITS = (\n$optional_units)\n\n" *
            "\"\"\"The blocks a structure document must carry.\"\"\"\n" *
            "const REQUIRED_BLOCKS = ($required)\n"
