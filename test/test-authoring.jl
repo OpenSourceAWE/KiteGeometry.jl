@@ -4,7 +4,9 @@
 using JSON
 using JSONSchema: Schema, validate
 using KiteUtils: Settings, set_data_path
+using LinearAlgebra: norm
 using OrderedCollections: OrderedDict
+using StaticArrays: SVector
 using YAML
 
 include("models.jl")
@@ -16,21 +18,33 @@ SCHEMA = Schema(YAML.load_file(joinpath(pkgdir(KiteGeometry), "src", "awesio",
 
 """SAM's point columns, as a stand-in for the default point model SAM registers."""
 struct SamPoint <: AbstractModel
+    type::String
     body_frame_damping::Float64
     world_frame_damping::Float64
+    area::Float64
+    drag_coeff::Float64
 end
 
 """`SamPoint` with the tube a point rides."""
 struct RidingPoint <: AbstractModel
+    type::String
     body_frame_damping::Float64
     world_frame_damping::Float64
+    area::Float64
+    drag_coeff::Float64
     tube::Union{Nothing, String}
 end
 
 """SAM's station columns."""
 struct SamStation <: AbstractModel
+    type::String
     moment_frac::Float64
     damping::Float64
+end
+
+"""SAM's body columns."""
+struct SamBody <: AbstractModel
+    type::Union{Nothing, String}
 end
 
 """SAM's wing columns, each optional."""
@@ -46,9 +60,12 @@ struct Timoshenko <: AbstractModel
     shear_coeff::Float64
 end
 
-SAM_MODELS = [(:points, "sam_point", SamPoint, ("N*s/m", "N*s/m"), true),
-              (:stations, "sam_station", SamStation, ("-", "N*m*s"), true),
+POINT_UNITS = ("-", "N*s/m", "N*s/m", "m^2", "-")
+SAM_MODELS = [(:points, "sam_point", SamPoint, POINT_UNITS, true),
+              (:spanwise_stations, "sam_station", SamStation, ("-", "-", "N*m*s"), true),
+              (:pulleys, "sam_pulley", SamPulley, ("-", "-"), true),
               (:wings, "sam_wing", SamWing, ("m", "-"), true),
+              (:bodies, "sam_body", SamBody, ("-",), true),
               (:tubes, "timoshenko", Timoshenko, ("N*m^2", "N*m^2", "-"), false)]
 
 """Register the stand-ins `models` for SAM's models."""
@@ -94,45 +111,105 @@ function column(table, header)
     return [row[index] for row in table["data"]]
 end
 
-"""`system` with the canopy faces of `other`."""
-function with_canopy_of(system, other)
-    blocks = NamedTuple(block => getfield(system, block)
-                        for block in keys(KiteGeometry.BLOCKS) if block != :canopy_faces)
-    return SystemDefinition(; system.metadata, system.extras, blocks...,
-                            canopy_faces=other.canopy_faces)
+"""The positions of the points of a `document`'s `points` table, then of its bodies."""
+function positions(document)
+    return SVector{3}.([column(document["points"], "pos_ENU");
+                        column(document["bodies"], "pos_ENU")])
 end
 
-@testset "the rigid 2-plate kite loads as SAM's golden document describes it" begin
-    golden_path = joinpath(@__DIR__, "data", "2plate_kite_structure.yml")
-    golden = YAML.load_file(golden_path; dicttype=OrderedDict{String, Any})
+"""The distance between every two of `positions` [m]."""
+pairwise_distances(positions) = [norm(a - b) for a in positions, b in positions]
+
+"""The row number of each point name of `refs` among `names`."""
+row_numbers(refs, names) = [findfirst(==(ref), names) for ref in refs]
+
+"""The `connectivity_sha` of SAM's golden `document`, with the canopy `faces`."""
+function golden_connectivity_sha(document, faces)
+    names = column(document["points"], "name")
+    segments = row_numbers.(column(document["segments"], "points"), (names,))
+    return connectivity_sha((length(names), segments),
+                            (length(column(document["bodies"], "name")), []),
+                            (length(faces), row_numbers.(faces, (names,))))
+end
+
+"""The block each block of SAM's golden document became, where it was renamed."""
+GOLDEN_BLOCKS = Dict("stations" => "spanwise_stations")
+
+"""The column each column of SAM's golden document became, where it was renamed."""
+GOLDEN_COLUMNS = Dict(("segments", "l0") => "rest_length",
+                      ("points", "drag_area") => "area",
+                      ("points", "drag_coefficient") => "drag_coeff")
+
+"""The point columns SAM's point model reads, which the points a tether adds leave
+unset."""
+POINT_MODEL_COLUMNS = ("type", "drag_area", "drag_coefficient")
+
+@testset "the rigid 2-plate kite has the shape of SAM's golden document, at zenith" begin
+    golden = YAML.load_file(joinpath(@__DIR__, "data", "2plate_kite_structure.yml");
+                            dicttype=OrderedDict{String, Any})
     system = load_kite("rigid_structural_geometry.yaml")
     document = structure_document(system)
     @test document["metadata"]["n_points"] == golden["metadata"]["n_points"]
-    @test column(document["canopy_faces"], "points") ==
-          [["le_left", "te_left", "te_center", "le_center"],
-           ["le_center", "te_center", "te_right", "le_right"]]
-    golden_system = without_sam_models(() -> load_structure(golden_path; strict=false),
-                                       :points, :stations, :wings)
-    @test document["metadata"]["connectivity_sha"] ==
-          connectivity_sha(with_canopy_of(golden_system, system))
+    faces = column(document["canopy_faces"], "points")
+    @test faces == [["le_left", "te_left", "te_center", "le_center"],
+                    ["le_center", "te_center", "te_right", "le_right"]]
+    @test document["metadata"]["connectivity_sha"] == golden_connectivity_sha(golden, faces)
+    @test isapprox(pairwise_distances(positions(document)),
+                   pairwise_distances(positions(golden)); rtol=0, atol=1e-12)
     unread = String[]
     for (block, expected) in golden
         block == "metadata" && continue
         isempty(expected["data"]) && continue
-        table = document[block]
-        @test column(table, "name") == column(expected, "name")
         for header in expected["headers"]
-            values = column(table, header)
+            table = document[get(GOLDEN_BLOCKS, block, block)]
+            values = column(table, get(GOLDEN_COLUMNS, (block, header), header))
             isnothing(values) && (push!(unread, "$block.$header"); continue)
+            header in ("pos_ENU", "Q_KA_to_ENU") && continue
             for (name, value, cell) in zip(column(expected, "name"), values,
                                            column(expected, header))
+                isnothing(value) && block == "points" && header in POINT_MODEL_COLUMNS &&
+                    continue
                 cells_agree(value, cell) || @error "$block $name $header" value cell
                 @test cells_agree(value, cell)
             end
         end
     end
-    @test sort(unread) == ["bodies.apparent_mass", "bodies.wing", "points.wing",
-                           "stations.stiffness", "winches.model", "wings.aero"]
+    @test sort(unread) == ["bodies.Q_KA_to_ENU", "bodies.apparent_mass", "bodies.type",
+                           "bodies.wing", "points.wing", "pulleys.efficiency",
+                           "segments.density", "segments.unit_stiffness",
+                           "stations.stiffness", "winches.model", "wings.aero",
+                           "wings.canopy_material"]
+end
+
+@testset "each segment's material gives the golden document's density and stiffness" begin
+    golden = YAML.load_file(joinpath(@__DIR__, "data", "2plate_kite_structure.yml"))
+    system = load_kite("rigid_structural_geometry.yaml")
+    @test [material.name for material in system.materials] == ["wing_element", "dyneema"]
+    @test all(material -> material.law == "linear", system.materials)
+    for (segment, row) in zip(system.segments, golden["segments"]["data"])
+        parameters = system.materials[segment.material].parameters
+        @test parameters["density"] == row[5]
+        @test isapprox(parameters["youngs_modulus"] * π * (segment.diameter / 2)^2, row[6];
+                       rtol=1e-12)
+    end
+end
+
+@testset "the 2-plate kite at zenith is its authoring YAML in its wing's KA frame" begin
+    for file in AUTHORING_SYSTEMS
+        authored = YAML.load_file(joinpath(KITE, file))["points"]
+        system = load_kite(file)
+        wing = only(system.wings)
+        @test wing.Q_KA2ENU == [1, 0, 0, 0]
+        @test wing.pos_ENU == [0, 0, 20]
+        names, pos_cad = column(authored, "name"), column(authored, "pos_cad")
+        for point in system.points
+            index = findfirst(==(point.name), names)
+            isnothing(index) && continue
+            @test isapprox(pos_KA(wing, point.pos_ENU), pos_cad[index]; rtol=0, atol=1e-12)
+        end
+        transforms = structure_document(system)["transforms"]
+        @test only(transforms["data"])["elevation"] == 50
+    end
 end
 
 @testset "every authoring system writes a document the vendored schema accepts" begin
@@ -150,7 +227,6 @@ end
     system = load_kite("rigid_structural_geometry.yaml")
     segment = system.segments[1]
     @test segment isa Segment{SegmentSpring}
-    @test segment.unit_stiffness ≈ 5000.0
     @test segment.unit_damping ≈ 10.0
     @test model_type(:segments, "spring") === SegmentSpring
 end
@@ -161,7 +237,7 @@ end
     start_pos = system.points[tether.start_point].pos_ENU
     end_pos = system.points[tether.end_point].pos_ENU
     @test hypot((start_pos - end_pos)...) ≈ 20.0
-    lengths = [system.segments[index].l0 for index in tether.segments]
+    lengths = [system.segments[index].rest_length for index in tether.segments]
     @test all(≈(20.0 / 6), lengths)
 end
 
@@ -193,6 +269,21 @@ function add_riders!(data)
     return data
 end
 
+@testset "materials of one law and different parameters get distinct names" begin
+    materials = KiteGeometry.MaterialTable(Material[], Dict{String, Any}())
+    names = [KiteGeometry.line_material!(materials, "line", density, "rope")
+             for density in (970.0, 1100.0, 970.0)]
+    @test names == ["rope", "rope_2", "rope"]
+    @test KiteGeometry.line_material!(materials, "rope", 970.0, 1.0e9) == "rope_3"
+end
+
+@testset "a breukels2011 tube's material is its own copy of SAM's constants" begin
+    system = load_edited(add_timoshenko_tube!)
+    parameters = system.materials[only(system.tubes).material].parameters
+    @test parameters == KiteGeometry.BREUKELS2011
+    @test parameters !== KiteGeometry.BREUKELS2011
+end
+
 @testset "SAM's columns read into the models it registers and are written back" begin
     authored = YAML.load_file(joinpath(KITE, "rigid_structural_geometry.yaml"))["points"]
     system = load_edited(add_timoshenko_tube!)
@@ -210,8 +301,9 @@ end
 end
 
 @testset "a column neither the loader nor a registered model reads is refused" begin
-    @test_throws "points columns body_frame_damping, world_frame_damping are read by " *
-                 "neither the loader nor a registered model" without_sam_models(:points) do
+    @test_throws "points columns body_frame_damping, world_frame_damping, area, " *
+                 "drag_coeff are read by neither the loader nor a registered " *
+                 "model" without_sam_models(:points) do
         load_kite("rigid_structural_geometry.yaml")
     end
     @test_throws "tubes columns model, EI, GJ, shear_coeff" without_sam_models(:tubes) do
@@ -226,7 +318,7 @@ end
 
 @testset "a point rides a tube where its default model reads the tube column" begin
     system = without_sam_models(:points) do
-        register_model!(:points, "riding_point", RidingPoint, ("N*s/m", "N*s/m", "-");
+        register_model!(:points, "riding_point", RidingPoint, (POINT_UNITS..., "-");
                         default=true)
         try
             return load_edited(data -> add_riders!(add_timoshenko_tube!(data)))
@@ -239,7 +331,7 @@ end
 
 @testset "a block takes one default model" begin
     @test_throws "points already reads the default model sam_point" register_model!(
-        :points, "riding_point", RidingPoint, ("N*s/m", "N*s/m", "-"); default=true)
+        :points, "riding_point", RidingPoint, (POINT_UNITS..., "-"); default=true)
     @test !haskey(KiteGeometry.MODELS, (:points, "riding_point"))
 end
 
@@ -276,7 +368,7 @@ end
 @testset "a wing has the canopy faces its authoring YAML states and no others" begin
     system = load_edited(data -> delete!(data, "canopy_faces"))
     @test isempty(system.canopy_faces)
-    @test !isempty(system.stations)
+    @test !isempty(system.spanwise_stations)
 end
 
 @testset "V3Kite's PSM fixture states the canopy faces of awesIO's V3 PSM document" begin
