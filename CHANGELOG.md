@@ -5,6 +5,12 @@ SPDX-License-Identifier: MIT
 
 # Changelog
 
+## KiteGeometry v0.1.2 2026-10-15
+
+### Fixed
+
+- A model field typed `Union{Nothing, Float64, Vector{Float64}}` reads a cell holding one number or a vector; both were refused with a `MethodError`.
+
 ## KiteGeometry v0.1.1 2026-10-15
 
 ### Added
