@@ -226,6 +226,13 @@ end
     @test_throws ArgumentError register_model!(:tubes, "test_beam", TestBeam, ("N",))
 end
 
+@testset "a field of one number or one per axis takes either" begin
+    field = Union{Nothing, Float64, Vector{Float64}}
+    @test KiteGeometry.to_field(field, 2) === 2.0
+    @test KiteGeometry.to_field(field, [1, 2, 3]) == [1.0, 2.0, 3.0]
+    @test isnothing(KiteGeometry.to_field(field, nothing))
+end
+
 @testset "names in, indices held" begin
     system = small_system(;
         tethers=[Tether(; name="main", start_point="anchor", end_point=2,
