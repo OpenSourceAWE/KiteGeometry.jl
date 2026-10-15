@@ -783,8 +783,7 @@ function load_authoring(path; set::Settings, name=first(splitext(basename(path))
                         extra_mass=authored.particle ? 0.0 : authored.extra_mass,
                         extra_inertia_KA=zero(Mat3))
                    for (wing, authored) in zip(wings, authored_wings)]
-    metadata = Metadata(name, "", "", AWESIO_VERSION, "structure_schema.yml",
-                        length(points), "")
+    metadata = Metadata(; name, n_points=length(points))
     draft = SystemDefinition(; metadata, points, segments,
                              stations=read_stations(data, wings, authored_wings),
                              pulleys=read_pulleys(data), tethers,
