@@ -316,12 +316,6 @@ function yaml_unit_inertia(row)
     return Mat3(Ixx, Ixy, Ixz, Ixy, Iyy, Iyz, Ixz, Iyz, Izz)
 end
 
-"""`component` with the fields `changes` names replaced."""
-function with_fields(component::T; changes...) where {T <: Component}
-    return T((get(changes, field, getfield(component, field))
-              for field in fieldnames(T))...)
-end
-
 """
     read_rows(data, block, columns; modelled=true, key=String(block)) -> [(row, model)]
 
@@ -879,7 +873,7 @@ function load_authoring(path; set::Settings, name=first(splitext(basename(path))
                             authored_bodies, inits, read_transforms(data))
     design_pos = placement.body_pos[eachindex(wings)]
     place!(placement; ignore_l0)
-    return placed_definition(placement, placement.body_pos[eachindex(wings)] - design_pos)
+    return placed_definition!(placement, placement.body_pos[eachindex(wings)] - design_pos)
 end
 
 """Index of each component of `block` of `system` by name."""
@@ -956,8 +950,7 @@ function design_pose(draft, set, point_wings, point_transforms, authored_wings,
         isempty(members) && continue
         body_pos[wing], body_R[wing], com_offset[wing], inertia =
             wing_body_pose(draft, authored, members, point_names)
-        isnothing(inertia) ||
-            (draft.bodies[wing] = with_fields(draft.bodies[wing]; extra_inertia_KA=inertia))
+        isnothing(inertia) || (draft.bodies[wing].extra_inertia_KA = inertia)
     end
     pos = [point.pos_ENU for point in draft.points]
     anchor = [isnothing(point.body) ? zero(Vec3) :
@@ -1010,8 +1003,7 @@ function wing_mass!(draft, wing, authored, members, set)
         iszero(authored.extra_mass) && set.mass > 0 && all(iszero, masses) || return nothing
     end
     for index in members
-        draft.points[index] = with_fields(draft.points[index];
-                                          extra_mass=set.mass / length(members))
+        draft.points[index].extra_mass = set.mass / length(members)
     end
     return nothing
 end
@@ -1057,31 +1049,33 @@ function wing_inertia(points, members, authored)
 end
 
 """
-    placed_definition(placement::Placement, wing_origins)
+    placed_definition!(placement::Placement, wing_origins)
 
-The `SystemDefinition` of `placement` where it stands: each point and body at its placed
-position, a body at the centre of its own mass, each wing's KA frame at its origin in
-`wing_origins` [m] with ENU's axes, and the metadata's `connectivity_sha` that of its
-tables.
+The `SystemDefinition` of `placement` where it stands, its rows moved there in place: each
+point and body at its placed position, a body at the centre of its own mass, each wing's KA
+frame at its origin in `wing_origins` [m] with ENU's axes, and the metadata's
+`connectivity_sha` that of its tables.
 """
-function placed_definition(placement::Placement, wing_origins)
+function placed_definition!(placement::Placement, wing_origins)
     (; system) = placement
+    for (point, pos) in zip(system.points, placement.pos)
+        point.pos_ENU .= pos
+    end
+    for (segment, l0) in zip(system.segments, placement.l0)
+        segment.rest_length = l0
+    end
+    for (wing, origin) in zip(system.wings, wing_origins)
+        wing.pos_ENU .= origin
+        wing.Q_KA2ENU .= IDENTITY_QUATERNION
+    end
+    for (index, body) in enumerate(system.bodies)
+        R = placement.body_R[index]
+        body.pos_ENU .= placement.body_pos[index] + R * placement.com_offset[index]
+        body.Q_KA2ENU .= rotation_matrix_to_quaternion(R)
+    end
     metadata = Metadata((field == :connectivity_sha ? connectivity_sha(system) :
                          getfield(system.metadata, field)
                          for field in fieldnames(Metadata))...)
-    points = [with_fields(point; pos_ENU=placement.pos[index])
-              for (index, point) in enumerate(system.points)]
-    segments = [with_fields(segment; rest_length=placement.l0[index])
-                for (index, segment) in enumerate(system.segments)]
-    wings = [with_fields(wing; pos_ENU=origin, Q_KA2ENU=IDENTITY_QUATERNION)
-             for (wing, origin) in zip(system.wings, wing_origins)]
-    bodies = map(enumerate(system.bodies)) do (index, body)
-        R = placement.body_R[index]
-        mass_centre = placement.body_pos[index] + R * placement.com_offset[index]
-        with_fields(body; pos_ENU=mass_centre, Q_KA2ENU=rotation_matrix_to_quaternion(R))
-    end
-    return SystemDefinition(metadata, system.materials, points, segments,
-                            system.spanwise_stations, system.pulleys, system.tethers,
-                            system.winches, wings, system.canopy_faces, bodies,
-                            system.tubes, system.extras)
+    return SystemDefinition(metadata, (getfield(system, field)
+                                       for field in fieldnames(SystemDefinition)[2:end])...)
 end

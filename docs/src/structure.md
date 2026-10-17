@@ -53,6 +53,8 @@ load_authoring
 
 ## Components
 
+A component is mutable, so a tool edits a loaded definition in place before it runs it: `segment.rest_length -= 0.1`, `point.pos_ENU .= pos`. Positions and rotations are `MVector`s and an inertia an `MMatrix`. Two components, models or definitions are equal, and hash alike, where their fields are.
+
 ```@docs
 Material
 Point
@@ -70,7 +72,7 @@ NameRef
 
 ## Models
 
-Every component `T{M}` carries a `model::M`: the parameters a tool attaches to a row by naming a registered model in its `model` column, one extra column per field of `M`, in the units the model was registered with. A table without a `model` column reads the model registered for its block with `default=true`; the writer leaves the `model` column out where every row reads that default, and names each row's model otherwise. A row whose `model` cell is unset or names no registered model, or whose table has no `model` column and whose block has no default, is a `NoModel` component. A model column a table leaves out is unset, refused where its field cannot be `nothing`, and the writer leaves out a model column no row fills. Reading refuses a filled cell in a column neither the schema nor the row's model names, an unregistered model's name included; `strict=false` drops those columns with a warning instead. A component reaches its model's fields as its own, so `tube.EA` reads `tube.model.EA`.
+Every component `T{M}` carries a `model::M`: the parameters a tool attaches to a row by naming a registered model in its `model` column, one extra column per field of `M`, in the units the model was registered with. A table without a `model` column reads the model registered for its block with `default=true`; the writer leaves the `model` column out where every row reads that default, and names each row's model otherwise. A row whose `model` cell is unset or names no registered model, or whose table has no `model` column and whose block has no default, is a `NoModel` component. A model column a table leaves out is unset, refused where its field cannot be `nothing`, and the writer leaves out a model column no row fills. Reading refuses a filled cell in a column neither the schema nor the row's model names, an unregistered model's name included; `strict=false` drops those columns with a warning instead. A component reaches its model's fields as its own, so `tube.EA` reads `tube.model.EA` and `tube.EA = 3e5` replaces the tube's model with one holding that value.
 
 ```@docs
 AbstractModel

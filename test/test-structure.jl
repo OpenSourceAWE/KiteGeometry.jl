@@ -4,7 +4,7 @@
 using KiteGeometry: BLOCKS, REFERENCES, NameRef, connectivity_sha
 using JSON
 using OrderedCollections: OrderedDict
-using StaticArrays: SVector
+using StaticArrays: MVector
 using YAML
 
 include("models.jl")
@@ -75,7 +75,7 @@ end
     @test system.bodies[point.body].name == document["points"]["data"][1][3]
     @test system.materials[system.segments[1].material].law == "linear"
     @test system.materials[system.tubes[1].material].parameters["C19"] == 0.0918
-    @test point.pos_ENU isa SVector{3, Float64}
+    @test point.pos_ENU isa MVector{3, Float64}
     @test all(tube -> tube isa Tube{NoModel}, system.tubes)
     face = system.canopy_faces[1]
     @test system.wings[face.wing].name == document["canopy_faces"]["data"][1][2]
@@ -329,6 +329,45 @@ end
     @test_throws ArgumentError SystemDefinition(document)
     delete!(document["segments"], "units")
     @test_throws ArgumentError SystemDefinition(document)
+end
+
+@testset "a loaded definition is edited in place, its connectivity unchanged" begin
+    system = load_structure(FIXTURE)
+    sha = connectivity_sha(system)
+    segment, point, body = system.segments[1], system.points[1], system.bodies[1]
+    segment.rest_length -= 0.1
+    point.extra_mass = 0.5
+    point.pos_ENU .+= [0, 0, 1]
+    body.pos_ENU[3] = 7
+    body.Q_KA2ENU .= [0, 1, 0, 0]
+    edited = SystemDefinition(structure_document(system))
+    @test edited.segments[1].rest_length == segment.rest_length
+    @test edited.points[1].extra_mass == 0.5
+    @test edited.points[1].pos_ENU == point.pos_ENU
+    @test edited.bodies[1].pos_ENU[3] == 7
+    @test edited.bodies[1].Q_KA2ENU == [0, 1, 0, 0]
+    @test connectivity_sha(edited) == sha
+end
+
+@testset "rows equal field by field are equal and hash alike" begin
+    kite, twin = (Point(; name="kite", pos_ENU=[0, 0, 100]) for _ in 1:2)
+    @test kite == twin
+    @test isequal(kite, twin)
+    @test hash(kite) == hash(twin)
+    twin.pos_ENU[1] = 1
+    @test kite != twin
+    @test Tube(; name="le", bodies=("a", "b")) != Segment(; name="le", points=("a", "b"))
+    @test load_structure(FIXTURE).segments == load_structure(FIXTURE).segments
+end
+
+@testset "a model column is assigned through the component" begin
+    system = with_test_beam(() -> SystemDefinition(modelled_document()))
+    tube = system.tubes[1]
+    tube.EA = 3e5
+    @test tube.model == TestBeam(3e5, 40.0)
+    tube.diameter = 0.2
+    @test tube.diameter == 0.2
+    @test_throws "no field GJ" (tube.GJ = 1.0)
 end
 
 unregister_model!(:pulleys, "sam_pulley")

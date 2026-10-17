@@ -5,6 +5,12 @@ SPDX-License-Identifier: MIT
 
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- BREAKING: Components are mutable, so a loaded definition can be edited before a run: `segment.rest_length = 99.9`, `point.pos_ENU .= pos`, and `tube.EA = 3e5` for a model's field. Positions and rotations are `MVector`s, an inertia an `MMatrix`. Components, models and definitions compare and hash by their fields.
+
 ## KiteGeometry v0.2.0 2026-10-16
 
 ### Added

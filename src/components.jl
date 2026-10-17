@@ -45,12 +45,24 @@ to_field(T, value) = convert(T, value)
 to_field(::Type{Union{Nothing, T}}, value) where {T} = isnothing(value) ? nothing :
                                                     to_field(T, value)
 to_field(T::Type{<:Tuple}, value::AbstractVector) = convert(T, Tuple(value))
-to_field(T::Type{<:SMatrix}, rows::AbstractVector) = T(permutedims(reduce(hcat, rows)))
+to_field(T::Type{<:StaticMatrix}, rows::AbstractVector) = T(permutedims(reduce(hcat, rows)))
 to_field(T::Type{<:OrderedDict}, value::AbstractDict) = T(value)
 to_field(::Type{Union{Nothing, Float64, Vector{Float64}}}, value::Real) = Float64(value)
 function to_field(::Type{Union{Nothing, Float64, Vector{Float64}}}, value::AbstractVector)
     return Vector{Float64}(value)
 end
+
+"""Types whose `==`, `isequal` and `hash` compare their fields."""
+const FieldwiseEqual = Union{Component, AbstractModel, SystemDefinition}
+
+"""The values of the fields of `x`, in order."""
+field_values(x) = ntuple(i -> getfield(x, i), fieldcount(typeof(x)))
+
+Base.:(==)(a::T, b::T) where {T <: FieldwiseEqual} = field_values(a) == field_values(b)
+function Base.isequal(a::T, b::T) where {T <: FieldwiseEqual}
+    return isequal(field_values(a), field_values(b))
+end
+Base.hash(x::FieldwiseEqual, h::UInt) = hash(field_values(x), hash(typeof(x), h))
 
 """
     pos_KA(wing::Wing, pos_ENU)

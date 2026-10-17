@@ -19,7 +19,8 @@ using KiteUtils: KiteUtils, Logger, Settings, SysLog, save_log
 using LinearAlgebra: Diagonal, I, cross, dot, norm, normalize
 using OrderedCollections: OrderedDict, OrderedSet
 using SHA: sha256
-using StaticArrays: SMatrix, SVector
+using StaticArrays: MMatrix, MVector, SMatrix, SVector, StaticArray, StaticMatrix,
+                    StaticVector
 using YAML: YAML
 
 export SystemDefinition, Metadata, Material, Point, Segment, SpanwiseStation, Pulley,

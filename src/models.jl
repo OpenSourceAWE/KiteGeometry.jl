@@ -108,6 +108,25 @@ function Base.propertynames(component::Component)
 end
 
 """
+    setproperty!(component::Component, name, value)
+
+Set the field `name` of `component`, or of its model, which is replaced by one holding
+`value` in that field.
+"""
+function Base.setproperty!(component::Component, name::Symbol, value)
+    T = typeof(component)
+    hasfield(T, name) &&
+        return setfield!(component, name, to_field(fieldtype(T, name), value))
+    model = getfield(component, :model)
+    M = typeof(model)
+    hasfield(M, name) || throw(ArgumentError("$T and its model $M have no field $name"))
+    setfield!(component, :model,
+              M((field == name ? model_value(M, field, value) : getfield(model, field)
+                 for field in fieldnames(M))...))
+    return value
+end
+
+"""
     SegmentSpring <: AbstractModel
 
 The spring of a segment besides its `unit_stiffness`: its damping and how it carries

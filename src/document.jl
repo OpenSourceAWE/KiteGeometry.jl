@@ -64,6 +64,7 @@ function resolve(component::Component, block, indices)
                       indices) for field in fieldnames(T))...)
 end
 resolve(value, ::Nothing, indices) = value
+resolve(value::StaticArray, ::Nothing, indices) = copy(value)
 resolve(::Nothing, target::Symbol, indices) = nothing
 function resolve(refs::Union{Tuple, Vector}, target::Symbol, indices)
     return resolve.(refs, target, (indices,))
@@ -382,8 +383,10 @@ end
 
 """`value` as a structure document writes it, a reference into `target` by name."""
 document_value(value, ::Nothing, system) = value
-document_value(value::SVector, ::Nothing, system) = collect(value)
-document_value(value::SMatrix, ::Nothing, system) = [collect(row) for row in eachrow(value)]
+document_value(value::StaticVector, ::Nothing, system) = collect(value)
+function document_value(value::StaticMatrix, ::Nothing, system)
+    return [collect(row) for row in eachrow(value)]
+end
 document_value(::Nothing, target::Symbol, system) = nothing
 document_value(index::Int, target::Symbol, system) = getfield(system, target)[index].name
 document_value(name::String, target::Symbol, system) = name
