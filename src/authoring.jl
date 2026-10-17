@@ -125,23 +125,32 @@ function expand_multi_variables(table, multi_variables::Dict{String, Any})
 end
 
 """
-    resolve_yaml_variables(data) -> data
+    yaml_variables(data) -> Dict
+
+The variables of the `variables` block of `data`, each with the variables it refers to
+substituted; none where it has no such block.
+"""
+function yaml_variables(data)
+    raw = get(data, "variables", Dict())
+    raw isa AbstractDict || throw(ArgumentError(
+        "`variables` must be a mapping of name => value, got $(typeof(raw))."))
+    variables = Dict{String, Any}()
+    for name in keys(raw)
+        resolve_variable!(variables, raw, String(name), String[])
+    end
+    return variables
+end
+
+"""
+    resolve_yaml_variables(data, variables=yaml_variables(data)) -> data
 
 Apply an optional top-level `variables` block to the rest of the YAML tree and
 drop the block. A variable holding a number, string or list replaces any cell
 written as its name; a variable holding a mapping is a multi-variable and fills
 the columns it names at once. Variables may refer to other variables.
 """
-function resolve_yaml_variables(data)
+function resolve_yaml_variables(data, variables=yaml_variables(data))
     haskey(data, "variables") || return data
-    raw = data["variables"]
-    raw isa AbstractDict || throw(ArgumentError(
-        "`variables` must be a mapping of name => value, got $(typeof(raw))."))
-
-    variables = Dict{String, Any}()
-    for name in keys(raw)
-        resolve_variable!(variables, raw, String(name), String[])
-    end
     check_variable_names(data, variables)
 
     multi_variables = Dict{String, Any}()
@@ -260,14 +269,18 @@ function yaml_row_name(row, i)
     return string(something(yaml_field(row, :name), i))
 end
 
-"""The dynamics type a cell names, refusing the removed `WING`."""
+"""The dynamics types of SymbolicAWEModels."""
+const DYNAMICS_TYPES = ("DYNAMIC", "STATIC", "BODY_STATIC", "KINEMATIC")
+
+"""The dynamics type a cell names, upper case, refusing the removed `WING`."""
 function parse_dynamics_type(text)
     name = uppercase(String(text))
     name == "WING" && throw(ArgumentError(
         "DynamicsType `WING` was removed: use `BODY_STATIC` (rigid wing, with " *
         "`body_idx` = the wing) or `DYNAMIC` (particle wing), and make the point " *
         "a member of one of the wing's stations."))
-    return to_field(DynamicsType, name)
+    name in DYNAMICS_TYPES || throw(ArgumentError("no dynamics type $name"))
+    return name
 end
 
 """Reference points as a row writes them — one reference, a list averaged equally, or
@@ -310,14 +323,15 @@ function with_fields(component::T; changes...) where {T <: Component}
 end
 
 """
-    read_rows(data, block, columns; modelled=true) -> [(row, model)]
+    read_rows(data, block, columns; modelled=true, key=String(block)) -> [(row, model)]
 
-The rows of `block` of `data`, none where it is absent or empty, each with the model it
-reads ([`authoring_model`](@ref)) where `modelled`, else `NoModel`. Refuses a filled cell in
-a column that neither the loader, which reads `columns` and `idx`, nor that model reads.
+The rows of the table `key` of `data`, none where it is absent or empty, each with the model
+of `block` it reads ([`authoring_model`](@ref)) where `modelled`, else `NoModel`. Refuses a
+filled cell in a column that neither the loader, which reads `columns` and `idx`, nor that
+model reads.
 """
-function read_rows(data, block, columns; modelled=true)
-    table = get(data, String(block), nothing)
+function read_rows(data, block, columns; modelled=true, key=String(block))
+    table = get(data, key, nothing)
     rows = isnothing(table) || isnothing(get(table, "data", nothing)) ? NamedTuple[] :
            parse_table(table)
     models = [modelled ? authoring_model(block, row) : NoModel() for row in rows]
@@ -349,24 +363,17 @@ function authoring_model(block, row)
     end
 end
 
-"""`value` as `field` of model `M`, refusing `nothing` where the field cannot hold it."""
-function model_value(M, field, value)
-    T = fieldtype(M, field)
-    isnothing(value) && !(Nothing <: T) &&
-        throw(ArgumentError("model $M needs its $field column filled"))
-    return to_field(T, value)
-end
-
 # ==================== MATERIAL ==================== #
 
 """
     resolve_material(label, set; diameter, unit_stiffness, unit_damping, density,
                      youngs_modulus, damping_per_stiffness)
 
-`(diameter, unit_stiffness, unit_damping, density)` of a segment from what its row gives,
-`NaN` for what it leaves out: `youngs_modulus` [Pa] and `damping_per_stiffness` [s] in
-place of `unit_stiffness` [N] and `unit_damping` [N*s], and `set`'s `d_tether` [mm],
-`rho_tether`, `e_tether` and `rel_damping` for the rest. A `unit_stiffness` naming a
+`(diameter, stiffness, unit_damping, density)` of a segment from what its row gives, `NaN`
+for what it leaves out: `stiffness` is its Young's modulus [Pa], from `youngs_modulus` or
+from `unit_stiffness` [N] over its cross-section, or the name of the nonlinear law
+`unit_stiffness` names. `damping_per_stiffness` [s] stands in for `unit_damping` [N*s], and
+`set`'s `d_tether` [mm], `rho_tether`, `e_tether` and `rel_damping` for the rest. A
 nonlinear law needs `unit_damping` given.
 """
 function resolve_material(label, set::Settings; diameter=NaN, unit_stiffness=NaN,
@@ -379,24 +386,26 @@ function resolve_material(label, set::Settings; diameter=NaN, unit_stiffness=NaN
     if !isnan(youngs_modulus)
         (!linear || !isnan(unit_stiffness)) && throw(ArgumentError(
             "$label: give either `unit_stiffness` or `youngs_modulus`, not both"))
-        unit_stiffness = youngs_modulus * area
-    elseif linear && isnan(unit_stiffness)
-        unit_stiffness = set.e_tether * area
+        stiffness = youngs_modulus
+    elseif linear
+        stiffness = isnan(unit_stiffness) ? set.e_tether : unit_stiffness / area
+    else
+        stiffness = unit_stiffness
     end
     if !isnan(damping_per_stiffness)
         isnan(unit_damping) || throw(ArgumentError(
             "$label: give either `unit_damping` or `damping_per_stiffness`, not both"))
         linear || throw(ArgumentError(
             "$label: `damping_per_stiffness` needs a linear `unit_stiffness`"))
-        unit_damping = damping_per_stiffness * unit_stiffness
+        unit_damping = damping_per_stiffness * stiffness * area
     elseif isnan(unit_damping)
         linear || throw(ArgumentError(
             "$label: give `unit_damping` for a nonlinear `unit_stiffness`"))
         set.rel_damping == 0 &&
             @warn "$label: unit_damping is zero (no rel_damping in the settings)."
-        unit_damping = set.rel_damping * unit_stiffness
+        unit_damping = set.rel_damping * stiffness * area
     end
-    return Float64(diameter), unit_stiffness, Float64(unit_damping), Float64(density)
+    return Float64(diameter), stiffness, Float64(unit_damping), Float64(density)
 end
 
 """The columns [`material`](@ref) reads."""
@@ -414,13 +423,80 @@ function material(row)
              for field in MATERIAL_COLUMNS[3:end])...)
 end
 
-"""A segment with its spring resolved from `materials` ([`resolve_material`](@ref)) and
-`set`; a zero `l0` is set from the design pose before placement."""
-function spring_segment(name, points, set; l0=0.0, compression_frac=0.1,
-                        compression_damping_frac=1.0, materials...)
-    diameter, unit_stiffness, unit_damping, density =
-        resolve_material("segment $name", set; materials...)
-    return Segment(; name, points, l0, diameter, density, unit_stiffness,
+"""The constants of SymbolicAWEModels' Breukels (2011) inflated tube."""
+const BREUKELS2011 = OrderedDict{String, Any}(
+    "C1" => 6582.82, "C2" => -272.43, "C3" => 40852.38, "C4" => 14.31,
+    "C5" => 271865251.42, "C6" => 215.93, "C7" => 14021.79, "C8" => -589.05,
+    "C9" => 322.55, "C10" => 0.0239, "C11" => 5.3833, "C12" => 0.0461, "C13" => 1467.0,
+    "C14" => 40.908, "C15" => -191.8, "C16" => 47.406, "C17" => -17703.0,
+    "C18" => 358.05, "C19" => 0.0918)
+
+"""
+    MaterialTable
+
+The materials a load has named so far, and the variables of its YAML they may be named
+after.
+"""
+struct MaterialTable
+    rows::Vector{Material}
+    variables::Dict{String, Any}
+end
+
+"""
+    material!(materials::MaterialTable, name, law, parameters)
+
+The name of the material of `law` and `parameters` among `materials`, added where none has
+them as `name`, or as `name_2`, `name_3`, … where another material holds that name.
+"""
+function material!(materials::MaterialTable, name, law, parameters)
+    for row in materials.rows
+        row.law == law && row.parameters == parameters && return row.name
+    end
+    taken = Set(row.name for row in materials.rows)
+    unique_name = name
+    n = 1
+    while unique_name in taken
+        n += 1
+        unique_name = "$(name)_$n"
+    end
+    push!(materials.rows, Material(; name=unique_name, law, parameters))
+    return unique_name
+end
+
+"""The name of the first multi-variable among `variables` whose fields hold `parameters`,
+else `label`."""
+function variable_name(variables, parameters, label)
+    for name in sort!(collect(keys(variables)))
+        fields = variables[name]
+        fields isa AbstractDict || continue
+        all(get(fields, key, nothing) == value for (key, value) in parameters) &&
+            return name
+    end
+    return label
+end
+
+"""The name among `materials` ([`material!`](@ref)) of a line of `density` [kg/m^3] and
+`stiffness`: a `linear` material of that Young's modulus [Pa], named after the
+multi-variable giving both else `label`, or the nonlinear law of that name."""
+function line_material!(materials, label, density, stiffness::Real)
+    parameters = OrderedDict{String, Any}("density" => density,
+                                          "youngs_modulus" => stiffness)
+    return material!(materials, variable_name(materials.variables, parameters, label),
+                     "linear", parameters)
+end
+function line_material!(materials, label, density, law::String)
+    return material!(materials, law, law, OrderedDict{String, Any}("density" => density))
+end
+
+"""A segment with its spring resolved from `spring` ([`resolve_material`](@ref)) and `set`,
+its material among `materials`; a zero `rest_length` is set from the design pose before
+placement."""
+function spring_segment(name, points, set, materials; rest_length=0.0,
+                        compression_frac=0.1, compression_damping_frac=1.0, spring...)
+    diameter, stiffness, unit_damping, density =
+        resolve_material("segment $name", set; spring...)
+    return Segment(; name, points, rest_length, diameter,
+                   material=line_material!(materials, name, density, stiffness),
                    model=SegmentSpring(unit_damping, compression_frac,
                                        compression_damping_frac))
 end
@@ -440,33 +516,32 @@ function read_points(data)
     points = Point[]
     point_wings = Union{Nothing, NameRef}[]
     point_transforms = Union{Nothing, NameRef}[]
-    columns = (:name, :type, :wing_idx, :body_idx, :body, :pos_cad, :extra_mass, :area,
-               :drag_coeff, :transform_idx)
+    columns = (:name, :type, :wing_idx, :body_idx, :body, :pos_cad, :extra_mass,
+               :transform_idx)
     for (i, (row, model)) in enumerate(read_rows(data, :points, columns))
         name = yaml_row_name(row, i)
         type = parse_dynamics_type(row.type)
         wing = yaml_ref(row, :wing_idx)
         body = something(yaml_ref(row, :body_idx), yaml_ref(row, :body), Some(nothing))
-        if type == BODY_STATIC
+        if type == "BODY_STATIC"
             isnothing(body) && isnothing(wing) && throw(ArgumentError(
                 "point $name: BODY_STATIC requires a `body` or a `wing` to ride"))
             body = something(body, wing)
         elseif !isnothing(body)
             throw(ArgumentError("point $name: `body` is only valid with type BODY_STATIC"))
         end
-        push!(points, Point(; name, type, body, pos_ENU=yaml_vec3(row, :pos_cad),
-                            extra_mass=something(yaml_float(row, :extra_mass), 0.0),
-                            drag_area=something(yaml_float(row, :area), 0.0),
-                            drag_coefficient=something(yaml_float(row, :drag_coeff), 0.0),
-                            model))
+        push!(points, Point(; name, fixed=type == "STATIC", body,
+                            pos_ENU=yaml_vec3(row, :pos_cad),
+                            extra_mass=something(yaml_float(row, :extra_mass), 0.0), model))
         push!(point_wings, wing)
         push!(point_transforms, yaml_ref(row, :transform_idx))
     end
     return points, point_wings, point_transforms
 end
 
-"""The segments of the `segments` block, their springs resolved against `set`."""
-function read_segments(data, set)
+"""The segments of the `segments` block, their springs resolved against `set` and their
+materials among `materials`."""
+function read_segments(data, set, materials)
     columns = (:name, :type, :point_i, :point_j, :l0, :compression_frac,
                :compression_damping_frac, MATERIAL_COLUMNS...)
     rows = read_rows(data, :segments, columns; modelled=false)
@@ -474,8 +549,8 @@ function read_segments(data, set)
         isnothing(yaml_field(row, :type)) || throw(ArgumentError(
             "the segment `type` column was removed; delete it"))
         spring_segment(yaml_row_name(row, i),
-                       (yaml_to_ref(row.point_i), yaml_to_ref(row.point_j)), set;
-                       l0=something(yaml_float(row, :l0), 0.0),
+                       (yaml_to_ref(row.point_i), yaml_to_ref(row.point_j)), set, materials;
+                       rest_length=something(yaml_float(row, :l0), 0.0),
                        compression_frac=something(yaml_float(row, :compression_frac), 0.1),
                        compression_damping_frac=something(
                            yaml_float(row, :compression_damping_frac), 1.0),
@@ -485,11 +560,10 @@ end
 
 """The pulleys of the `pulleys` block."""
 function read_pulleys(data)
-    rows = read_rows(data, :pulleys, (:name, :segment_i, :segment_j, :type, :efficiency))
+    rows = read_rows(data, :pulleys, (:name, :segment_i, :segment_j))
     return Pulley[Pulley(; name=yaml_row_name(row, i),
                          segments=(yaml_to_ref(row.segment_i), yaml_to_ref(row.segment_j)),
-                         type=parse_dynamics_type(row.type),
-                         efficiency=something(yaml_float(row, :efficiency), 0.95), model)
+                         model)
                   for (i, (row, model)) in enumerate(rows)]
 end
 
@@ -536,7 +610,7 @@ function read_wings(data)
         isnothing(yaml_field(row, :mass)) || throw(ArgumentError(
             "wing $name: the `mass` column was renamed to `extra_mass`"))
         origin = yaml_field(row, :origin_idx)
-        push!(wings, Wing(; name, canopy_material=nothing, model))
+        push!(wings, Wing(; name, pos_ENU=zero(Vec3), model))
         push!(authored, AuthoringWing(
             dynamics == "PARTICLE_DYNAMICS",
             yaml_to_ref.(something(yaml_field(row, :stations), [])),
@@ -550,10 +624,11 @@ function read_wings(data)
     return wings, authored
 end
 
-"""The stations of the `stations` block, each on the wing it names or the wing listing
-it among its `stations`."""
+"""The spanwise stations of the `stations` block, each on the wing it names or the wing
+listing it among its `stations`."""
 function read_stations(data, wings, authored)
-    rows = read_rows(data, :stations, (:name, :wing, :type, :points, :point_idxs))
+    rows = read_rows(data, :spanwise_stations, (:name, :wing, :points, :point_idxs);
+                     key="stations")
     return map(enumerate(rows)) do (i, (row, model))
         name = yaml_row_name(row, i)
         wing = yaml_ref(row, :wing)
@@ -565,8 +640,7 @@ function read_stations(data, wings, authored)
             wing = wings[listing].name
         end
         points = something(yaml_field(row, :points), yaml_field(row, :point_idxs), [])
-        Station(; name, wing, type=parse_dynamics_type(row.type),
-                points=yaml_to_ref.(points), model)
+        SpanwiseStation(; name, wing, points=yaml_to_ref.(points), model)
     end
 end
 
@@ -591,15 +665,15 @@ function tether_init(row, name)
 end
 
 """
-    read_tethers!(points, segments, point_transforms, data, set)
+    read_tethers!(points, segments, point_transforms, data, set, materials)
 
 The tethers of the `tethers` block and the length each starts at. A tether row naming its
 `segment_idxs` runs over those segments, between the points they chain unless it names
 them; one naming `n_segments` adds that many segments and the points between them, on the
 straight line between its ends, to `points` and `segments`, its material resolved against
-`set`.
+`set` and named among `materials`.
 """
-function read_tethers!(points, segments, point_transforms, data, set)
+function read_tethers!(points, segments, point_transforms, data, set, materials)
     tethers = Tether[]
     inits = TetherInit[]
     columns = (:name, :segment_idxs, :start_point, :end_point, :n_segments,
@@ -621,7 +695,8 @@ function read_tethers!(points, segments, point_transforms, data, set)
         end
         start_point, end_point = yaml_to_ref(row.start_point), yaml_to_ref(row.end_point)
         push!(tethers, expand_tether!(points, segments, point_transforms, name, start_point,
-                                      end_point, Int(row.n_segments), last(inits), set;
+                                      end_point, Int(row.n_segments), last(inits), set,
+                                      materials;
                                       model,
                                       compression_frac=something(
                                           yaml_float(row, :compression_frac), 0.1),
@@ -637,7 +712,7 @@ points `<name>_point_<i>` added to `points` on the straight line between them, i
 transform of whichever end has one, and its segments `<name>_seg_<i>` to `segments`; the
 tether carries `model`."""
 function expand_tether!(points, segments, point_transforms, name, start_point, end_point,
-                        n, init, set; model, spring...)
+                        n, init, set, materials; model, spring...)
     ends = [start_point, end_point]
     indices = [ref isa Int ? ref : findfirst(point -> point.name == ref, points)
                for ref in ends]
@@ -649,18 +724,18 @@ function expand_tether!(points, segments, point_transforms, name, start_point, e
         "tether $name: its ends are in different transforms"))
     transform = isempty(transforms) ? nothing : only(transforms)
     start_pos, end_pos = points[indices[1]].pos_ENU, points[indices[2]].pos_ENU
-    l0 = something(init.stretched_length, norm(end_pos - start_pos)) / n
+    rest_length = something(init.stretched_length, norm(end_pos - start_pos)) / n
     point_names = [start_point; ["$(name)_point_$i" for i in 1:(n - 1)]; end_point]
     for i in 1:(n - 1)
-        push!(points, Point(; name=point_names[i + 1], type=DYNAMIC,
+        push!(points, Point(; name=point_names[i + 1], extra_mass=0.0,
                             pos_ENU=start_pos + i / n * (end_pos - start_pos)))
         push!(point_transforms, transform)
     end
     segment_names = ["$(name)_seg_$i" for i in 1:n]
     for i in 1:n
         push!(segments, spring_segment(segment_names[i],
-                                       (point_names[i], point_names[i + 1]), set;
-                                       l0, spring...))
+                                       (point_names[i], point_names[i + 1]), set, materials;
+                                       rest_length, spring...))
     end
     return Tether(; name, start_point, end_point, segments=segment_names, model)
 end
@@ -674,8 +749,8 @@ function read_winches(data, set)
                  for (i, (row, model)) in enumerate(rows)]
 end
 
-"""The transforms of the `transforms` block, their angles in radians and references
-unresolved, refusing one chained to another."""
+"""The name, base position [m] and base point of each transform of the `transforms` block,
+refusing one chained to another."""
 function read_transforms(data)
     columns = (:name, :elevation, :azimuth, :heading, :base_pos, :base_point_idx,
                :base_transform_idx, :wing_idx, :rot_point_idx)
@@ -684,18 +759,16 @@ function read_transforms(data)
         name = yaml_row_name(row, i)
         isnothing(yaml_field(row, :base_transform_idx)) || throw(ArgumentError(
             "transform $name is chained to another, which this loader does not place"))
-        (; name, elevation=deg2rad(row.elevation), azimuth=deg2rad(row.azimuth),
-         heading=deg2rad(row.heading), base_pos=Vec3(row.base_pos...),
-         base_point=yaml_to_ref(row.base_point_idx), wing=yaml_ref(row, :wing_idx),
-         rot_point=yaml_ref(row, :rot_point_idx))
+        (; name, base_pos=Vec3(row.base_pos...), base_point=yaml_to_ref(row.base_point_idx))
     end
 end
 
-"""The plain bodies of the `bodies` block at their origins, each with its transform and
-the centre of its own mass in its frame [m]."""
+"""The plain bodies of the `bodies` block at their origins, each with its transform, the
+centre of its own mass in its frame [m], and whether it is `STATIC`."""
 function read_bodies(data)
     bodies = Body[]
-    authored = @NamedTuple{transform::Union{Nothing, NameRef}, com_offset::Vec3}[]
+    authored = @NamedTuple{transform::Union{Nothing, NameRef}, com_offset::Vec3,
+                           static::Bool}[]
     columns = (:name, :mass, :extra_mass, :pos, :inertia, :inertia_principal, :type,
                :Q_b_to_w, :transform_idx, :com_offset_b)
     for (i, (row, model)) in enumerate(read_rows(data, :bodies, columns))
@@ -711,29 +784,33 @@ function read_bodies(data)
         isnothing(inertia) == isnothing(principal) && throw(ArgumentError(
             "body $name: give one of `inertia` or `inertia_principal`"))
         type = parse_dynamics_type(something(yaml_field(row, :type), "DYNAMIC"))
-        type in (DYNAMIC, STATIC) || throw(ArgumentError(
+        type in ("DYNAMIC", "STATIC") || throw(ArgumentError(
             "body $name: type must be DYNAMIC or STATIC, got $type"))
-        push!(bodies, Body(; name, type, pos_ENU=pos, extra_mass,
-                           Q_KA_to_ENU=something(yaml_field(row, :Q_b_to_w),
-                                                 IDENTITY_QUATERNION),
+        rotation = something(yaml_field(row, :Q_b_to_w), IDENTITY_QUATERNION)
+        push!(bodies, Body(; name, pos_ENU=pos, extra_mass, Q_KA2ENU=rotation,
                            extra_inertia_KA=isnothing(inertia) ? Mat3(Diagonal(principal)) :
                                             to_field(Mat3, inertia), model))
         push!(authored, (; transform=yaml_ref(row, :transform_idx),
-                         com_offset=something(yaml_vec3(row, :com_offset_b), zero(Vec3))))
+                         com_offset=something(yaml_vec3(row, :com_offset_b), zero(Vec3)),
+                         static=type == "STATIC"))
     end
     return bodies, authored
 end
 
-"""The tubes of the `tubes` block."""
-function read_tubes(data)
+"""The tubes of the `tubes` block, each made of the material of its `law` among
+`materials`: SymbolicAWEModels' constants for `breukels2011`, no parameters for another."""
+function read_tubes(data, materials)
     rows = read_rows(data, :tubes, (:name, :bodies, :diameter, :pressure, :law))
     return map(enumerate(rows)) do (i, (row, model))
         name = yaml_row_name(row, i)
         bodies = yaml_field(row, :bodies)
         (isnothing(bodies) || length(bodies) != 2) && throw(ArgumentError(
             "tube $name: `bodies` must name the two bodies it joins"))
+        law = String(row.law)
+        parameters = law == "breukels2011" ? copy(BREUKELS2011) : OrderedDict{String, Any}()
         Tube(; name, bodies=yaml_to_ref.(bodies), diameter=yaml_float(row, :diameter),
-             pressure=yaml_float(row, :pressure), law=String(row.law), model)
+             pressure=yaml_float(row, :pressure),
+             material=material!(materials, law, law, parameters), model)
     end
 end
 
@@ -754,16 +831,20 @@ end
 """
     load_authoring(path; set::Settings, name, ignore_l0=false)
 
-The `SystemDefinition` SymbolicAWEModels' authoring YAML at `path` describes, placed:
-design positions moved by its tethers' stretched lengths and its `transforms`, so every
-`pos_ENU` and `Q_KA_to_ENU` is the initial pose. `set` gives what a row leaves out:
-segment material, and every winch's gear ratio and drum radius. `name` is the metadata
-name, the file's by default; `ignore_l0` makes every rest length the placed length.
-Refuses a block it does not read, other than a table without rows.
+The `SystemDefinition` SymbolicAWEModels' authoring YAML at `path` describes, its kite at
+zenith: design positions moved by its tethers' stretched lengths and shifted so each
+transform's base point is at its `base_pos`, each wing's KA frame the design frame so
+shifted, and the `transforms` kept as an extra block. `set` gives what a row leaves out:
+segment material, and every winch's gear ratio and drum radius. Each distinct line
+material is named after the multi-variable giving it, else after its first segment.
+`name` is the metadata name, the file's by default; `ignore_l0` makes every rest length the
+placed length. Refuses a block it does not read, other than a table without rows.
 """
 function load_authoring(path; set::Settings, name=first(splitext(basename(path))),
                         ignore_l0=false)
-    data = resolve_yaml_variables(YAML.load_file(path))
+    authored = YAML.load_file(path)
+    variables = yaml_variables(authored)
+    data = resolve_yaml_variables(authored, variables)
     for key in ("materials", "elements", "segment_properties")
         haskey(data, key) && throw(ArgumentError(
             "the `$key` block was removed; define shared properties as a mapping under " *
@@ -773,26 +854,31 @@ function load_authoring(path; set::Settings, name=first(splitext(basename(path))
                     if !(key in AUTHORING_BLOCKS) && holds_rows(table)])
     isempty(unread) || throw(ArgumentError(
         "blocks $(join(unread, ", ")) are read by nothing"))
+    materials = MaterialTable(Material[], variables)
     points, point_wings, point_transforms = read_points(data)
-    segments = read_segments(data, set)
-    tethers, inits = read_tethers!(points, segments, point_transforms, data, set)
+    segments = read_segments(data, set, materials)
+    tethers, inits = read_tethers!(points, segments, point_transforms, data, set, materials)
     wings, authored_wings = read_wings(data)
     bodies, authored_bodies = read_bodies(data)
-    wing_bodies = [Body(; name=wing.name, type=authored.particle ? KINEMATIC : DYNAMIC,
-                        pos_ENU=something(authored.pos_cad, zero(Vec3)),
+    tubes = read_tubes(data, materials)
+    wing_bodies = [Body(; name=wing.name, pos_ENU=something(authored.pos_cad, zero(Vec3)),
                         extra_mass=authored.particle ? 0.0 : authored.extra_mass,
                         extra_inertia_KA=zero(Mat3))
                    for (wing, authored) in zip(wings, authored_wings)]
     metadata = Metadata(; name, n_points=length(points))
-    draft = SystemDefinition(; metadata, points, segments,
-                             stations=read_stations(data, wings, authored_wings),
+    extras = OrderedDict{String, Any}(key => data[key] for key in ("transforms",)
+                                      if holds_rows(get(data, key, nothing)))
+    draft = SystemDefinition(; metadata, materials=materials.rows, points, segments,
+                             spanwise_stations=read_stations(data, wings, authored_wings),
                              pulleys=read_pulleys(data), tethers,
                              winches=read_winches(data, set), wings,
                              canopy_faces=read_canopy_faces(data),
-                             bodies=[wing_bodies; bodies], tubes=read_tubes(data))
+                             bodies=[wing_bodies; bodies], tubes, extras)
     placement = design_pose(draft, set, point_wings, point_transforms, authored_wings,
                             authored_bodies, inits, read_transforms(data))
-    return placed_definition(place!(placement; ignore_l0))
+    design_pos = placement.body_pos[eachindex(wings)]
+    place!(placement; ignore_l0)
+    return placed_definition(placement, placement.body_pos[eachindex(wings)] - design_pos)
 end
 
 """Index of each component of `block` of `system` by name."""
@@ -856,14 +942,14 @@ function design_pose(draft, set, point_wings, point_transforms, authored_wings,
     transform_names = name_indices(transforms, :transforms)
     point_wing = [resolve_index(ref, wing_names, :wings) for ref in point_wings]
     wing_node = falses(length(draft.points))
-    foreach(station -> wing_node[Int.(station.points)] .= true, draft.stations)
+    foreach(station -> wing_node[Int.(station.points)] .= true, draft.spanwise_stations)
     body_pos = [body.pos_ENU for body in draft.bodies]
-    body_R = [quaternion_to_rotation_matrix(body.Q_KA_to_ENU) for body in draft.bodies]
+    body_R = [quaternion_to_rotation_matrix(body.Q_KA2ENU) for body in draft.bodies]
     com_offset = [fill(zero(Vec3), length(draft.wings));
                   [body.com_offset for body in authored_bodies]]
     for (wing, authored) in enumerate(authored_wings)
         members = [index for (index, point) in enumerate(draft.points)
-                   if (wing_node[index] || point.type == BODY_STATIC) &&
+                   if (wing_node[index] || !isnothing(point.body)) &&
                       point_wing[index] == wing]
         wing_mass!(draft, wing, authored, members, set)
         isempty(members) && continue
@@ -880,20 +966,17 @@ function design_pose(draft, set, point_wings, point_transforms, authored_wings,
     body_transforms = [[something(wing.transform, Some(first_transform))
                         for wing in authored_wings];
                        [body.transform for body in authored_bodies]]
-    frames = Union{Nothing, WingFrame}[
-        [wing.particle ? authored_frame(wing, point_names) : nothing
-         for wing in authored_wings]; fill(nothing, length(authored_bodies))]
+    static_body = [fill(false, length(authored_wings));
+                   [body.static for body in authored_bodies]]
     placed_transforms = [PlacedTransform(
-        transform.elevation, transform.azimuth, transform.heading, transform.base_pos,
-        resolve_index(transform.base_point, point_names, :points),
-        resolve_index(transform.wing, wing_names, :wings),
-        resolve_index(transform.rot_point, point_names, :points))
+        transform.base_pos, resolve_index(transform.base_point, point_names, :points))
         for transform in transforms]
-    placement = Placement(draft, pos, [segment.l0 for segment in draft.segments], body_pos,
-                          body_R, com_offset, anchor,
+    placement = Placement(draft, pos, [segment.rest_length for segment in draft.segments],
+                          body_pos, body_R, com_offset, anchor,
                           resolve_index.(point_transforms, (transform_names,), :transforms),
                           resolve_index.(body_transforms, (transform_names,), :transforms),
-                          point_wing, wing_node, frames, inits,
+                          point_wing, wing_node, static_body,
+                          [wing.particle for wing in authored_wings], inits,
                           placed_transforms)
     update_segment_lengths!(placement)
     return placement
@@ -940,7 +1023,7 @@ and the other bodies sharing a tube-connected group with the bodies those points
 """
 function particle_wing_parts(draft, wing, members)
     point_idxs = Set{Int}()
-    for station in draft.stations
+    for station in draft.spanwise_stations
         station.wing == wing && union!(point_idxs, station.points)
     end
     isempty(point_idxs) && union!(point_idxs, members)
@@ -973,27 +1056,31 @@ function wing_inertia(points, members, authored)
 end
 
 """
-    placed_definition(placement::Placement)
+    placed_definition(placement::Placement, wing_origins)
 
 The `SystemDefinition` of `placement` where it stands: each point and body at its placed
-position, a body at the centre of its own mass, and the metadata's `connectivity_sha` that
-of its tables.
+position, a body at the centre of its own mass, each wing's KA frame at its origin in
+`wing_origins` [m] with ENU's axes, and the metadata's `connectivity_sha` that of its
+tables.
 """
-function placed_definition(placement::Placement)
+function placed_definition(placement::Placement, wing_origins)
     (; system) = placement
     metadata = Metadata((field == :connectivity_sha ? connectivity_sha(system) :
                          getfield(system.metadata, field)
                          for field in fieldnames(Metadata))...)
     points = [with_fields(point; pos_ENU=placement.pos[index])
               for (index, point) in enumerate(system.points)]
-    segments = [with_fields(segment; l0=placement.l0[index])
+    segments = [with_fields(segment; rest_length=placement.l0[index])
                 for (index, segment) in enumerate(system.segments)]
+    wings = [with_fields(wing; pos_ENU=origin, Q_KA2ENU=IDENTITY_QUATERNION)
+             for (wing, origin) in zip(system.wings, wing_origins)]
     bodies = map(enumerate(system.bodies)) do (index, body)
         R = placement.body_R[index]
         mass_centre = placement.body_pos[index] + R * placement.com_offset[index]
-        with_fields(body; pos_ENU=mass_centre, Q_KA_to_ENU=rotation_matrix_to_quaternion(R))
+        with_fields(body; pos_ENU=mass_centre, Q_KA2ENU=rotation_matrix_to_quaternion(R))
     end
-    return SystemDefinition(metadata, points, segments, system.stations, system.pulleys,
-                            system.tethers, system.winches, system.wings,
-                            system.canopy_faces, bodies, system.tubes, system.extras)
+    return SystemDefinition(metadata, system.materials, points, segments,
+                            system.spanwise_stations, system.pulleys, system.tethers,
+                            system.winches, wings, system.canopy_faces, bodies,
+                            system.tubes, system.extras)
 end

@@ -8,6 +8,7 @@ using StaticArrays: SVector
 using YAML
 
 include("models.jl")
+register_model!(:pulleys, "sam_pulley", SamPulley, ("-", "-"); default=true)
 
 struct TestBeam <: AbstractModel
     EA::Float64
@@ -50,13 +51,16 @@ function modelled_document()
     return document
 end
 
+"""The segment `line` from the anchor to `kite`."""
+function line_segment(kite="kite")
+    return Segment(; name="line", points=("anchor", kite), rest_length=100, diameter=0.004)
+end
+
 function small_system(; kwargs...)
     metadata = Metadata(; name="small", n_points=2, connectivity_sha="0"^64)
-    points = [Point(; name="anchor", type=STATIC, pos_ENU=[0, 0, 0]),
+    points = [Point(; name="anchor", fixed=true, pos_ENU=[0, 0, 0]),
               Point(; name="kite", pos_ENU=[0, 0, 100])]
-    segments = [Segment(; name="line", points=("anchor", "kite"), l0=100, diameter=0.004,
-                        density=970, unit_stiffness=6e5)]
-    return SystemDefinition(; metadata, points, segments, kwargs...)
+    return SystemDefinition(; metadata, points, segments=[line_segment()], kwargs...)
 end
 
 @testset "every component builds from the vendored example" begin
@@ -67,13 +71,16 @@ end
     end
     @test system.metadata.n_points == length(system.points)
     point = system.points[1]
-    @test point.type == BODY_STATIC
+    @test !point.fixed
     @test system.bodies[point.body].name == document["points"]["data"][1][3]
+    @test system.materials[system.segments[1].material].law == "linear"
+    @test system.materials[system.tubes[1].material].parameters["C19"] == 0.0918
     @test point.pos_ENU isa SVector{3, Float64}
     @test all(tube -> tube isa Tube{NoModel}, system.tubes)
     face = system.canopy_faces[1]
     @test system.wings[face.wing].name == document["canopy_faces"]["data"][1][2]
-    @test system.stations[1].wing == face.wing
+    @test system.spanwise_stations[1].wing == face.wing
+    @test system.wings[face.wing].Q_KA2ENU == [1, 0, 0, 0]
     @test isempty(system.extras)
 end
 
@@ -86,6 +93,24 @@ end
         @test structure_document(from_json(to_json(system))) == document
         @test structure_document(KiteGeometry.definition(to_json(system))) == document
     end
+end
+
+@testset "an optional column a document leaves out is written back left out" begin
+    document = fixture_document()
+    points = document["points"]
+    pop!(points["headers"])
+    pop!(points["units"])
+    foreach(pop!, points["data"])
+    system = SystemDefinition(document)
+    @test all(point -> isnothing(point.extra_mass), system.points)
+    @test structure_document(system) == document
+end
+
+@testset "a position in the world is put into a wing's KA frame" begin
+    wing = Wing(; name="wing", pos_ENU=[3, 4, 50],
+                Q_KA2ENU=[0.7071067811865476, 0, 0, 0.7071067811865476])
+    @test isapprox(pos_KA(wing, [3, 6, 51]), [2, 0, 1]; atol=1e-12)
+    @test pos_KA(Wing(; name="wing", pos_ENU=[0, 0, 100]), [1, 2, 103]) == [1, 2, 3]
 end
 
 @testset "connectivity_sha hashes the schema's worked examples" begin
@@ -119,11 +144,11 @@ function versioned_document(version)
 end
 
 @testset "another major awesIO version is refused, another minor warns" begin
-    @test_throws "0.1.0" SystemDefinition(versioned_document("0.1.0"))
+    @test_throws "1.0.0" SystemDefinition(versioned_document("1.0.0"))
     @test_throws "2.0.0" KiteGeometry.definition(JSON.json(versioned_document("2.0.0")))
-    system = @test_logs (:warn, r"1.1.0") SystemDefinition(versioned_document("1.1.0"))
-    @test system.metadata.awesIO_version == "1.1.0"
-    @test_logs SystemDefinition(versioned_document("1.0.3"))
+    system = @test_logs (:warn, r"0.2.0") SystemDefinition(versioned_document("0.2.0"))
+    @test system.metadata.awesIO_version == "0.2.0"
+    @test_logs SystemDefinition(versioned_document("0.1.3"))
     @test_throws ArgumentError SystemDefinition(versioned_document(1.0))
     document = fixture_document()
     delete!(document["metadata"], "awesIO_version")
@@ -196,7 +221,7 @@ end
     @test tube.EA == 2e5
     @test :EI in propertynames(tube)
     built = Tube(; name="le", bodies=("a", "b"), diameter=0.1, pressure=3e4,
-                 law="breukels2011", model=TestBeam(1, 2))
+                 model=TestBeam(1, 2))
     @test built isa Tube{TestBeam}
     @test built.EI == 2
 end
@@ -211,8 +236,7 @@ end
     try
         system = SystemDefinition(document)
         @test all(tube -> tube.model == TestBeam(2e5, 40.0), system.tubes)
-        written = structure_document(system)["tubes"]
-        @test unique(row[end - 2] for row in written["data"]) == ["test_beam"]
+        @test structure_document(system) == document
     finally
         unregister_model!(:tubes, "test_beam")
     end
@@ -224,6 +248,13 @@ end
 
 @testset "a model registered without one unit per field is refused" begin
     @test_throws ArgumentError register_model!(:tubes, "test_beam", TestBeam, ("N",))
+end
+
+@testset "a field of one number or one per axis takes either" begin
+    field = Union{Nothing, Float64, Vector{Float64}}
+    @test KiteGeometry.to_field(field, 2) === 2.0
+    @test KiteGeometry.to_field(field, [1, 2, 3]) == [1.0, 2.0, 3.0]
+    @test isnothing(KiteGeometry.to_field(field, nothing))
 end
 
 @testset "names in, indices held" begin
@@ -254,23 +285,19 @@ end
 
 @testset "a system holding names still writes them" begin
     system = small_system()
-    segments = [Segment(; name="line", points=("anchor", "kite"), l0=100, diameter=0.004,
-                        density=970, unit_stiffness=6e5)]
-    held_names = SystemDefinition(system.metadata, system.points, segments,
-                                  system.stations, system.pulleys, system.tethers,
-                                  system.winches, system.wings, system.canopy_faces,
-                                  system.bodies, system.tubes, system.extras)
+    held_names = SystemDefinition(system.metadata, system.materials, system.points,
+                                  [line_segment()], system.spanwise_stations,
+                                  system.pulleys, system.tethers, system.winches,
+                                  system.wings, system.canopy_faces, system.bodies,
+                                  system.tubes, system.extras)
     @test structure_document(held_names) == structure_document(system)
-    held_names.segments[1] = Segment(; name="line", points=("anchor", "nowhere"), l0=100,
-                                     diameter=0.004, density=970, unit_stiffness=6e5)
+    held_names.segments[1] = line_segment("nowhere")
     @test_throws "no points named nowhere" structure_document(held_names)
 end
 
 @testset "models giving one column two units are refused on writing" begin
-    tubes = [Tube(; name="le", bodies=("a", "b"), diameter=0.1, pressure=3e4,
-                  law="breukels2011", model=TestBeam(1, 2)),
-             Tube(; name="te", bodies=("a", "b"), diameter=0.1, pressure=3e4,
-                  law="breukels2011", model=StiffBeam(3))]
+    tubes = [Tube(; name="le", bodies=("a", "b"), model=TestBeam(1, 2)),
+             Tube(; name="te", bodies=("a", "b"), model=StiffBeam(3))]
     system = small_system(; bodies=[Body(; name="a", pos_ENU=[0, 0, 0]),
                                     Body(; name="b", pos_ENU=[0, 0, 1])], tubes)
     register_model!(:tubes, "stiff_beam", StiffBeam, ("kN",))
@@ -283,21 +310,21 @@ end
 
 @testset "constructors fill in the defaults" begin
     point = Point(; name="kite", pos_ENU=[0, 0, 100])
-    @test point.type == DYNAMIC
+    @test !point.fixed
     @test isnothing(point.body)
-    @test point.extra_mass == 0
+    @test isnothing(point.extra_mass)
     body = Body(; name="wing", pos_ENU=[0, 0, 100])
-    @test body.Q_KA_to_ENU == [1, 0, 0, 0]
-    @test iszero(body.extra_inertia_KA)
-    @test Tube(; name="le", bodies=("a", "b"), diameter=0.1, pressure=3e4,
-               law="breukels2011") isa Tube{NoModel}
-    @test_throws ArgumentError Segment(; name="line", points=("a", "b"))
+    @test body.Q_KA2ENU == [1, 0, 0, 0]
+    @test isnothing(body.extra_inertia_KA)
+    @test Wing(; name="wing", pos_ENU=[0, 0, 100]).Q_KA2ENU == [1, 0, 0, 0]
+    @test Tube(; name="le", bodies=("a", "b")) isa Tube{NoModel}
+    @test_throws ArgumentError Point(; name="kite")
 end
 
 @testset "a table whose headers leave the schema's order is refused" begin
     document = fixture_document()
-    headers = document["segments"]["headers"]
-    headers[3], headers[4] = headers[4], headers[3]
+    headers = document["points"]["headers"]
+    headers[2], headers[3] = headers[3], headers[2]
     @test_throws ArgumentError SystemDefinition(document)
 end
 
@@ -308,3 +335,5 @@ end
     delete!(document["segments"], "units")
     @test_throws ArgumentError SystemDefinition(document)
 end
+
+unregister_model!(:pulleys, "sam_pulley")
