@@ -27,9 +27,9 @@ COLUMN_TYPES = Dict(
     "name_pair" => "NTuple{2, NameRef}",
     "name_list" => "Vector{NameRef}",
     "face_corners" => "Vector{NameRef}",
-    "vec3" => "SVector{3, Float64}",
-    "matrix3" => "SMatrix{3, 3, Float64, 9}",
-    "quaternion" => "SVector{4, Float64}",
+    "vec3" => "MVector{3, Float64}",
+    "matrix3" => "MMatrix{3, 3, Float64, 9}",
+    "quaternion" => "MVector{4, Float64}",
     "length" => "Float64",
     "non_negative" => "Float64",
 )
@@ -134,7 +134,7 @@ function component_source(block, spec)
     description = "A row of the `$block` block. " * get(spec, "description", "")
     body = join(("    $field::$type" for (field, type) in fields), "\n")
     return docstring("$name{M}", description, fields) *
-           "struct $name{M <: AbstractModel} <: Component\n$body\nend\n"
+           "mutable struct $name{M <: AbstractModel} <: Component\n$body\nend\n"
 end
 
 """Source of `Metadata`, from the schema's `metadata` object."""
