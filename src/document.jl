@@ -22,6 +22,19 @@ const REFERENCES = Dict(
 )
 
 """
+    Metadata(; name, n_points, description="", note="", awesIO_version=AWESIO_VERSION,
+             schema="structure_schema.yml", connectivity_sha="")
+
+Metadata from one keyword argument per field. An empty `connectivity_sha` stands for one not
+yet computed.
+"""
+function Metadata(; name, n_points, description="", note="", awesIO_version=AWESIO_VERSION,
+                  schema="structure_schema.yml", connectivity_sha="")
+    return Metadata(name, description, note, awesIO_version, schema, n_points,
+                    connectivity_sha)
+end
+
+"""
     SystemDefinition(; metadata, materials, points, segments, spanwise_stations, pulleys,
                      tethers, winches, wings, canopy_faces, bodies, tubes, extras)
 
