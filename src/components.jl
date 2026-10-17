@@ -52,7 +52,10 @@ function to_field(::Type{Union{Nothing, Float64, Vector{Float64}}}, value::Abstr
     return Vector{Float64}(value)
 end
 
-"""Types whose `==`, `isequal` and `hash` compare their fields."""
+"""
+Types whose `==`, `isequal` and `hash` compare their fields, so a value used as a `Dict` or
+`Set` key is lost once one of its fields is edited.
+"""
 const FieldwiseEqual = Union{Component, AbstractModel, SystemDefinition}
 
 """The values of the fields of `x`, in order."""

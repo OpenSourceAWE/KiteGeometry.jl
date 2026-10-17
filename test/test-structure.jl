@@ -349,6 +349,14 @@ end
     @test connectivity_sha(edited) == sha
 end
 
+@testset "a definition does not share arrays with the rows it was built from" begin
+    anchor = Point(; name="anchor", fixed=true, pos_ENU=[0, 0, 0])
+    kite = Point(; name="kite", pos_ENU=[0, 0, 100])
+    system = small_system(; points=[anchor, kite])
+    kite.pos_ENU[3] = 50
+    @test system.points[2].pos_ENU == [0, 0, 100]
+end
+
 @testset "rows equal field by field are equal and hash alike" begin
     kite, twin = (Point(; name="kite", pos_ENU=[0, 0, 100]) for _ in 1:2)
     @test kite == twin

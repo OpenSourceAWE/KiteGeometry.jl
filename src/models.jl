@@ -115,8 +115,10 @@ Set the field `name` of `component`, or of its model, which is replaced by one h
 """
 function Base.setproperty!(component::Component, name::Symbol, value)
     T = typeof(component)
-    hasfield(T, name) &&
-        return setfield!(component, name, to_field(fieldtype(T, name), value))
+    if hasfield(T, name)
+        setfield!(component, name, to_field(fieldtype(T, name), value))
+        return value
+    end
     model = getfield(component, :model)
     M = typeof(model)
     hasfield(M, name) || throw(ArgumentError("$T and its model $M have no field $name"))

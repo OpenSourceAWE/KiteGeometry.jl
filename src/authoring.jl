@@ -1077,5 +1077,6 @@ function placed_definition!(placement::Placement, wing_origins)
                          getfield(system.metadata, field)
                          for field in fieldnames(Metadata))...)
     return SystemDefinition(metadata, (getfield(system, field)
-                                       for field in fieldnames(SystemDefinition)[2:end])...)
+                                       for field in fieldnames(SystemDefinition)
+                                       if field != :metadata)...)
 end
