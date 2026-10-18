@@ -16,7 +16,7 @@ structure_document
 
 ## Frames
 
-Positions are in the ENU world frame, with the kite at zenith by convention. Each wing gives the origin and rotation of its KA frame, the frame its aerodynamic mesh is drawn in, and `pos_KA` puts a world position into it.
+Positions are in the ENU world frame. Each wing gives the origin and rotation of its KA frame, the frame its aerodynamic mesh is drawn in, and `pos_KA` puts a world position into it.
 
 ```@docs
 pos_KA

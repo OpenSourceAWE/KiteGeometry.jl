@@ -95,19 +95,7 @@ end
 """The `Pose` of `placement`, sharing its vectors."""
 Pose(placement::Placement) = Pose(placement.pos, placement.body_pos, placement.body_R)
 
-# ==================== ROTATIONS ==================== #
-
-"""Wrap `angle` [rad] into [-π, π]."""
-wrap_to_pi(angle) = mod(angle + π, 2π) - π
-
-"""`v` rotated about the axis `k` by `θ` [rad], by Rodrigues' formula."""
-function rotate_v_around_k(v, k, θ)
-    k = normalize(k)
-    return v * cos(θ) + cross(k, v) * sin(θ) + k * dot(k, v) * (1 - cos(θ))
-end
-
-"""`R` with each column rotated about the axis `k` by `θ` [rad]."""
-rotate_frame(R, k, θ) = Mat3(hcat((rotate_v_around_k(R[:, i], k, θ) for i in 1:3)...))
+# ==================== TANGENTIAL FRAME ==================== #
 
 """
     calc_R_t_to_w(pos)
@@ -132,23 +120,6 @@ with the nose towards the base.
 function calc_heading(R_b_to_w, pos)
     e_x_t = calc_R_t_to_w(pos)' * R_b_to_w[:, 1]
     return atan(e_x_t[2], e_x_t[1])
-end
-
-"""
-    min_rotation(curr_dir, target_dir) -> (axis, angle)
-
-Axis and angle [rad] of the smallest rotation taking the unit vector `curr_dir` onto
-`target_dir`, which adds no roll about either; about some perpendicular axis where the two
-are opposite.
-"""
-function min_rotation(curr_dir, target_dir)
-    cosang = clamp(dot(curr_dir, target_dir), -1.0, 1.0)
-    cosang > 1 - 1e-12 && return Vec3(0, 0, 1), 0.0
-    if cosang < -1 + 1e-12
-        ref = abs(curr_dir[1]) < 0.9 ? Vec3(1, 0, 0) : Vec3(0, 1, 0)
-        return normalize(cross(curr_dir, ref)), Float64(π)
-    end
-    return normalize(cross(curr_dir, target_dir)), acos(cosang)
 end
 
 """
@@ -234,7 +205,7 @@ function turn!(pose, transform, base_pos)
     isnothing(transform.body) && return nothing
     heading = calc_heading(pose.body_R[transform.body], radial)
     rotate_members!(pose, transform, base_pos, radial,
-                    wrap_to_pi(transform.heading - heading))
+                    wrap2pi(transform.heading - heading))
     return nothing
 end
 
@@ -299,7 +270,8 @@ end
 
 [`turn!`](@ref) the members of each of `transforms`, in order, to its current
 `elevation`, `azimuth` and `heading` about its base where it stands in `pose`, without
-moving that base.
+moving that base. A chained transform is not carried with its base, as
+[`place_transforms!`](@ref) carries it.
 """
 function reposition!(pose::Pose, transforms)
     for transform in transforms
@@ -313,7 +285,8 @@ end
 
 The velocity [m/s] of each point and body position, and the angular velocity [rad/s] of
 each body in the world, of the rigid rotation about its base ([`spherical_spin`](@ref))
-each of `transforms` gives its members in `pose`; zero for what none moves.
+each of `transforms` gives its members in `pose`; zero for what none moves. The members of
+a chained transform get its own rotation alone, not its base's.
 """
 function transform_velocities(pose::Pose, transforms)
     point_vel = fill(zero(Vec3), length(pose.pos))

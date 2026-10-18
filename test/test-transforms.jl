@@ -17,6 +17,9 @@ function load_chained(edit=identity)
     return load_authoring(path; set=Settings("system.yaml"))
 end
 
+"""The names of the `rows` at `indices`."""
+row_names(indices, rows) = [rows[index].name for index in indices]
+
 """Whether the poses `a` and `b` agree to `atol`."""
 function poses_agree(a, b; atol=1e-9)
     return all(isapprox.(a.pos, b.pos; atol)) &&
@@ -40,11 +43,11 @@ end
 
 @testset "each transform holds the points and bodies naming it" begin
     system, (main_tf, kite_tilt) = load_chained()
-    names(indices, rows) = [rows[index].name for index in indices]
-    @test names(main_tf.points, system.points) ==
+    @test row_names(main_tf.points, system.points) ==
           ["kcu", "nose", ("main_tether_point_$i" for i in 1:3)...]
-    @test names(kite_tilt.points, system.points) == ["top", "left", "right", "kite_origin"]
-    @test isempty(main_tf.bodies) && names(kite_tilt.bodies, system.bodies) == ["kite"]
+    @test row_names(kite_tilt.points, system.points) ==
+          ["top", "left", "right", "kite_origin"]
+    @test isempty(main_tf.bodies) && row_names(kite_tilt.bodies, system.bodies) == ["kite"]
     @test kite_tilt.base_transform == 1 && kite_tilt.rot_point == [7 => 1.0]
     @test isnothing(main_tf.body) && kite_tilt.body == 1
     @test rad2deg(kite_tilt.heading) ≈ 25
@@ -85,6 +88,16 @@ end
     @test calc_heading(pose.body_R[1], kite_origin - kcu) ≈ deg2rad(-35)
 end
 
+"""`data`, the chained system's YAML, with its first transform turning no point."""
+function unturn_main!(data)
+    data["transforms"]["data"][1][11] = nothing
+    return data
+end
+
+@testset "a transform turning neither a point nor a body is refused" begin
+    @test_throws "turns a rot_point or a body: give one" load_chained(unturn_main!)
+end
+
 """`pose` repositioned with every one of `transforms` advanced by its rates for `dt` [s]."""
 function advanced(pose, transforms, dt)
     for transform in transforms
@@ -106,7 +119,7 @@ end
         system, transforms = load_chained()
         held = transforms[3 - moving]
         held.elevation_vel = held.azimuth_vel = held.turn_rate = 0.0
-        # main_tf heads no body, so repositioning keeps no heading for an azimuth rate
+        # main_tf heads no body: reposition! turns it without roll, its azimuth spin rolls
         main_tf, kite_tilt = transforms
         main_tf.azimuth_vel, kite_tilt.azimuth_vel = 0.0, moving == 2 ? deg2rad(-1.5) : 0.0
         pose = Pose(system)

@@ -898,7 +898,7 @@ function load_authoring(path; set::Settings, name=first(splitext(basename(path))
                                     point_transforms, body_transforms)
     placement = design_pose(draft, set, point_wings, authored_wings, authored_bodies, inits)
     design = copy(Pose(placement))
-    place_authored!(placement, transforms; ignore_l0)
+    place_authored!(placement, design, transforms; ignore_l0)
     return placed_definition(placement, design), transforms
 end
 
@@ -924,7 +924,7 @@ function resolve_transforms(authored, draft, authored_wings, point_transforms,
         bodies = transform_members(body_transforms, names, i)
         wing = optional_index(row.wing, wing_names, :wings)
         rot_point, body = if isnothing(wing)
-            [resolve_index(row.rot_point, point_names, :points) => 1.0],
+            optional_rot_point(row.rot_point, point_names),
             isempty(bodies) ? nothing : first(bodies)
         else
             wing_origin(authored_wings[wing], point_names), wing
@@ -935,6 +935,11 @@ function resolve_transforms(authored, draft, authored_wings, point_transforms,
                   base_transform=optional_index(row.base_transform, names, :transforms),
                   rot_point, body, points, bodies)
     end
+end
+
+"""The point `ref` as reference points of weight one, `nothing` for `nothing`."""
+function optional_rot_point(ref, point_names)
+    return isnothing(ref) ? nothing : [resolve_index(ref, point_names, :points) => 1.0]
 end
 
 """The indices whose transform in `refs`, resolved into the indices `names`, is `i`."""

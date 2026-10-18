@@ -90,6 +90,32 @@ function rotation_matrix_to_quaternion(R)
                    (R[2, 3] + R[3, 2]) / S, S / 4)
 end
 
+"""`v` rotated about the axis `k` by `θ` [rad], by Rodrigues' formula."""
+function rotate_v_around_k(v, k, θ)
+    k = normalize(k)
+    return v * cos(θ) + cross(k, v) * sin(θ) + k * dot(k, v) * (1 - cos(θ))
+end
+
+"""`R` with each column rotated about the axis `k` by `θ` [rad]."""
+rotate_frame(R, k, θ) = Mat3(hcat((rotate_v_around_k(R[:, i], k, θ) for i in 1:3)...))
+
+"""
+    min_rotation(curr_dir, target_dir) -> (axis, angle)
+
+Axis and angle [rad] of the smallest rotation taking the unit vector `curr_dir` onto
+`target_dir`, which adds no roll about either; about some perpendicular axis where the two
+are opposite.
+"""
+function min_rotation(curr_dir, target_dir)
+    cosang = clamp(dot(curr_dir, target_dir), -1.0, 1.0)
+    cosang > 1 - 1e-12 && return Vec3(0, 0, 1), 0.0
+    if cosang < -1 + 1e-12
+        ref = abs(curr_dir[1]) < 0.9 ? Vec3(1, 0, 0) : Vec3(0, 1, 0)
+        return normalize(cross(curr_dir, ref)), Float64(π)
+    end
+    return normalize(cross(curr_dir, target_dir)), acos(cosang)
+end
+
 # ==================== WING FRAMES ==================== #
 
 """Weighted position of the reference points `refs` among the positions `pos`."""
@@ -110,16 +136,15 @@ end
 # ==================== PLACE ==================== #
 
 """
-    place_authored!(placement::Placement, transforms; ignore_l0=false)
+    place_authored!(placement::Placement, design::Pose, transforms; ignore_l0=false)
 
-Place the system by its tethers' lengths and `transforms`, from the design pose
-`placement` holds: tethers to their stretched lengths, every unset rest length to the
+Place the system by its tethers' lengths and `transforms`, from the pose `design`
+`placement` stands in: tethers to their stretched lengths, every unset rest length to the
 length it then has, tether and pulley rest lengths shared out, the transforms applied
 ([`place_transforms!`](@ref)), and each body's points carried with it. `ignore_l0` makes
 every rest length the placed length.
 """
-function place_authored!(placement::Placement, transforms; ignore_l0=false)
-    design = copy(Pose(placement))
+function place_authored!(placement::Placement, design, transforms; ignore_l0=false)
     apply_tether_init_stretched_lens!(placement)
     update_segment_lengths!(placement)
     apply_tether_init_forces!(placement)
