@@ -4,7 +4,8 @@
 using JSON
 using JSONSchema: Schema, validate
 using KiteUtils: Settings, set_data_path
-using LinearAlgebra: norm
+using KiteGeometry: quaternion_to_rotation_matrix
+using LinearAlgebra: cross, norm
 using OrderedCollections: OrderedDict
 using StaticArrays: SVector
 using YAML
@@ -103,8 +104,11 @@ function kite_settings(directory=KITE)
     return Settings("system.yaml")
 end
 
+"""The 2-plate kite of the authoring `file`, loaded and placed, and its transforms."""
+load_kite_transforms(file) = load_authoring(joinpath(KITE, file); set=kite_settings())
+
 """The 2-plate kite of the authoring `file`, loaded and placed."""
-load_kite(file) = load_authoring(joinpath(KITE, file); set=kite_settings())
+load_kite(file) = first(load_kite_transforms(file))
 
 """Whether `value` and `expected`, cells of a document, agree to rounding."""
 cells_agree(value::Real, expected::Real) = isapprox(value, expected; rtol=1e-12, atol=1e-12)
@@ -146,6 +150,7 @@ GOLDEN_BLOCKS = Dict("stations" => "spanwise_stations")
 
 """The column each column of SAM's golden document became, where it was renamed."""
 GOLDEN_COLUMNS = Dict(("segments", "l0") => "rest_length",
+                      ("bodies", "Q_KA_to_ENU") => "Q_KA2ENU",
                       ("points", "drag_area") => "area",
                       ("points", "drag_coefficient") => "drag_coeff")
 
@@ -153,7 +158,7 @@ GOLDEN_COLUMNS = Dict(("segments", "l0") => "rest_length",
 unset."""
 POINT_MODEL_COLUMNS = ("type", "drag_area", "drag_coefficient")
 
-@testset "the rigid 2-plate kite has the shape of SAM's golden document, at zenith" begin
+@testset "the rigid 2-plate kite is SAM's golden document, placed by its transform" begin
     golden = YAML.load_file(joinpath(@__DIR__, "data", "2plate_kite_structure.yml");
                             dicttype=OrderedDict{String, Any})
     system = load_kite("rigid_structural_geometry.yaml")
@@ -173,7 +178,6 @@ POINT_MODEL_COLUMNS = ("type", "drag_area", "drag_coefficient")
             table = document[get(GOLDEN_BLOCKS, block, block)]
             values = column(table, get(GOLDEN_COLUMNS, (block, header), header))
             isnothing(values) && (push!(unread, "$block.$header"); continue)
-            header in ("pos_ENU", "Q_KA_to_ENU") && continue
             for (name, value, cell) in zip(column(expected, "name"), values,
                                            column(expected, header))
                 isnothing(value) && block == "points" && header in POINT_MODEL_COLUMNS &&
@@ -183,7 +187,7 @@ POINT_MODEL_COLUMNS = ("type", "drag_area", "drag_coefficient")
             end
         end
     end
-    @test sort(unread) == ["bodies.Q_KA_to_ENU", "bodies.apparent_mass", "bodies.type",
+    @test sort(unread) == ["bodies.apparent_mass", "bodies.type",
                            "bodies.wing", "points.wing", "pulleys.efficiency",
                            "segments.density", "segments.unit_stiffness",
                            "stations.stiffness", "winches.model", "wings.aero",
@@ -203,21 +207,29 @@ end
     end
 end
 
-@testset "the 2-plate kite at zenith is its authoring YAML in its wing's KA frame" begin
+"""Whether each point of `system` the authoring `points` table names is at its `pos_cad`
+in the KA frame of the system's wing."""
+function at_pos_cad(system, points)
+    wing = only(system.wings)
+    names, pos_cad = column(points, "name"), column(points, "pos_cad")
+    return all(system.points) do point
+        index = findfirst(==(point.name), names)
+        isnothing(index) ||
+            isapprox(pos_KA(wing, point.pos_ENU), pos_cad[index]; atol=1e-12)
+    end
+end
+
+@testset "the placed 2-plate kite is its authoring YAML in its wing's KA frame" begin
     for file in AUTHORING_SYSTEMS
         authored = YAML.load_file(joinpath(KITE, file))["points"]
-        system = load_kite(file)
-        wing = only(system.wings)
-        @test wing.Q_KA2ENU == [1, 0, 0, 0]
-        @test wing.pos_ENU == [0, 0, 20]
-        names, pos_cad = column(authored, "name"), column(authored, "pos_cad")
-        for point in system.points
-            index = findfirst(==(point.name), names)
-            isnothing(index) && continue
-            @test isapprox(pos_KA(wing, point.pos_ENU), pos_cad[index]; rtol=0, atol=1e-12)
-        end
-        transforms = structure_document(system)["transforms"]
-        @test only(transforms["data"])["elevation"] == 50
+        system, transforms = load_kite_transforms(file)
+        @test at_pos_cad(system, authored)
+        @test rad2deg(only(transforms).elevation) ≈ 50
+        @test !haskey(structure_document(system), "transforms")
+        transform = only(transforms)
+        transform.elevation, transform.azimuth = deg2rad(35), deg2rad(20)
+        transform.heading = deg2rad(10)
+        @test at_pos_cad(place!(system, transforms), authored)
     end
 end
 
@@ -257,7 +269,7 @@ function load_edited(edit, file="rigid_structural_geometry.yaml")
     edit(data)
     path = joinpath(mktempdir(), "edited.yaml")
     YAML.write_file(path, data)
-    return load_authoring(path; set=kite_settings())
+    return first(load_authoring(path; set=kite_settings()))
 end
 
 """`data` with two bodies and the `timoshenko` tube `strut` between them."""
@@ -345,11 +357,10 @@ end
     @test !haskey(KiteGeometry.MODELS, (:points, "riding_point"))
 end
 
-@testset "a chained transform is refused whatever is registered" begin
-    chained = @test_throws ErrorException load_edited() do data
+@testset "a transform with both a base_pos and a base_transform is refused" begin
+    @test_throws "has a base_pos or a base_transform: give one" load_edited() do data
         only(data["transforms"]["data"])["base_transform_idx"] = "main_transform"
     end
-    @test occursin("chained to another", chained.value.msg)
 end
 
 @testset "an unread block is kept as an extra block, an empty one dropped" begin
@@ -360,7 +371,7 @@ end
         data["groups"] = Dict("headers" => ["idx", "point_idxs"], "data" => nothing)
         data["twist"] = nothing
     end
-    @test collect(keys(system.extras)) == ["surfaces", "transforms"]
+    @test collect(keys(system.extras)) == ["surfaces"]
     @test system.extras["surfaces"] == surfaces
     @test structure_document(from_yaml(to_yaml(system)))["surfaces"] == surfaces
     @test_throws "block metadata is a block of the structure document" load_edited() do data
@@ -385,8 +396,8 @@ end
 
 @testset "V3Kite's PSM fixture states the canopy faces of awesIO's V3 PSM document" begin
     v3_psm = joinpath(@__DIR__, "data", "v3_psm")
-    system = load_authoring(joinpath(v3_psm, "struc_geometry.yaml");
-                            set=kite_settings(v3_psm))
+    system, _ = load_authoring(joinpath(v3_psm, "struc_geometry.yaml");
+                               set=kite_settings(v3_psm))
     document = structure_document(system)
     golden = YAML.load_file(joinpath(@__DIR__, "data", "v3_psm_structure.yml"))
     faces, expected = document["canopy_faces"], golden["canopy_faces"]
@@ -398,10 +409,51 @@ end
     @test isnothing(validate(SCHEMA, JSON.parse(to_json(system))))
 end
 
+"""The authoring YAML of each system SymbolicAWEModels' placed pose is recorded for."""
+SAM_PLACED_SYSTEMS = Dict("rigid_structural_geometry" => KITE,
+                          "particle_structural_geometry" => KITE,
+                          "weighted_ref" => joinpath(@__DIR__, "data"),
+                          "chained_transforms" => joinpath(@__DIR__, "data"))
+
+"""The system `name` of `SAM_PLACED_SYSTEMS`, and its transforms, loaded and placed."""
+function load_sam_placed(name)
+    load() = load_authoring(joinpath(SAM_PLACED_SYSTEMS[name], "$name.yaml");
+                            set=kite_settings())
+    name == "chained_transforms" || return load()
+    return without_sam_models(load, :points, :bodies)
+end
+
+@testset "authoring YAMLs with transforms load to the pose SymbolicAWEModels places" begin
+    reference = YAML.load_file(joinpath(@__DIR__, "data", "sam_placed.yml"))
+    @test sort(collect(keys(reference))) == sort(collect(keys(SAM_PLACED_SYSTEMS)))
+    for (name, placed) in reference
+        system, transforms = load_sam_placed(name)
+        point_vel, body_vel, body_spin = transform_velocities(Pose(system), transforms)
+        @test sort([point.name for point in system.points]) ==
+              sort(collect(keys(placed["points"])))
+        for (point, vel) in zip(system.points, point_vel)
+            expected = placed["points"][point.name]
+            @test isapprox(point.pos_ENU, expected["pos"]; rtol=0, atol=1e-12)
+            @test isapprox(vel, expected["vel"]; rtol=0, atol=1e-12)
+        end
+        for segment in system.segments
+            @test segment.rest_length ≈ placed["segments"][segment.name] atol=1e-12
+        end
+        for (index, body) in enumerate(system.bodies)
+            expected = placed["bodies"][body.name]
+            @test isapprox(quaternion_to_rotation_matrix(body.Q_KA2ENU),
+                           quaternion_to_rotation_matrix(expected["Q"]); rtol=0, atol=1e-12)
+            origin_vel = body_vel[index] +
+                         cross(body_spin[index], expected["pos"] - body.pos_ENU)
+            @test isapprox(origin_vel, expected["vel"]; rtol=0, atol=1e-12)
+        end
+    end
+end
+
 SAM_CASES = joinpath(@__DIR__, "data", "sam_cases")
 
 """The authoring YAML `file` of SAM's tests, loaded."""
-load_case(file) = load_authoring(joinpath(SAM_CASES, file); set=kite_settings())
+load_case(file) = first(load_authoring(joinpath(SAM_CASES, file); set=kite_settings()))
 
 """The particle 2-plate kite with the `wing_idx` cell of the point `name` set to `wing`,
 loaded."""
@@ -424,6 +476,7 @@ end
 @testset "a refusal is an error naming the row" begin
     for (file, message) in (
         "cyclic.yaml" => "Cyclic variable reference: a -> b -> a",
+        "cyclic_reversed.yaml" => "Cyclic variable reference: b -> a -> b",
         "shadow.yaml" => "Variable `anchor` has the same name as a component in block " *
                          "`points`",
         "mismatch.yaml" => "Variable `dyneema` defines damping_per_stiffness, " *

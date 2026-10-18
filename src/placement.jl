@@ -8,17 +8,6 @@ const Mat3 = SMatrix{3, 3, Float64, 9}
 const RefPoints = Vector{Pair{Int, Float64}}
 
 """
-    PlacedTransform
-
-A transform of the authoring YAML, its reference resolved: the position [m] its
-`base_point` is moved to, its components with it.
-"""
-struct PlacedTransform
-    base_pos::Vec3
-    base_point::Int
-end
-
-"""
     WingFrame
 
 The points that fix a wing body's frame: its origin, and the two pairs giving its z and its
@@ -57,10 +46,6 @@ struct Placement
     com_offset::Vector{Vec3}
     "position of each body-carried point in its body's frame [m]"
     anchor::Vector{Vec3}
-    "index of the transform moving each point, 0 for none"
-    point_transform::Vector{Int}
-    "index of the transform moving each body, 0 for none"
-    body_transform::Vector{Int}
     "index of the wing body each point belongs to, 0 for none"
     point_wing::Vector{Int}
     "whether each point is a member of a station"
@@ -70,7 +55,6 @@ struct Placement
     "whether each wing is a particle wing"
     particle_wing::Vector{Bool}
     tether_init::Vector{TetherInit}
-    transforms::Vector{PlacedTransform}
 end
 
 # ==================== ROTATIONS ==================== #
@@ -106,6 +90,32 @@ function rotation_matrix_to_quaternion(R)
                    (R[2, 3] + R[3, 2]) / S, S / 4)
 end
 
+"""`v` rotated about the axis `k` by `θ` [rad], by Rodrigues' formula."""
+function rotate_v_around_k(v, k, θ)
+    k = normalize(k)
+    return v * cos(θ) + cross(k, v) * sin(θ) + k * dot(k, v) * (1 - cos(θ))
+end
+
+"""`R` with each column rotated about the axis `k` by `θ` [rad]."""
+rotate_frame(R, k, θ) = Mat3(hcat((rotate_v_around_k(R[:, i], k, θ) for i in 1:3)...))
+
+"""
+    min_rotation(curr_dir, target_dir) -> (axis, angle)
+
+Axis and angle [rad] of the smallest rotation taking the unit vector `curr_dir` onto
+`target_dir`, which adds no roll about either; about some perpendicular axis where the two
+are opposite.
+"""
+function min_rotation(curr_dir, target_dir)
+    cosang = clamp(dot(curr_dir, target_dir), -1.0, 1.0)
+    cosang > 1 - 1e-12 && return Vec3(0, 0, 1), 0.0
+    if cosang < -1 + 1e-12
+        ref = abs(curr_dir[1]) < 0.9 ? Vec3(1, 0, 0) : Vec3(0, 1, 0)
+        return normalize(cross(curr_dir, ref)), Float64(π)
+    end
+    return normalize(cross(curr_dir, target_dir)), acos(cosang)
+end
+
 # ==================== WING FRAMES ==================== #
 
 """Weighted position of the reference points `refs` among the positions `pos`."""
@@ -126,20 +136,20 @@ end
 # ==================== PLACE ==================== #
 
 """
-    place!(placement::Placement; ignore_l0=false)
+    place_authored!(placement::Placement, design::Pose, transforms; ignore_l0=false)
 
-Place the system by its tethers' lengths and its transforms' base positions, from the
-design pose `placement` holds: tethers to their stretched lengths, every unset rest length
-to the length it then has, tether and pulley rest lengths shared out, each transform's
-members shifted to its base position, and each body's points carried with it. `ignore_l0`
-makes every rest length the placed length.
+Place the system by its tethers' lengths and `transforms`, from the pose `design`
+`placement` stands in: tethers to their stretched lengths, every unset rest length to the
+length it then has, tether and pulley rest lengths shared out, the transforms applied
+([`place_transforms!`](@ref)), and each body's points carried with it. `ignore_l0` makes
+every rest length the placed length.
 """
-function place!(placement::Placement; ignore_l0=false)
+function place_authored!(placement::Placement, design, transforms; ignore_l0=false)
     apply_tether_init_stretched_lens!(placement)
     update_segment_lengths!(placement)
     apply_tether_init_forces!(placement)
     init_pulley_lengths!(placement)
-    apply_transforms!(placement)
+    place_transforms!(Pose(placement), design, transforms)
     carry_body_points!(placement)
     ignore_l0 && relax_segments!(placement)
     return placement
@@ -508,24 +518,6 @@ function apply_tether_init_forces!(placement::Placement)
         len = init_unstretched_len(placement, index)
         len > 0 || error("tether $(tether.name): rest length $len m must be positive")
         placement.l0[Int.(tether.segments)] .= len / length(tether.segments)
-    end
-    return nothing
-end
-
-# ==================== TRANSFORMS ==================== #
-
-"""
-    apply_transforms!(placement::Placement)
-
-Move the points and bodies of each transform so its base point lands on its `base_pos`.
-"""
-function apply_transforms!(placement::Placement)
-    for (index, transform) in enumerate(placement.transforms)
-        shift = transform.base_pos - placement.pos[transform.base_point]
-        points = findall(==(index), placement.point_transform)
-        bodies = findall(==(index), placement.body_transform)
-        placement.pos[points] .+= (shift,)
-        placement.body_pos[bodies] .+= (shift,)
     end
     return nothing
 end
