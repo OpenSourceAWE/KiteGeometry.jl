@@ -298,7 +298,7 @@ end
 
 """The `headers` of the filled `cells` that `model` does not read."""
 function unread_columns(headers, cells, model)
-    read = model isa NoModel ? () : ("model", String.(fieldnames(typeof(model)))...)
+    read = model isa NoModel ? () : ("model", String.(model_columns(typeof(model)))...)
     return (header for (header, cell) in zip(headers, cells)
             if !isnothing(cell) && !(header in read))
 end
@@ -347,7 +347,7 @@ function write_table(system, block, rows)
     any(!isnothing, registrations) &&
         !all(reads_default.(registrations, block)) && (model_units["model"] = "-")
     for model in unique(filter(!isnothing, registrations))
-        for (field, unit) in zip(fieldnames(model.type), model.units)
+        for (field, unit) in zip(model_columns(model.type), model.units)
             any(row -> row.model isa model.type && !isnothing(getfield(row.model, field)),
                 rows) || continue
             get!(model_units, String(field), unit) == unit || throw(ArgumentError(
@@ -376,14 +376,16 @@ end
 registered name for `model`, else the field of that name, `nothing` where it has none."""
 function model_cell(model, registration, header)
     header == "model" && return isnothing(registration) ? nothing : registration.name
-    hasfield(typeof(model), Symbol(header)) || return nothing
+    Symbol(header) in model_columns(typeof(model)) || return nothing
     return document_value(getfield(model, Symbol(header)), nothing, nothing)
 end
 
 """`value` as a structure document writes it, a reference into `target` by name."""
 document_value(value, ::Nothing, system) = value
-document_value(value::SVector, ::Nothing, system) = collect(value)
-document_value(value::SMatrix, ::Nothing, system) = [collect(row) for row in eachrow(value)]
+document_value(value::StaticVector, ::Nothing, system) = collect(value)
+function document_value(value::StaticMatrix, ::Nothing, system)
+    return [collect(row) for row in eachrow(value)]
+end
 document_value(::Nothing, target::Symbol, system) = nothing
 document_value(index::Int, target::Symbol, system) = getfield(system, target)[index].name
 document_value(name::String, target::Symbol, system) = name
