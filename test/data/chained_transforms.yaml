@@ -1,0 +1,40 @@
+# A bridle and a kite body placed by two transforms, the second chained to the first.
+variables:
+  dyneema:
+    youngs_modulus: 55.0e9
+    damping_per_stiffness: 0.00077
+    density: 724.0
+
+points:
+  headers: [name, pos_cad, type, body, transform_idx, extra_mass]
+  data:
+    - [ground, [0.0, 0.0, 0.0], STATIC, nothing, nothing, 0.0]
+    - [kcu, [0.0, 0.0, 40.0], DYNAMIC, nothing, main_tf, 1.0]
+    - [nose, [0.6, 0.0, 41.0], DYNAMIC, nothing, main_tf, 0.2]
+    - [top, [0.1, 0.0, 42.5], BODY_STATIC, kite, kite_tilt, 0.1]
+    - [left, [0.4, 1.6, 41.8], BODY_STATIC, kite, kite_tilt, 0.1]
+    - [right, [0.4, -1.6, 41.8], BODY_STATIC, kite, kite_tilt, 0.1]
+
+segments:
+  headers: [name, point_i, point_j, l0, diameter_mm, youngs_modulus, damping_per_stiffness, density]
+  data:
+    - [kcu_nose, kcu, nose, nothing, 2.0, dyneema]
+    - [nose_top, nose, top, nothing, 2.0, dyneema]
+    - [left_kcu, left, kcu, nothing, 2.0, dyneema]
+    - [right_kcu, right, kcu, nothing, 2.0, dyneema]
+
+tethers:
+  headers: [name, start_point, end_point, n_segments, youngs_modulus, damping_per_stiffness, density, diameter_mm, init_stretched_length]
+  data:
+    - [main_tether, ground, kcu, 4, dyneema, 2.0, 42.0]
+
+bodies:
+  headers: [name, pos, extra_mass, inertia_principal, transform_idx]
+  data:
+    - [kite, [0.3, 0.0, 42.0], 2.0, [1.0, 2.0, 3.0], kite_tilt]
+
+transforms:
+  headers: [name, elevation, azimuth, heading, elevation_vel, azimuth_vel, turn_rate, base_pos, base_point_idx, base_transform_idx, rot_point_idx]
+  data:
+    - [main_tf, 55.0, 15.0, 0.0, 2.0, -1.5, 0.0, [0.0, 0.0, 0.0], ground, nothing, kcu]
+    - [kite_tilt, 62.0, 15.0, 25.0, 1.0, 0.0, 4.0, nothing, nothing, main_tf, top]
