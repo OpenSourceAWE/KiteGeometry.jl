@@ -1,0 +1,11 @@
+points:
+  headers: [name, pos_cad, type]
+  data:
+    - [anchor, [0.0, 0.0, 0.0], STATIC]
+    - [top, [0.0, 0.0, -10.0], DYNAMIC]
+
+segments:
+  headers: [name, point_i, point_j, diameter_mm, youngs_modulus,
+            unit_stiffness]
+  data:
+    - [line, anchor, top, 1.0, 55.0e9, 43196.9]
