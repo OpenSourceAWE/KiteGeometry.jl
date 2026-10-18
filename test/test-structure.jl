@@ -325,6 +325,15 @@ end
     @test_throws ArgumentError small_system(; rudders=[])
 end
 
+@testset "a block's rows are found by their name as well as their position" begin
+    system = small_system()
+    @test system.points[:kite] === system.points["kite"] === system.points[2]
+    @test haskey(system.points, :anchor) && !haskey(system.points, :ground)
+    @test_throws KeyError system.points[:ground]
+    push!(system.segments, Segment(; name="spare", points=(1, 2)))
+    @test system.segments[:spare].points == (1, 2)
+end
+
 @testset "a point count the points disagree with is refused" begin
     points = small_system().points
     metadata = Metadata("small", "", "", "0.1.0", "structure_schema.yml", 3, "0"^64)

@@ -22,7 +22,7 @@ using SHA: sha256
 using StaticArrays: MMatrix, MVector, SMatrix, StaticMatrix, StaticVector, SVector
 using YAML: YAML
 
-export SystemDefinition, Metadata, Material, Point, Segment, SpanwiseStation, Pulley,
+export SystemDefinition, Rows, Metadata, Material, Point, Segment, SpanwiseStation, Pulley,
        Tether, Winch, Wing, CanopyFace, Body, Tube, pos_KA
 export Transform, Pose, place!, place_transforms!, reposition!, transform_velocities,
        calc_heading
@@ -47,6 +47,7 @@ Supertype of the row types of the table blocks.
 """
 abstract type Component end
 
+include("rows.jl")
 include("models.jl")
 include("_structure.jl")
 include("components.jl")

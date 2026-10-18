@@ -244,6 +244,19 @@ end
     end
 end
 
+@testset "a parsed authoring document loads as its file does" begin
+    path = joinpath(KITE, "rigid_structural_geometry.yaml")
+    authored = YAML.load_file(path; dicttype=OrderedDict{String, Any})
+    system, transforms = load_authoring(authored; set=kite_settings(),
+                                        name="rigid_structural_geometry")
+    from_file, file_transforms = load_kite_transforms("rigid_structural_geometry.yaml")
+    @test to_yaml(system) == to_yaml(from_file)
+    members(transform) = (transform.name, transform.points, transform.bodies)
+    @test members.(transforms) == members.(file_transforms)
+    @test transforms isa Rows{Transform}
+    @test transforms[:main_transform] === transforms[1]
+end
+
 @testset "a segment carries its spring as the segment model spring" begin
     system = load_kite("rigid_structural_geometry.yaml")
     segment = system.segments[1]

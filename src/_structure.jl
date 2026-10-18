@@ -290,36 +290,36 @@ end
 """
     SystemDefinition
 
-A structure document: its metadata, one vector per table block, and the blocks the schema
+A structure document: its metadata, the rows of each table block, and the blocks the schema
 does not name.
 
 - `metadata::Metadata`: the document's metadata
-- `materials::Vector{Material}`: the rows of `materials`
-- `points::Vector{Point}`: the rows of `points`
-- `segments::Vector{Segment}`: the rows of `segments`
-- `spanwise_stations::Vector{SpanwiseStation}`: the rows of `spanwise_stations`
-- `pulleys::Vector{Pulley}`: the rows of `pulleys`
-- `tethers::Vector{Tether}`: the rows of `tethers`
-- `winches::Vector{Winch}`: the rows of `winches`
-- `wings::Vector{Wing}`: the rows of `wings`
-- `canopy_faces::Vector{CanopyFace}`: the rows of `canopy_faces`
-- `bodies::Vector{Body}`: the rows of `bodies`
-- `tubes::Vector{Tube}`: the rows of `tubes`
+- `materials::Rows{Material}`: the rows of `materials`
+- `points::Rows{Point}`: the rows of `points`
+- `segments::Rows{Segment}`: the rows of `segments`
+- `spanwise_stations::Rows{SpanwiseStation}`: the rows of `spanwise_stations`
+- `pulleys::Rows{Pulley}`: the rows of `pulleys`
+- `tethers::Rows{Tether}`: the rows of `tethers`
+- `winches::Rows{Winch}`: the rows of `winches`
+- `wings::Rows{Wing}`: the rows of `wings`
+- `canopy_faces::Rows{CanopyFace}`: the rows of `canopy_faces`
+- `bodies::Rows{Body}`: the rows of `bodies`
+- `tubes::Rows{Tube}`: the rows of `tubes`
 - `extras::OrderedDict{String, Any}`: blocks the schema does not name, in the order read
 """
 struct SystemDefinition
     metadata::Metadata
-    materials::Vector{Material}
-    points::Vector{Point}
-    segments::Vector{Segment}
-    spanwise_stations::Vector{SpanwiseStation}
-    pulleys::Vector{Pulley}
-    tethers::Vector{Tether}
-    winches::Vector{Winch}
-    wings::Vector{Wing}
-    canopy_faces::Vector{CanopyFace}
-    bodies::Vector{Body}
-    tubes::Vector{Tube}
+    materials::Rows{Material}
+    points::Rows{Point}
+    segments::Rows{Segment}
+    spanwise_stations::Rows{SpanwiseStation}
+    pulleys::Rows{Pulley}
+    tethers::Rows{Tether}
+    winches::Rows{Winch}
+    wings::Rows{Wing}
+    canopy_faces::Rows{CanopyFace}
+    bodies::Rows{Body}
+    tubes::Rows{Tube}
     extras::OrderedDict{String, Any}
 end
 
