@@ -11,6 +11,17 @@ SPDX-License-Identifier: MIT
 
 - Rows are mutable: `point.extra_mass = 2.5` and `point.pos_ENU .= [1, 2, 3]` change a row in place, and a field of its model is set through the row (`tube.EA = 3e5`). Vector and matrix fields are `MVector`/`MMatrix`. Rows and models compare and hash by their fields.
 - `model_columns(M)` names the fields of a model type that are document columns, all of them unless a method says fewer; a model may keep fields of its own that are neither read nor written.
+- `load_authoring` keeps every block it does not read, such as a plate wing's `surfaces`, as an extra block instead of refusing it. A wing's `dynamics_type`, `origin_idx`, `z_ref_points` and `y_ref_points` reach a registered wing model that has fields of those names.
+
+### Changed
+
+- BREAKING: `load_authoring` refuses with `error(...)` (an `ErrorException`) naming the offending row instead of an `ArgumentError`, refuses a station's point that names no wing or another wing, and names the point whose wing does not exist.
+
+### Fixed
+
+- `load_authoring` reads `0` in an optional reference column (`wing_idx`, `transform_idx`, `body_idx`) as none, as SymbolicAWEModels writes it.
+- A model field typed `Any` no longer overflows the stack when it is filled.
+- The points `load_authoring` adds along a tether and the body it adds for each wing carry their block's default model, where that model needs no column filled, so the definition reads back from its own YAML with the same models.
 
 ## KiteGeometry v0.2.0 2026-10-16
 

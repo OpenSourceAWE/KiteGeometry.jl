@@ -301,9 +301,9 @@ function tether_downstream_idxs(tether, segments, boundary, from, anchor, rigid_
             sibling == current || push!(neighbors, sibling)
         end
         for neighbor in neighbors
-            neighbor == anchor && throw(ArgumentError(
+            neighbor == anchor && error(
                 "tether $(tether.name): the structure downstream of it connects back to " *
-                "its anchor, so it cannot be placed at its length"))
+                "its anchor, so it cannot be placed at its length")
             neighbor in visited && continue
             push!(visited, neighbor)
             neighbor in boundary && continue
@@ -363,8 +363,8 @@ function apply_cluster_init_stretched_len!(placement::Placement, cluster, downst
             reverse!(seg_lens)
         end
         path_len = sum(seg_lens)
-        path_len > 0 || throw(ArgumentError(
-            "tether $(tether.name) has no length to scale to its stretched length"))
+        path_len > 0 || error(
+            "tether $(tether.name) has no length to scale to its stretched length")
         (; index, free, anchor_pos=pos[anchor], free_pos=pos[free], ordered, seg_lens,
          path_len)
     end
@@ -427,9 +427,9 @@ function apply_tether_init_stretched_lens!(placement::Placement)
     end
     for index in anchored
         tether = system.tethers[index]
-        isnothing(first(tether_anchor_free(tether, boundary))) && throw(ArgumentError(
+        isnothing(first(tether_anchor_free(tether, boundary))) && error(
             "tether $(tether.name) has neither endpoint on a fixed or winch point, so " *
-            "it cannot be placed at its stretched length"))
+            "it cannot be placed at its stretched length")
     end
     rigid_siblings = rigid_point_siblings(
         placement, connected_body_groups(length(system.bodies), system.tubes))
@@ -463,21 +463,20 @@ function init_unstretched_len(placement::Placement, index)
     stretched = sum(segment_length(segments[segment], placement.pos)
                     for segment in tether.segments)
     (; force, stretch_frac) = placement.tether_init[index]
-    !isnothing(force) && !isnothing(stretch_frac) && throw(ArgumentError(
-        "tether $(tether.name): give init_stretch_frac or init_tether_force, not both"))
+    !isnothing(force) && !isnothing(stretch_frac) && error(
+        "tether $(tether.name): give init_stretch_frac or init_tether_force, not both")
     if !isnothing(stretch_frac)
-        stretch_frac > 0 || throw(ArgumentError(
-            "tether $(tether.name): init_stretch_frac $stretch_frac must be positive"))
+        stretch_frac > 0 || error(
+            "tether $(tether.name): init_stretch_frac $stretch_frac must be positive")
         return stretched * stretch_frac
     end
     force = something(force, 0.0)
-    force >= 0 || throw(ArgumentError(
-        "tether $(tether.name): init_tether_force $force N is negative"))
+    force >= 0 || error("tether $(tether.name): init_tether_force $force N is negative")
     force == 0 && return stretched
     stiffness = tether_unit_stiffness(tether, segments, placement.system.materials)
-    force < stiffness || throw(ArgumentError(
+    force < stiffness || error(
         "tether $(tether.name): init_tether_force $force N is not below its " *
-        "unit_stiffness $stiffness N"))
+        "unit_stiffness $stiffness N")
     return stretched * (1 - force / stiffness)
 end
 
@@ -486,8 +485,8 @@ end
 function tether_unit_stiffness(tether, segments, materials)
     stiffnesses = [unit_stiffness(segments[index], materials, tether)
                    for index in tether.segments]
-    all(≈(first(stiffnesses)), stiffnesses) || throw(ArgumentError(
-        "tether $(tether.name): its segments differ in unit_stiffness ($stiffnesses)"))
+    all(≈(first(stiffnesses)), stiffnesses) || error(
+        "tether $(tether.name): its segments differ in unit_stiffness ($stiffnesses)")
     return first(stiffnesses)
 end
 
@@ -495,9 +494,9 @@ end
 material among `materials` and its diameter."""
 function unit_stiffness(segment, materials, tether)
     material = materials[segment.material]
-    material.law == "linear" || throw(ArgumentError(
+    material.law == "linear" || error(
         "tether $(tether.name): init_tether_force needs a linear material; use " *
-        "init_stretch_frac"))
+        "init_stretch_frac")
     return material.parameters["youngs_modulus"] * π * (segment.diameter / 2)^2
 end
 
@@ -507,8 +506,7 @@ function apply_tether_init_forces!(placement::Placement)
     for (index, tether) in enumerate(placement.system.tethers)
         isempty(tether.segments) && continue
         len = init_unstretched_len(placement, index)
-        len > 0 || throw(ArgumentError(
-            "tether $(tether.name): rest length $len m must be positive"))
+        len > 0 || error("tether $(tether.name): rest length $len m must be positive")
         placement.l0[Int.(tether.segments)] .= len / length(tether.segments)
     end
     return nothing

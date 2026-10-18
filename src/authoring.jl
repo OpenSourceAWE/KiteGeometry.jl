@@ -132,8 +132,8 @@ substituted; none where it has no such block.
 """
 function yaml_variables(data)
     raw = get(data, "variables", Dict())
-    raw isa AbstractDict || throw(ArgumentError(
-        "`variables` must be a mapping of name => value, got $(typeof(raw))."))
+    raw isa AbstractDict || error(
+        "`variables` must be a mapping of name => value, got $(typeof(raw)).")
     variables = Dict{String, Any}()
     for name in keys(raw)
         resolve_variable!(variables, raw, String(name), String[])
@@ -180,7 +180,7 @@ Rows starting with a `#` string are skipped, short rows padded with `nothing`, a
 rows skipped with a warning.
 """
 function parse_table(table)::Vector{NamedTuple}
-    haskey(table, "data") || throw(ArgumentError("table is missing `data`"))
+    haskey(table, "data") || error("table is missing `data`")
 
     rows = table["data"]
     (isnothing(rows) || isempty(rows)) && return NamedTuple[]
@@ -198,9 +198,7 @@ function parse_table(table)::Vector{NamedTuple}
         return out
     else
         # Array format: requires headers
-        haskey(table, "headers") ||
-            throw(ArgumentError(
-                "table with array rows requires `headers`"))
+        haskey(table, "headers") || error("table with array rows requires `headers`")
         headers = String.(table["headers"])
 
         out = NamedTuple[]
@@ -254,8 +252,11 @@ function yaml_vec3(row, field)
     return isnothing(value) ? nothing : Vec3(value...)
 end
 
-"""Optional reference field: an index or a name."""
-yaml_ref(row, field) = yaml_to_ref(yaml_field(row, field))
+"""Optional reference field: an index or a name, `nothing` where unset or 0."""
+function yaml_ref(row, field)
+    ref = yaml_to_ref(yaml_field(row, field))
+    return ref == 0 ? nothing : ref
+end
 
 """A reference cell as a `NameRef`, `nothing` where it is unset."""
 yaml_to_ref(value) = yaml_unset(value) ? nothing :
@@ -265,7 +266,7 @@ yaml_to_ref(value) = yaml_unset(value) ? nothing :
 repeat."""
 function yaml_row_name(row, i)
     idx = yaml_field(row, :idx)
-    isnothing(idx) || idx == i || throw(ArgumentError("row $i is numbered `idx` $idx"))
+    isnothing(idx) || idx == i || error("row $i is numbered `idx` $idx")
     return string(something(yaml_field(row, :name), i))
 end
 
@@ -275,11 +276,11 @@ const DYNAMICS_TYPES = ("DYNAMIC", "STATIC", "BODY_STATIC", "KINEMATIC")
 """The dynamics type a cell names, upper case, refusing the removed `WING`."""
 function parse_dynamics_type(text)
     name = uppercase(String(text))
-    name == "WING" && throw(ArgumentError(
+    name == "WING" && error(
         "DynamicsType `WING` was removed: use `BODY_STATIC` (rigid wing, with " *
         "`body_idx` = the wing) or `DYNAMIC` (particle wing), and make the point " *
-        "a member of one of the wing's stations."))
-    name in DYNAMICS_TYPES || throw(ArgumentError("no dynamics type $name"))
+        "a member of one of the wing's stations.")
+    name in DYNAMICS_TYPES || error("no dynamics type $name")
     return name
 end
 
@@ -291,18 +292,18 @@ function yaml_ref_points(value)
                                                for entry in value]
     weights = [Float64(weight) for (_, weight) in value]
     total = sum(weights)
-    total > 0 || throw(ArgumentError("reference point weights sum to $total"))
+    total > 0 || error("reference point weights sum to $total")
     isapprox(total, 1.0; atol=1e-6) ||
         @warn "Reference point weights sum to $total, normalizing to 1.0"
     return [yaml_to_ref(ref) => weight / total
             for ((ref, _), weight) in zip(value, weights)]
 end
 
-"""The pair of reference points in `field` of a wing row, or `nothing`."""
-function yaml_ref_point_pair(row, field)
+"""The pair of reference points in `field` of the row of wing `name`, or `nothing`."""
+function yaml_ref_point_pair(row, field, name)
     value = yaml_field(row, field)
     isnothing(value) && return nothing
-    length(value) == 2 || throw(ArgumentError("$field must hold two reference points"))
+    length(value) == 2 || error("wing $name: $field must hold two reference points")
     return (yaml_ref_points(value[1]), yaml_ref_points(value[2]))
 end
 
@@ -342,9 +343,9 @@ function read_rows(data, block, columns; modelled=true, key=String(block))
         union!(unread, unread_columns(headers, [yaml_field(row, Symbol(header))
                                                 for header in headers], model))
     end
-    isempty(unread) || throw(ArgumentError(
+    isempty(unread) || error(
         "$block columns $(join(unread, ", ")) are read by neither the loader nor a " *
-        "registered model"))
+        "registered model")
     return collect(zip(rows, models))
 end
 
@@ -361,6 +362,14 @@ function authoring_model(block, row)
     return row_model(block, name) do M, field, _
         model_value(M, field, yaml_field(row, field))
     end
+end
+
+"""The model of a row the loader adds to `block`: the block's default with every column
+unset, `NoModel` where that default needs a column filled."""
+function added_row_model(block)
+    M = model_type(block, default_model(block))
+    all(field -> Nothing <: fieldtype(M, field), model_columns(M)) || return NoModel()
+    return authoring_model(block, (;))
 end
 
 # ==================== MATERIAL ==================== #
@@ -384,8 +393,8 @@ function resolve_material(label, set::Settings; diameter=NaN, unit_stiffness=NaN
     area = π * (diameter / 2)^2
     linear = unit_stiffness isa Real
     if !isnan(youngs_modulus)
-        (!linear || !isnan(unit_stiffness)) && throw(ArgumentError(
-            "$label: give either `unit_stiffness` or `youngs_modulus`, not both"))
+        (!linear || !isnan(unit_stiffness)) && error(
+            "$label: give either `unit_stiffness` or `youngs_modulus`, not both")
         stiffness = youngs_modulus
     elseif linear
         stiffness = isnan(unit_stiffness) ? set.e_tether : unit_stiffness / area
@@ -393,14 +402,12 @@ function resolve_material(label, set::Settings; diameter=NaN, unit_stiffness=NaN
         stiffness = unit_stiffness
     end
     if !isnan(damping_per_stiffness)
-        isnan(unit_damping) || throw(ArgumentError(
-            "$label: give either `unit_damping` or `damping_per_stiffness`, not both"))
-        linear || throw(ArgumentError(
-            "$label: `damping_per_stiffness` needs a linear `unit_stiffness`"))
+        isnan(unit_damping) || error(
+            "$label: give either `unit_damping` or `damping_per_stiffness`, not both")
+        linear || error("$label: `damping_per_stiffness` needs a linear `unit_stiffness`")
         unit_damping = damping_per_stiffness * stiffness * area
     elseif isnan(unit_damping)
-        linear || throw(ArgumentError(
-            "$label: give `unit_damping` for a nonlinear `unit_stiffness`"))
+        linear || error("$label: give `unit_damping` for a nonlinear `unit_stiffness`")
         set.rel_damping == 0 &&
             @warn "$label: unit_damping is zero (no rel_damping in the settings)."
         unit_damping = set.rel_damping * stiffness * area
@@ -503,11 +510,12 @@ end
 
 # ==================== BLOCKS ==================== #
 
-"""The component `ref` names in `rows`: by name, or by its one-based index."""
-function find_row(rows, ref, block)
-    ref isa Int && return rows[ref]
-    index = findfirst(row -> row.name == ref, rows)
-    isnothing(index) && throw(ArgumentError("no $block named $ref"))
+"""The component `ref` names among the `rows` of `block` for `owner`: by name, or by its
+one-based index."""
+function find_row(rows, ref, block, owner)
+    index = ref isa Int ? (ref in eachindex(rows) ? ref : nothing) :
+            findfirst(row -> row.name == ref, rows)
+    isnothing(index) && error("$owner: no $block $ref")
     return rows[index]
 end
 
@@ -524,11 +532,11 @@ function read_points(data)
         wing = yaml_ref(row, :wing_idx)
         body = something(yaml_ref(row, :body_idx), yaml_ref(row, :body), Some(nothing))
         if type == "BODY_STATIC"
-            isnothing(body) && isnothing(wing) && throw(ArgumentError(
-                "point $name: BODY_STATIC requires a `body` or a `wing` to ride"))
+            isnothing(body) && isnothing(wing) && error(
+                "point $name: BODY_STATIC requires a `body` or a `wing` to ride")
             body = something(body, wing)
         elseif !isnothing(body)
-            throw(ArgumentError("point $name: `body` is only valid with type BODY_STATIC"))
+            error("point $name: `body` is only valid with type BODY_STATIC")
         end
         push!(points, Point(; name, fixed=type == "STATIC", body,
                             pos_ENU=yaml_vec3(row, :pos_cad),
@@ -546,8 +554,8 @@ function read_segments(data, set, materials)
                :compression_damping_frac, MATERIAL_COLUMNS...)
     rows = read_rows(data, :segments, columns; modelled=false)
     return map(enumerate(rows)) do (i, (row, _))
-        isnothing(yaml_field(row, :type)) || throw(ArgumentError(
-            "the segment `type` column was removed; delete it"))
+        isnothing(yaml_field(row, :type)) || error(
+            "the segment `type` column was removed; delete it")
         spring_segment(yaml_row_name(row, i),
                        (yaml_to_ref(row.point_i), yaml_to_ref(row.point_j)), set, materials;
                        rest_length=something(yaml_float(row, :l0), 0.0),
@@ -600,24 +608,25 @@ function read_wings(data)
         dynamics = yaml_field(row, :dynamics_type)
         if isnothing(dynamics)
             dynamics = yaml_field(row, :type)
-            isnothing(dynamics) && throw(ArgumentError(
-                "wing $name is missing its `dynamics_type`"))
+            isnothing(dynamics) && error("wing $name is missing its `dynamics_type`")
             @warn "Wing YAML field `type` is deprecated; rename to `dynamics_type`."
         end
-        dynamics in ("PARTICLE_DYNAMICS", "RIGID_DYNAMICS") || throw(ArgumentError(
+        dynamics in ("PARTICLE_DYNAMICS", "RIGID_DYNAMICS") || error(
             "wing $name: dynamics_type $dynamics is not PARTICLE_DYNAMICS or " *
-            "RIGID_DYNAMICS"))
-        isnothing(yaml_field(row, :mass)) || throw(ArgumentError(
-            "wing $name: the `mass` column was renamed to `extra_mass`"))
+            "RIGID_DYNAMICS")
+        isnothing(yaml_field(row, :mass)) || error(
+            "wing $name: the `mass` column was renamed to `extra_mass`")
         origin = yaml_field(row, :origin_idx)
+        dynamics == "PARTICLE_DYNAMICS" && isnothing(origin) &&
+            error("particle wing $name needs an `origin_idx`")
         push!(wings, Wing(; name, pos_ENU=zero(Vec3), model))
         push!(authored, AuthoringWing(
             dynamics == "PARTICLE_DYNAMICS",
             yaml_to_ref.(something(yaml_field(row, :stations), [])),
             yaml_ref(row, :transform_idx),
             isnothing(origin) ? nothing : yaml_ref_points(origin),
-            yaml_ref_point_pair(row, :z_ref_points),
-            yaml_ref_point_pair(row, :y_ref_points),
+            yaml_ref_point_pair(row, :z_ref_points, name),
+            yaml_ref_point_pair(row, :y_ref_points, name),
             yaml_vec3(row, :pos_cad), something(yaml_float(row, :extra_mass), 0.0),
             yaml_vec3(row, :com), yaml_unit_inertia(row)))
     end
@@ -635,8 +644,7 @@ function read_stations(data, wings, authored)
         if isnothing(wing)
             listing = findfirst(wing -> name in wing.stations || i in wing.stations,
                                 authored)
-            isnothing(listing) && throw(ArgumentError(
-                "station $name names no wing and no wing lists it"))
+            isnothing(listing) && error("station $name names no wing and no wing lists it")
             wing = wings[listing].name
         end
         points = something(yaml_field(row, :points), yaml_field(row, :point_idxs), [])
@@ -656,9 +664,9 @@ end
 """What a tether row gives of the length it starts at, refusing the removed
 `init_unstretched_length`."""
 function tether_init(row, name)
-    isnothing(yaml_field(row, :init_unstretched_length)) || throw(ArgumentError(
+    isnothing(yaml_field(row, :init_unstretched_length)) || error(
         "tether $name: init_unstretched_length was removed; the rest length is derived " *
-        "from init_stretched_length with init_tether_force or init_stretch_frac"))
+        "from init_stretched_length with init_tether_force or init_stretch_frac")
     return TetherInit((yaml_float(row, :init_stretched_length),
                        yaml_float(row, :init_tether_force),
                        yaml_float(row, :init_stretch_frac)))
@@ -686,10 +694,10 @@ function read_tethers!(points, segments, point_transforms, data, set, materials)
         segment_refs = yaml_field(row, :segment_idxs)
         if !isnothing(segment_refs)
             refs = yaml_to_ref.(segment_refs)
-            start_point = something(yaml_ref(row, :start_point),
-                                    find_row(segments, first(refs), "segments").points[1])
-            end_point = something(yaml_ref(row, :end_point),
-                                  find_row(segments, last(refs), "segments").points[2])
+            first_segment = find_row(segments, first(refs), "segments", "tether $name")
+            last_segment = find_row(segments, last(refs), "segments", "tether $name")
+            start_point = something(yaml_ref(row, :start_point), first_segment.points[1])
+            end_point = something(yaml_ref(row, :end_point), last_segment.points[2])
             push!(tethers, Tether(; name, start_point, end_point, segments=refs, model))
             continue
         end
@@ -717,18 +725,18 @@ function expand_tether!(points, segments, point_transforms, name, start_point, e
     indices = [ref isa Int ? ref : findfirst(point -> point.name == ref, points)
                for ref in ends]
     for (ref, index) in zip(ends, indices)
-        isnothing(index) && throw(ArgumentError("tether $name: no point named $ref"))
+        isnothing(index) && error("tether $name: no point named $ref")
     end
     transforms = unique(filter(!isnothing, point_transforms[indices]))
-    length(transforms) <= 1 || throw(ArgumentError(
-        "tether $name: its ends are in different transforms"))
+    length(transforms) <= 1 || error("tether $name: its ends are in different transforms")
     transform = isempty(transforms) ? nothing : only(transforms)
     start_pos, end_pos = points[indices[1]].pos_ENU, points[indices[2]].pos_ENU
     rest_length = something(init.stretched_length, norm(end_pos - start_pos)) / n
     point_names = [start_point; ["$(name)_point_$i" for i in 1:(n - 1)]; end_point]
     for i in 1:(n - 1)
         push!(points, Point(; name=point_names[i + 1], extra_mass=0.0,
-                            pos_ENU=start_pos + i / n * (end_pos - start_pos)))
+                            pos_ENU=start_pos + i / n * (end_pos - start_pos),
+                            model=added_row_model(:points)))
         push!(point_transforms, transform)
     end
     segment_names = ["$(name)_seg_$i" for i in 1:n]
@@ -757,8 +765,8 @@ function read_transforms(data)
     rows = read_rows(data, :transforms, columns; modelled=false)
     return map(enumerate(rows)) do (i, (row, _))
         name = yaml_row_name(row, i)
-        isnothing(yaml_field(row, :base_transform_idx)) || throw(ArgumentError(
-            "transform $name is chained to another, which this loader does not place"))
+        isnothing(yaml_field(row, :base_transform_idx)) || error(
+            "transform $name is chained to another, which this loader does not place")
         (; name, base_pos=Vec3(row.base_pos...), base_point=yaml_to_ref(row.base_point_idx))
     end
 end
@@ -773,19 +781,19 @@ function read_bodies(data)
                :Q_b_to_w, :transform_idx, :com_offset_b)
     for (i, (row, model)) in enumerate(read_rows(data, :bodies, columns))
         name = yaml_row_name(row, i)
-        isnothing(yaml_field(row, :mass)) || throw(ArgumentError(
-            "body $name: the `mass` column was renamed to `extra_mass`"))
+        isnothing(yaml_field(row, :mass)) || error(
+            "body $name: the `mass` column was renamed to `extra_mass`")
         extra_mass = yaml_float(row, :extra_mass)
         pos = yaml_vec3(row, :pos)
-        (isnothing(extra_mass) || isnothing(pos)) && throw(ArgumentError(
-            "body $name needs `extra_mass` and `pos`"))
+        (isnothing(extra_mass) || isnothing(pos)) && error(
+            "body $name needs `extra_mass` and `pos`")
         inertia = yaml_field(row, :inertia)
         principal = yaml_vec3(row, :inertia_principal)
-        isnothing(inertia) == isnothing(principal) && throw(ArgumentError(
-            "body $name: give one of `inertia` or `inertia_principal`"))
+        isnothing(inertia) == isnothing(principal) && error(
+            "body $name: give one of `inertia` or `inertia_principal`")
         type = parse_dynamics_type(something(yaml_field(row, :type), "DYNAMIC"))
-        type in ("DYNAMIC", "STATIC") || throw(ArgumentError(
-            "body $name: type must be DYNAMIC or STATIC, got $type"))
+        type in ("DYNAMIC", "STATIC") || error(
+            "body $name: type must be DYNAMIC or STATIC, got $type")
         rotation = something(yaml_field(row, :Q_b_to_w), IDENTITY_QUATERNION)
         push!(bodies, Body(; name, pos_ENU=pos, extra_mass, Q_KA2ENU=rotation,
                            extra_inertia_KA=isnothing(inertia) ? Mat3(Diagonal(principal)) :
@@ -804,8 +812,8 @@ function read_tubes(data, materials)
     return map(enumerate(rows)) do (i, (row, model))
         name = yaml_row_name(row, i)
         bodies = yaml_field(row, :bodies)
-        (isnothing(bodies) || length(bodies) != 2) && throw(ArgumentError(
-            "tube $name: `bodies` must name the two bodies it joins"))
+        (isnothing(bodies) || length(bodies) != 2) && error(
+            "tube $name: `bodies` must name the two bodies it joins")
         law = String(row.law)
         parameters = law == "breukels2011" ? copy(BREUKELS2011) : OrderedDict{String, Any}()
         Tube(; name, bodies=yaml_to_ref.(bodies), diameter=yaml_float(row, :diameter),
@@ -834,11 +842,12 @@ end
 The `SystemDefinition` SymbolicAWEModels' authoring YAML at `path` describes, its kite at
 zenith: design positions moved by its tethers' stretched lengths and shifted so each
 transform's base point is at its `base_pos`, each wing's KA frame the design frame so
-shifted, and the `transforms` kept as an extra block. `set` gives what a row leaves out:
-segment material, and every winch's gear ratio and drum radius. Each distinct line
-material is named after the multi-variable giving it, else after its first segment.
-`name` is the metadata name, the file's by default; `ignore_l0` makes every rest length the
-placed length. Refuses a block it does not read, other than a table without rows.
+shifted. `set` gives what a row leaves out: segment material, and every winch's gear ratio
+and drum radius. Each distinct line material is named after the multi-variable giving it,
+else after its first segment. `name` is the metadata name, the file's by default;
+`ignore_l0` makes every rest length the placed length. The `transforms`, and every other
+unread non-empty block, are kept as extra blocks; one named after a block of the structure
+document, or holding a single value, is refused.
 """
 function load_authoring(path; set::Settings, name=first(splitext(basename(path))),
                         ignore_l0=false)
@@ -846,14 +855,19 @@ function load_authoring(path; set::Settings, name=first(splitext(basename(path))
     variables = yaml_variables(authored)
     data = resolve_yaml_variables(authored, variables)
     for key in ("materials", "elements", "segment_properties")
-        haskey(data, key) && throw(ArgumentError(
+        haskey(data, key) && error(
             "the `$key` block was removed; define shared properties as a mapping under " *
-            "`variables` and name its fields as columns"))
+            "`variables` and name its fields as columns")
     end
-    unread = sort!([key for (key, table) in data
-                    if !(key in AUTHORING_BLOCKS) && holds_rows(table)])
-    isempty(unread) || throw(ArgumentError(
-        "blocks $(join(unread, ", ")) are read by nothing"))
+    extra_blocks = filter(key -> (key == "transforms" || !(key in AUTHORING_BLOCKS)) &&
+                                 holds_rows(data[key]), sort!(collect(keys(data))))
+    for key in extra_blocks
+        data[key] isa Union{AbstractDict, AbstractVector} ||
+            error("$key: $(repr(data[key])) is not a block")
+        (key == "metadata" || haskey(BLOCKS, Symbol(key))) &&
+            error("block $key is a block of the structure document, not of an authoring " *
+                  "YAML")
+    end
     materials = MaterialTable(Material[], variables)
     points, point_wings, point_transforms = read_points(data)
     segments = read_segments(data, set, materials)
@@ -863,12 +877,11 @@ function load_authoring(path; set::Settings, name=first(splitext(basename(path))
     tubes = read_tubes(data, materials)
     wing_bodies = [Body(; name=wing.name, pos_ENU=something(authored.pos_cad, zero(Vec3)),
                         extra_mass=authored.particle ? 0.0 : authored.extra_mass,
-                        extra_inertia_KA=zero(Mat3))
+                        extra_inertia_KA=zero(Mat3), model=added_row_model(:bodies))
                    for (wing, authored) in zip(wings, authored_wings)]
     metadata = Metadata(name, "", "", AWESIO_VERSION, "structure_schema.yml",
                         length(points), "")
-    extras = OrderedDict{String, Any}(key => data[key] for key in ("transforms",)
-                                      if holds_rows(get(data, key, nothing)))
+    extras = OrderedDict{String, Any}(key => data[key] for key in extra_blocks)
     draft = SystemDefinition(; metadata, materials=materials.rows, points, segments,
                              spanwise_stations=read_stations(data, wings, authored_wings),
                              pulleys=read_pulleys(data), tethers,
@@ -910,15 +923,13 @@ end
 The design pose of a wing's body: its origin [m], its rotation into the world, the centre of
 its own mass in its frame [m], and its own inertia about that centre in its axes [kg*m²],
 `nothing` for none. A particle wing's body sits at its origin, framed by its reference
-points where it has them; a rigid wing's is framed by its reference points, else at the
-centre of its own mass ([`wing_inertia`](@ref)) in the world's axes.
+points where it has them; a rigid wing's is framed by its reference points,
+else at the centre of its own mass ([`wing_inertia`](@ref)) in the world's axes.
 """
 function wing_body_pose(draft, authored, members, point_names)
     pos = [point.pos_ENU for point in draft.points]
     frame = authored_frame(authored, point_names)
     if authored.particle
-        isnothing(authored.origin) && throw(ArgumentError(
-            "a particle wing needs an `origin_idx`"))
         R = isnothing(frame) ? Mat3(I) : first(wing_frame(pos, frame))
         origin = ref_position(pos, resolve_ref_points(authored.origin, point_names))
         return origin, R, zero(Vec3), nothing
@@ -927,6 +938,35 @@ function wing_body_pose(draft, authored, members, point_names)
     R, origin = isnothing(frame) ? (Mat3(I), com) : wing_frame(pos, frame)
     own_inertia = isnothing(inertia) ? nothing : R' * (authored.extra_mass * inertia) * R
     return origin, R, R' * (com - origin), own_inertia
+end
+
+"""The index of the wing `ref` names for `point`, 0 for none, refusing one that does not
+exist."""
+function point_wing_index(point, ref, wing_names)
+    isnothing(ref) && return 0
+    index = ref isa Int ? (ref in values(wing_names) ? ref : nothing) :
+            get(wing_names, ref, nothing)
+    isnothing(index) && error("point $(point.name): wing $ref does not exist")
+    return index
+end
+
+"""
+    point_wing_indices(draft, point_wings, wing_names) -> Vector{Int}
+
+The index of the wing each point of `draft` names in `point_wings`, none for a point a
+tether adds ([`point_wing_index`](@ref)). Refuses a station's point that names another wing
+than the station's, or none.
+"""
+function point_wing_indices(draft, point_wings, wing_names)
+    point_wing = [point_wing_index(point, get(point_wings, index, nothing), wing_names)
+                  for (index, point) in enumerate(draft.points)]
+    for station in draft.spanwise_stations, index in station.points
+        point_wing[index] == station.wing && continue
+        named = point_wing[index] == 0 ? "no wing" : draft.wings[point_wing[index]].name
+        error("point $(draft.points[index].name) is a point of station $(station.name) " *
+              "of wing $(draft.wings[station.wing].name), but names $named")
+    end
+    return point_wing
 end
 
 """
@@ -941,7 +981,7 @@ function design_pose(draft, set, point_wings, point_transforms, authored_wings,
                      authored_bodies, inits, transforms)
     point_names, wing_names = indices_of(draft, :points), indices_of(draft, :wings)
     transform_names = name_indices(transforms, :transforms)
-    point_wing = [resolve_index(ref, wing_names, :wings) for ref in point_wings]
+    point_wing = point_wing_indices(draft, point_wings, wing_names)
     wing_node = falses(length(draft.points))
     foreach(station -> wing_node[Int.(station.points)] .= true, draft.spanwise_stations)
     body_pos = [body.pos_ENU for body in draft.bodies]

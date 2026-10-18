@@ -16,13 +16,14 @@ AUTHORING_SYSTEMS = filter(endswith("_structural_geometry.yaml"), readdir(KITE))
 SCHEMA = Schema(YAML.load_file(joinpath(pkgdir(KiteGeometry), "src", "awesio",
                                          "structure_schema.yml")))
 
-"""SAM's point columns, as a stand-in for the default point model SAM registers."""
+"""SAM's point columns, each optional, as a stand-in for the default point model SAM
+registers."""
 struct SamPoint <: AbstractModel
-    type::String
-    body_frame_damping::Float64
-    world_frame_damping::Float64
-    area::Float64
-    drag_coeff::Float64
+    type::Union{Nothing, String}
+    body_frame_damping::Union{Nothing, Float64}
+    world_frame_damping::Union{Nothing, Float64}
+    area::Union{Nothing, Float64}
+    drag_coeff::Union{Nothing, Float64}
 end
 
 """`SamPoint` with the tube a point rides."""
@@ -47,10 +48,17 @@ struct SamBody <: AbstractModel
     type::Union{Nothing, String}
 end
 
-"""SAM's wing columns, each optional."""
+"""SAM's wing columns, each optional, with the columns that frame a wing's body."""
 struct SamWing <: AbstractModel
-    aero_z_offset::Union{Nothing, Float64}
+    aero_mode::Union{Nothing, String}
+    angular_damping::Union{Nothing, Float64, Vector{Float64}}
     aero_scale_chord::Union{Nothing, Float64}
+    aero_z_offset::Union{Nothing, Float64}
+    principal_frame_method::Union{Nothing, String}
+    dynamics_type::Union{Nothing, String}
+    origin_idx::Any
+    z_ref_points::Any
+    y_ref_points::Any
 end
 
 """SAM's Timoshenko beam, a tube model chosen by name."""
@@ -64,7 +72,8 @@ POINT_UNITS = ("-", "N*s/m", "N*s/m", "m^2", "-")
 SAM_MODELS = [(:points, "sam_point", SamPoint, POINT_UNITS, true),
               (:spanwise_stations, "sam_station", SamStation, ("-", "-", "N*m*s"), true),
               (:pulleys, "sam_pulley", SamPulley, ("-", "-"), true),
-              (:wings, "sam_wing", SamWing, ("m", "-"), true),
+              (:wings, "sam_wing", SamWing, ("-", "1/s", "-", "m", "-", "-", "-", "-", "-"),
+               true),
               (:bodies, "sam_body", SamBody, ("-",), true),
               (:tubes, "timoshenko", Timoshenko, ("N*m^2", "N*m^2", "-"), false)]
 
@@ -241,9 +250,10 @@ end
     @test all(≈(20.0 / 6), lengths)
 end
 
-"""The rigid 2-plate kite with `edit` applied to its parsed authoring YAML, loaded."""
-function load_edited(edit)
-    data = YAML.load_file(joinpath(KITE, "rigid_structural_geometry.yaml"))
+"""The 2-plate kite of the authoring `file` with `edit` applied to its parsed YAML,
+loaded."""
+function load_edited(edit, file="rigid_structural_geometry.yaml")
+    data = YAML.load_file(joinpath(KITE, file))
     edit(data)
     path = joinpath(mktempdir(), "edited.yaml")
     YAML.write_file(path, data)
@@ -293,8 +303,8 @@ end
     @test isnothing(validate(SCHEMA, document))
     damping = column(authored, "body_frame_damping")
     @test column(document["points"], "body_frame_damping")[eachindex(damping)] == damping
-    @test column(document["points"], "model")[eachindex(damping)] == fill("sam_point",
-                                                                            length(damping))
+    @test isnothing(column(document["points"], "model"))
+    @test from_yaml(to_yaml(system)).points[1] isa Point{SamPoint}
     tubes = document["tubes"]
     @test [column(tubes, header) for header in ("model", "EI", "GJ", "shear_coeff")] ==
           [["timoshenko"], [120.0], [80.0], [0.85]]
@@ -336,25 +346,27 @@ end
 end
 
 @testset "a chained transform is refused whatever is registered" begin
-    chained = @test_throws ArgumentError load_edited() do data
+    chained = @test_throws ErrorException load_edited() do data
         only(data["transforms"]["data"])["base_transform_idx"] = "main_transform"
     end
     @test occursin("chained to another", chained.value.msg)
 end
 
-@testset "a block nothing reads is refused, an empty one is not" begin
-    @test_throws "blocks groups, twist are read by nothing" load_edited() do data
-        data["twist"] = Dict("headers" => ["gamma"], "data" => [[0.1]])
-        data["groups"] = Dict("headers" => ["idx", "point_idxs"], "data" => [[1, [1, 2]]])
-    end
-    @test_throws "blocks metadata are read by nothing" load_edited() do data
-        data["metadata"] = Dict("author" => "x")
-    end
+@testset "an unread block is kept as an extra block, an empty one dropped" begin
+    surfaces = Dict("headers" => ["name", "point_idx", "x_airf", "y_airf", "area"],
+                    "data" => [["main", "kcu", [1, 0, 0], [0, 1, 0], 10.18]])
     system = load_edited() do data
+        data["surfaces"] = surfaces
         data["groups"] = Dict("headers" => ["idx", "point_idxs"], "data" => nothing)
         data["twist"] = nothing
     end
-    @test !isempty(system.points)
+    @test collect(keys(system.extras)) == ["surfaces", "transforms"]
+    @test system.extras["surfaces"] == surfaces
+    @test structure_document(from_yaml(to_yaml(system)))["surfaces"] == surfaces
+    @test_throws "block metadata is a block of the structure document" load_edited() do data
+        data["metadata"] = Dict("author" => "x")
+    end
+    @test_throws "version: 1 is not a block" load_edited(data -> data["version"] = 1)
 end
 
 @testset "an idx column repeats the row's position" begin
@@ -384,6 +396,78 @@ end
     @test unique(column(expected, "wing")) == column(golden["wings"], "name")
     @test isnothing(only(system.wings).canopy_material)
     @test isnothing(validate(SCHEMA, JSON.parse(to_json(system))))
+end
+
+SAM_CASES = joinpath(@__DIR__, "data", "sam_cases")
+
+"""The authoring YAML `file` of SAM's tests, loaded."""
+load_case(file) = load_authoring(joinpath(SAM_CASES, file); set=kite_settings())
+
+"""The particle 2-plate kite with the `wing_idx` cell of the point `name` set to `wing`,
+loaded."""
+function load_with_point_wing(name, wing)
+    return load_edited("particle_structural_geometry.yaml") do data
+        points = data["points"]
+        row = points["data"][findfirst(row -> row[1] == name, points["data"])]
+        row[findfirst(==("wing_idx"), points["headers"])] = wing
+    end
+end
+
+@testset "0 in a reference column names nothing" begin
+    for file in ("tether_wing.yaml", "wing_freefall.yaml", "wing_hanging.yaml")
+        @test only(load_case(file).wings).name == "main_wing"
+    end
+    @test structure_document(load_with_point_wing("kcu", 0)) ==
+          structure_document(load_with_point_wing("kcu", nothing))
+end
+
+@testset "a refusal is an error naming the row" begin
+    for (file, message) in (
+        "cyclic.yaml" => "Cyclic variable reference: a -> b -> a",
+        "shadow.yaml" => "Variable `anchor` has the same name as a component in block " *
+                         "`points`",
+        "mismatch.yaml" => "Variable `dyneema` defines damping_per_stiffness, " *
+                           "youngs_modulus, but the columns at that position are " *
+                           "youngs_modulus, compression_frac",
+        "materials.yaml" => "the `materials` block was removed",
+        "conflict.yaml" => "segment line: give either `unit_stiffness` or " *
+                           "`youngs_modulus`, not both",
+        "tether_loop.yaml" => "tether main_tether: the structure downstream of it " *
+                              "connects back to its anchor",
+        "tether_stacked.yaml" => "tether upper has neither endpoint on a fixed or winch " *
+                                 "point")
+        @test_throws ErrorException load_case(file)
+        @test_throws message load_case(file)
+    end
+    @test_throws "point le_left is a point of station left of wing main_wing, but names " *
+                 "no wing" load_with_point_wing("le_left", 0)
+    @test_throws ErrorException("point kcu: wing 7 does not exist") load_with_point_wing(
+        "kcu", 7)
+end
+
+@testset "a wing keeps the columns that frame its body in its model" begin
+    wing = only(load_kite("particle_structural_geometry.yaml").wings)
+    @test wing.dynamics_type == "PARTICLE_DYNAMICS"
+    @test wing.origin_idx == "kcu"
+    @test wing.z_ref_points == ["kcu", "le_center"]
+    @test wing.y_ref_points == ["le_right", "le_left"]
+    no_origin = ErrorException("particle wing main_wing needs an `origin_idx`")
+    @test_throws no_origin load_edited("particle_structural_geometry.yaml") do data
+        only(data["wings"]["data"])["origin_idx"] = nothing
+    end
+end
+
+"""The type of the model of each component of each block of `system`."""
+model_types(system) = [typeof.(getfield.(getfield(system, block), :model))
+                       for block in keys(KiteGeometry.BLOCKS)]
+
+@testset "a row the loader adds carries its block's default model" begin
+    for system in (load_kite("particle_structural_geometry.yaml"),
+                   load_case("tether_wing.yaml"))
+        @test model_types(from_yaml(to_yaml(system))) == model_types(system)
+        @test all(point -> point.model isa SamPoint, system.points)
+        @test all(body -> body.model isa SamBody, system.bodies)
+    end
 end
 
 foreach(model -> unregister_model!(model[1], model[2]), SAM_MODELS)

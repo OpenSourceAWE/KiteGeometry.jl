@@ -44,6 +44,7 @@ end
 to_field(T, value) = convert(T, value)
 to_field(::Type{Union{Nothing, T}}, value) where {T} = isnothing(value) ? nothing :
                                                     to_field(T, value)
+to_field(::Type{Any}, value) = value
 to_field(T::Type{<:Tuple}, value::AbstractVector) = convert(T, Tuple(value))
 to_field(T::Type{<:StaticMatrix}, rows::AbstractVector) =
     T(permutedims(reduce(hcat, rows)))

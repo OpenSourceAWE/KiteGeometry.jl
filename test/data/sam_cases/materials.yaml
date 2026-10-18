@@ -1,0 +1,9 @@
+materials:
+  headers: [name, youngs_modulus, density, damping_per_stiffness]
+  data:
+    - [dyneema, 55e9, 724, 0.00077]
+
+points:
+  headers: [name, pos_cad, type]
+  data:
+    - [anchor, [0.0, 0.0, 0.0], STATIC]
