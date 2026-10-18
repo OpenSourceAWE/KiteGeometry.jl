@@ -749,17 +749,33 @@ function read_winches(data, set)
                  for (i, (row, model)) in enumerate(rows)]
 end
 
-"""The name, base position [m] and base point of each transform of the `transforms` block,
-refusing one chained to another."""
+"""The angle a transform row `name` gives in degrees in `field`, in radians: `default`
+where it is unset, refusing an unset one without."""
+function yaml_radians(row, field, name; default=nothing)
+    degrees = something(yaml_float(row, field), default, Some(nothing))
+    isnothing(degrees) && throw(ArgumentError("transform $name needs its $field"))
+    return deg2rad(degrees)
+end
+
+"""The transforms of the `transforms` block, their angles read in degrees, with no
+members yet."""
 function read_transforms(data)
-    columns = (:name, :elevation, :azimuth, :heading, :base_pos, :base_point_idx,
-               :base_transform_idx, :wing_idx, :rot_point_idx)
+    columns = (:name, :elevation, :azimuth, :heading, :elevation_vel, :azimuth_vel,
+               :turn_rate, :base_pos, :base_point_idx, :base_transform_idx, :wing_idx,
+               :rot_point_idx)
     rows = read_rows(data, :transforms, columns; modelled=false)
     return map(enumerate(rows)) do (i, (row, _))
         name = yaml_row_name(row, i)
-        isnothing(yaml_field(row, :base_transform_idx)) || throw(ArgumentError(
-            "transform $name is chained to another, which this loader does not place"))
-        (; name, base_pos=Vec3(row.base_pos...), base_point=yaml_to_ref(row.base_point_idx))
+        Transform(; name, elevation=yaml_radians(row, :elevation, name),
+                  azimuth=yaml_radians(row, :azimuth, name),
+                  heading=yaml_radians(row, :heading, name),
+                  elevation_vel=yaml_radians(row, :elevation_vel, name; default=0.0),
+                  azimuth_vel=yaml_radians(row, :azimuth_vel, name; default=0.0),
+                  turn_rate=yaml_radians(row, :turn_rate, name; default=0.0),
+                  base_pos=yaml_vec3(row, :base_pos),
+                  base_point=yaml_ref(row, :base_point_idx),
+                  base_transform=yaml_ref(row, :base_transform_idx),
+                  wing=yaml_ref(row, :wing_idx), rot_point=yaml_ref(row, :rot_point_idx))
     end
 end
 
@@ -831,10 +847,11 @@ end
 """
     load_authoring(path; set::Settings, name, ignore_l0=false)
 
-The `SystemDefinition` SymbolicAWEModels' authoring YAML at `path` describes, its kite at
-zenith: design positions moved by its tethers' stretched lengths and shifted so each
-transform's base point is at its `base_pos`, each wing's KA frame the design frame so
-shifted, and the `transforms` kept as an extra block. `set` gives what a row leaves out:
+The `SystemDefinition` SymbolicAWEModels' authoring YAML at `path` describes, placed by
+`place!`: design positions moved by its tethers' stretched lengths and then by its
+transforms, each wing's KA frame the authored frame moved with its body. Each transform
+keeps the points and bodies it moves: those naming it, a tether's inner points that of its
+ends, and a wing's body its wing's, else the first transform. `set` gives what a row leaves out:
 segment material, and every winch's gear ratio and drum radius. Each distinct line
 material is named after the multi-variable giving it, else after its first segment.
 `name` is the metadata name, the file's by default; `ignore_l0` makes every rest length the
@@ -867,19 +884,36 @@ function load_authoring(path; set::Settings, name=first(splitext(basename(path))
                    for (wing, authored) in zip(wings, authored_wings)]
     metadata = Metadata(name, "", "", AWESIO_VERSION, "structure_schema.yml",
                         length(points), "")
-    extras = OrderedDict{String, Any}(key => data[key] for key in ("transforms",)
-                                      if holds_rows(get(data, key, nothing)))
+    transforms = read_transforms(data)
+    first_transform = isempty(transforms) ? nothing : 1
+    body_transforms = [[something(wing.transform, Some(first_transform))
+                        for wing in authored_wings];
+                       [body.transform for body in authored_bodies]]
+    add_members!(transforms, point_transforms, body_transforms)
     draft = SystemDefinition(; metadata, materials=materials.rows, points, segments,
                              spanwise_stations=read_stations(data, wings, authored_wings),
                              pulleys=read_pulleys(data), tethers,
                              winches=read_winches(data, set), wings,
                              canopy_faces=read_canopy_faces(data),
-                             bodies=[wing_bodies; bodies], tubes, extras)
-    placement = design_pose(draft, set, point_wings, point_transforms, authored_wings,
-                            authored_bodies, inits, read_transforms(data))
-    design_pos = placement.body_pos[eachindex(wings)]
+                             bodies=[wing_bodies; bodies], tubes, transforms)
+    placement = design_pose(draft, set, point_wings, authored_wings, authored_bodies, inits)
+    design = copy(Pose(placement))
     place!(placement; ignore_l0)
-    return placed_definition(placement, placement.body_pos[eachindex(wings)] - design_pos)
+    return placed_definition(placement, design)
+end
+
+"""Add to each of `transforms` the index of each point `point_transforms` and each body
+`body_transforms` names it for."""
+function add_members!(transforms, point_transforms, body_transforms)
+    names = name_indices(transforms, :transforms)
+    for (members, refs) in ((:points, point_transforms), (:bodies, body_transforms))
+        for (index, ref) in enumerate(refs)
+            isnothing(ref) && continue
+            push!(getfield(transforms[resolve_index(ref, names, :transforms)], members),
+                  index)
+        end
+    end
+    return transforms
 end
 
 """Index of each component of `block` of `system` by name."""
@@ -930,17 +964,14 @@ function wing_body_pose(draft, authored, members, point_names)
 end
 
 """
-    design_pose(draft, set, point_wings, point_transforms, authored_wings, authored_bodies,
-                inits, transforms)
+    design_pose(draft, set, point_wings, authored_wings, authored_bodies, inits)
 
 The `Placement` of `draft` in its design pose: each wing body given its mass
 ([`wing_mass!`](@ref)) and posed by [`wing_body_pose`](@ref), each carried point anchored
 in its body's frame, and every unset rest length the design length.
 """
-function design_pose(draft, set, point_wings, point_transforms, authored_wings,
-                     authored_bodies, inits, transforms)
+function design_pose(draft, set, point_wings, authored_wings, authored_bodies, inits)
     point_names, wing_names = indices_of(draft, :points), indices_of(draft, :wings)
-    transform_names = name_indices(transforms, :transforms)
     point_wing = [resolve_index(ref, wing_names, :wings) for ref in point_wings]
     wing_node = falses(length(draft.points))
     foreach(station -> wing_node[Int.(station.points)] .= true, draft.spanwise_stations)
@@ -963,22 +994,11 @@ function design_pose(draft, set, point_wings, point_transforms, authored_wings,
     anchor = [isnothing(point.body) ? zero(Vec3) :
               body_R[point.body]' * (pos[index] - body_pos[point.body])
               for (index, point) in enumerate(draft.points)]
-    first_transform = isempty(transforms) ? nothing : 1
-    body_transforms = [[something(wing.transform, Some(first_transform))
-                        for wing in authored_wings];
-                       [body.transform for body in authored_bodies]]
     static_body = [fill(false, length(authored_wings));
                    [body.static for body in authored_bodies]]
-    placed_transforms = [PlacedTransform(
-        transform.base_pos, resolve_index(transform.base_point, point_names, :points))
-        for transform in transforms]
     placement = Placement(draft, pos, [segment.rest_length for segment in draft.segments],
-                          body_pos, body_R, com_offset, anchor,
-                          resolve_index.(point_transforms, (transform_names,), :transforms),
-                          resolve_index.(body_transforms, (transform_names,), :transforms),
-                          point_wing, wing_node, static_body,
-                          [wing.particle for wing in authored_wings], inits,
-                          placed_transforms)
+                          body_pos, body_R, com_offset, anchor, point_wing, wing_node,
+                          static_body, [wing.particle for wing in authored_wings], inits)
     update_segment_lengths!(placement)
     return placement
 end
@@ -1057,14 +1077,14 @@ function wing_inertia(points, members, authored)
 end
 
 """
-    placed_definition(placement::Placement, wing_origins)
+    placed_definition(placement::Placement, design::Pose)
 
 The `SystemDefinition` of `placement` where it stands: each point and body at its placed
-position, a body at the centre of its own mass, each wing's KA frame at its origin in
-`wing_origins` [m] with ENU's axes, and the metadata's `connectivity_sha` that of its
+position, a body at the centre of its own mass, each wing's KA frame the authored frame
+moved as its body moved from `design`, and the metadata's `connectivity_sha` that of its
 tables.
 """
-function placed_definition(placement::Placement, wing_origins)
+function placed_definition(placement::Placement, design::Pose)
     (; system) = placement
     metadata = Metadata((field == :connectivity_sha ? connectivity_sha(system) :
                          getfield(system.metadata, field)
@@ -1073,8 +1093,11 @@ function placed_definition(placement::Placement, wing_origins)
               for (index, point) in enumerate(system.points)]
     segments = [with_fields(segment; rest_length=placement.l0[index])
                 for (index, segment) in enumerate(system.segments)]
-    wings = [with_fields(wing; pos_ENU=origin, Q_KA2ENU=IDENTITY_QUATERNION)
-             for (wing, origin) in zip(system.wings, wing_origins)]
+    wings = map(enumerate(system.wings)) do (index, wing)
+        R = placement.body_R[index] * design.body_R[index]'
+        with_fields(wing; pos_ENU=placement.body_pos[index] - R * design.body_pos[index],
+                    Q_KA2ENU=rotation_matrix_to_quaternion(R))
+    end
     bodies = map(enumerate(system.bodies)) do (index, body)
         R = placement.body_R[index]
         mass_centre = placement.body_pos[index] + R * placement.com_offset[index]
@@ -1083,5 +1106,5 @@ function placed_definition(placement::Placement, wing_origins)
     return SystemDefinition(metadata, system.materials, points, segments,
                             system.spanwise_stations, system.pulleys, system.tethers,
                             system.winches, wings, system.canopy_faces, bodies,
-                            system.tubes, system.extras)
+                            system.tubes, system.transforms, system.extras)
 end

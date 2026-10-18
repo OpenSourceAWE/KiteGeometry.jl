@@ -19,18 +19,25 @@ const REFERENCES = Dict(
     (:canopy_faces, :points) => :points,
     (:tubes, :bodies) => :bodies,
     (:tubes, :material) => :materials,
+    (:transforms, :base_point) => :points,
+    (:transforms, :base_transform) => :transforms,
+    (:transforms, :wing) => :wings,
+    (:transforms, :rot_point) => :points,
+    (:transforms, :points) => :points,
+    (:transforms, :bodies) => :bodies,
 )
 
 """
     SystemDefinition(; metadata, materials, points, segments, spanwise_stations, pulleys,
-                     tethers, winches, wings, canopy_faces, bodies, tubes, extras)
+                     tethers, winches, wings, canopy_faces, bodies, tubes, transforms,
+                     extras)
 
-A system definition from its components, every reference resolved to the index of the
-component it names. Absent blocks are empty; `extras` holds the blocks the schema does not
-name. Refuses a `metadata.n_points` that is not the number of points.
+A system definition from its components and transforms, every reference resolved to the
+index of the component it names. Absent blocks are empty; `extras` holds the blocks the
+schema does not name. Refuses a `metadata.n_points` that is not the number of points.
 """
-function SystemDefinition(; metadata::Metadata, extras=OrderedDict{String, Any}(),
-                          components...)
+function SystemDefinition(; metadata::Metadata, transforms=Transform[],
+                          extras=OrderedDict{String, Any}(), components...)
     unknown = setdiff(keys(components), keys(BLOCKS))
     isempty(unknown) || throw(ArgumentError("no block named $(join(unknown, ", "))"))
     n_points = length(get(components, :points, ()))
@@ -39,10 +46,10 @@ function SystemDefinition(; metadata::Metadata, extras=OrderedDict{String, Any}(
     blocks = NamedTuple{keys(BLOCKS)}(
         convert(Vector{BLOCKS[block]}, get(components, block, BLOCKS[block][]))
         for block in keys(BLOCKS))
-    indices = NamedTuple{keys(BLOCKS)}(name_indices(blocks[block], block)
-                                       for block in keys(BLOCKS))
+    blocks = (; blocks..., transforms=convert(Vector{Transform}, transforms))
+    indices = map(name_indices, blocks, NamedTuple{keys(blocks)}(keys(blocks)))
     resolved = ([resolve(component, block, indices) for component in blocks[block]]
-                for block in keys(BLOCKS))
+                for block in keys(blocks))
     return SystemDefinition(metadata, resolved..., extras)
 end
 
@@ -58,7 +65,7 @@ function name_indices(rows, block)
 end
 
 """`component` of `block` with every reference in it an index into `indices`' blocks."""
-function resolve(component::Component, block, indices)
+function resolve(component::Union{Component, Transform}, block, indices)
     T = typeof(component)
     return T((resolve(getfield(component, field), get(REFERENCES, (block, field), nothing),
                       indices) for field in fieldnames(T))...)
@@ -83,8 +90,9 @@ end
 
 The system definition a parsed awesIO structure document describes. A row reads the columns
 of the model its `model` column registers; a filled cell in any other column the schema does
-not name is refused, or with `strict=false` dropped with a warning. The blocks the schema
-does not name are kept as `extras`, in the order read. Refuses another major
+not name is refused, or with `strict=false` dropped with a warning. A `transforms` block is
+read into `Transform`s, the other blocks the schema does not name kept as `extras`, in the
+order read. Refuses another major
 `awesIO_version` than `AWESIO_VERSION`, warning on another minor one, and a
 `connectivity_sha` that does not describe the document's own tables.
 """
@@ -98,10 +106,11 @@ function SystemDefinition(document::AbstractDict; strict=true)
                          for field in fieldnames(Metadata))...)
     tables = (block => read_table(block, document[String(block)], strict)
               for block in keys(BLOCKS) if haskey(document, String(block)))
+    transforms = read_transforms_table(get(document, "transforms", nothing))
     extras = OrderedDict{String, Any}(
         name => block for (name, block) in document
-        if name != "metadata" && !haskey(BLOCKS, Symbol(name)))
-    system = SystemDefinition(; metadata, extras, tables...)
+        if !(name in ("metadata", "transforms")) && !haskey(BLOCKS, Symbol(name)))
+    system = SystemDefinition(; metadata, transforms, extras, tables...)
     sha = connectivity_sha(system)
     metadata.connectivity_sha == sha || throw(ArgumentError(
         "connectivity_sha $(metadata.connectivity_sha) does not describe the document's " *
@@ -332,7 +341,47 @@ function structure_document(system::SystemDefinition)
         block in REQUIRED_BLOCKS || !isempty(rows) || continue
         document[String(block)] = write_table(system, block, rows)
     end
+    isempty(system.transforms) || (document["transforms"] = transforms_table(system))
     return merge!(document, system.extras)
+end
+
+"""The unit of each column of a structure document's `transforms` block, one per field of
+`Transform`, in order."""
+const TRANSFORM_UNITS = (name="-", elevation="deg", azimuth="deg", heading="deg",
+                         elevation_vel="deg/s", azimuth_vel="deg/s", turn_rate="deg/s",
+                         base_pos="m", base_point="-", base_transform="-", wing="-",
+                         rot_point="-", points="-", bodies="-")
+
+"""Whether a column in `unit` holds an angle or an angular rate."""
+is_angle(unit) = unit in ("deg", "deg/s")
+
+"""The `headers`/`units`/`data` table of the transforms of `system`, angles in degrees and
+references by name."""
+function transforms_table(system)
+    data = [Any[document_value(is_angle(unit) ? rad2deg(getfield(transform, field)) :
+                               getfield(transform, field),
+                               get(REFERENCES, (:transforms, field), nothing), system)
+                for (field, unit) in pairs(TRANSFORM_UNITS)]
+            for transform in system.transforms]
+    return OrderedDict{String, Any}("headers" => collect(String.(keys(TRANSFORM_UNITS))),
+                                    "units" => collect(String, TRANSFORM_UNITS),
+                                    "data" => data)
+end
+
+"""The transforms of the `transforms` table `table` as [`transforms_table`](@ref) writes
+it, none for `nothing`."""
+function read_transforms_table(table)
+    isnothing(table) && return Transform[]
+    table["headers"] == collect(String.(keys(TRANSFORM_UNITS))) &&
+        table["units"] == collect(String, TRANSFORM_UNITS) || throw(ArgumentError(
+        "transforms headers must be $(join(keys(TRANSFORM_UNITS), ", ")) in units " *
+        join(TRANSFORM_UNITS, ", ")))
+    return map(table["data"]) do row
+        Transform((to_field(fieldtype(Transform, field),
+                            is_angle(unit) ? deg2rad(cell) : cell)
+                   for (field, unit, cell) in zip(keys(TRANSFORM_UNITS), TRANSFORM_UNITS,
+                                                  row))...)
+    end
 end
 
 """The `headers`/`units`/`data` table of the components `rows` of `block`: the required

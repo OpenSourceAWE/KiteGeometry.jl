@@ -137,6 +137,7 @@ GOLDEN_BLOCKS = Dict("stations" => "spanwise_stations")
 
 """The column each column of SAM's golden document became, where it was renamed."""
 GOLDEN_COLUMNS = Dict(("segments", "l0") => "rest_length",
+                      ("bodies", "Q_KA_to_ENU") => "Q_KA2ENU",
                       ("points", "drag_area") => "area",
                       ("points", "drag_coefficient") => "drag_coeff")
 
@@ -144,7 +145,7 @@ GOLDEN_COLUMNS = Dict(("segments", "l0") => "rest_length",
 unset."""
 POINT_MODEL_COLUMNS = ("type", "drag_area", "drag_coefficient")
 
-@testset "the rigid 2-plate kite has the shape of SAM's golden document, at zenith" begin
+@testset "the rigid 2-plate kite is SAM's golden document, placed by its transform" begin
     golden = YAML.load_file(joinpath(@__DIR__, "data", "2plate_kite_structure.yml");
                             dicttype=OrderedDict{String, Any})
     system = load_kite("rigid_structural_geometry.yaml")
@@ -164,7 +165,6 @@ POINT_MODEL_COLUMNS = ("type", "drag_area", "drag_coefficient")
             table = document[get(GOLDEN_BLOCKS, block, block)]
             values = column(table, get(GOLDEN_COLUMNS, (block, header), header))
             isnothing(values) && (push!(unread, "$block.$header"); continue)
-            header in ("pos_ENU", "Q_KA_to_ENU") && continue
             for (name, value, cell) in zip(column(expected, "name"), values,
                                            column(expected, header))
                 isnothing(value) && block == "points" && header in POINT_MODEL_COLUMNS &&
@@ -174,7 +174,7 @@ POINT_MODEL_COLUMNS = ("type", "drag_area", "drag_coefficient")
             end
         end
     end
-    @test sort(unread) == ["bodies.Q_KA_to_ENU", "bodies.apparent_mass", "bodies.type",
+    @test sort(unread) == ["bodies.apparent_mass", "bodies.type",
                            "bodies.wing", "points.wing", "pulleys.efficiency",
                            "segments.density", "segments.unit_stiffness",
                            "stations.stiffness", "winches.model", "wings.aero",
@@ -194,21 +194,18 @@ end
     end
 end
 
-@testset "the 2-plate kite at zenith is its authoring YAML in its wing's KA frame" begin
+@testset "the placed 2-plate kite is its authoring YAML in its wing's KA frame" begin
     for file in AUTHORING_SYSTEMS
         authored = YAML.load_file(joinpath(KITE, file))["points"]
         system = load_kite(file)
         wing = only(system.wings)
-        @test wing.Q_KA2ENU == [1, 0, 0, 0]
-        @test wing.pos_ENU == [0, 0, 20]
         names, pos_cad = column(authored, "name"), column(authored, "pos_cad")
         for point in system.points
             index = findfirst(==(point.name), names)
             isnothing(index) && continue
             @test isapprox(pos_KA(wing, point.pos_ENU), pos_cad[index]; rtol=0, atol=1e-12)
         end
-        transforms = structure_document(system)["transforms"]
-        @test only(transforms["data"])["elevation"] == 50
+        @test only(column(structure_document(system)["transforms"], "elevation")) ≈ 50
     end
 end
 
@@ -335,11 +332,10 @@ end
     @test !haskey(KiteGeometry.MODELS, (:points, "riding_point"))
 end
 
-@testset "a chained transform is refused whatever is registered" begin
-    chained = @test_throws ArgumentError load_edited() do data
+@testset "a transform with both a base_pos and a base_transform is refused" begin
+    @test_throws "has a base_pos or a base_transform: give one" load_edited() do data
         only(data["transforms"]["data"])["base_transform_idx"] = "main_transform"
     end
-    @test occursin("chained to another", chained.value.msg)
 end
 
 @testset "a block nothing reads is refused, an empty one is not" begin

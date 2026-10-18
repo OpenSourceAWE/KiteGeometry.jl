@@ -8,17 +8,6 @@ const Mat3 = SMatrix{3, 3, Float64, 9}
 const RefPoints = Vector{Pair{Int, Float64}}
 
 """
-    PlacedTransform
-
-A transform of the authoring YAML, its reference resolved: the position [m] its
-`base_point` is moved to, its components with it.
-"""
-struct PlacedTransform
-    base_pos::Vec3
-    base_point::Int
-end
-
-"""
     WingFrame
 
 The points that fix a wing body's frame: its origin, and the two pairs giving its z and its
@@ -57,10 +46,6 @@ struct Placement
     com_offset::Vector{Vec3}
     "position of each body-carried point in its body's frame [m]"
     anchor::Vector{Vec3}
-    "index of the transform moving each point, 0 for none"
-    point_transform::Vector{Int}
-    "index of the transform moving each body, 0 for none"
-    body_transform::Vector{Int}
     "index of the wing body each point belongs to, 0 for none"
     point_wing::Vector{Int}
     "whether each point is a member of a station"
@@ -70,8 +55,10 @@ struct Placement
     "whether each wing is a particle wing"
     particle_wing::Vector{Bool}
     tether_init::Vector{TetherInit}
-    transforms::Vector{PlacedTransform}
 end
+
+"""The `Pose` of `placement`, sharing its vectors."""
+Pose(placement::Placement) = Pose(placement.pos, placement.body_pos, placement.body_R)
 
 # ==================== ROTATIONS ==================== #
 
@@ -128,18 +115,19 @@ end
 """
     place!(placement::Placement; ignore_l0=false)
 
-Place the system by its tethers' lengths and its transforms' base positions, from the
-design pose `placement` holds: tethers to their stretched lengths, every unset rest length
-to the length it then has, tether and pulley rest lengths shared out, each transform's
-members shifted to its base position, and each body's points carried with it. `ignore_l0`
-makes every rest length the placed length.
+Place the system by its tethers' lengths and its transforms, from the design pose
+`placement` holds: tethers to their stretched lengths, every unset rest length to the
+length it then has, tether and pulley rest lengths shared out, the transforms applied
+([`place_transforms!`](@ref)), and each body's points carried with it. `ignore_l0` makes
+every rest length the placed length.
 """
 function place!(placement::Placement; ignore_l0=false)
+    design = copy(Pose(placement))
     apply_tether_init_stretched_lens!(placement)
     update_segment_lengths!(placement)
     apply_tether_init_forces!(placement)
     init_pulley_lengths!(placement)
-    apply_transforms!(placement)
+    place_transforms!(Pose(placement), design, placement.system)
     carry_body_points!(placement)
     ignore_l0 && relax_segments!(placement)
     return placement
@@ -510,24 +498,6 @@ function apply_tether_init_forces!(placement::Placement)
         len > 0 || throw(ArgumentError(
             "tether $(tether.name): rest length $len m must be positive"))
         placement.l0[Int.(tether.segments)] .= len / length(tether.segments)
-    end
-    return nothing
-end
-
-# ==================== TRANSFORMS ==================== #
-
-"""
-    apply_transforms!(placement::Placement)
-
-Move the points and bodies of each transform so its base point lands on its `base_pos`.
-"""
-function apply_transforms!(placement::Placement)
-    for (index, transform) in enumerate(placement.transforms)
-        shift = transform.base_pos - placement.pos[transform.base_point]
-        points = findall(==(index), placement.point_transform)
-        bodies = findall(==(index), placement.body_transform)
-        placement.pos[points] .+= (shift,)
-        placement.body_pos[bodies] .+= (shift,)
     end
     return nothing
 end
