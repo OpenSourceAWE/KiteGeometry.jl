@@ -366,6 +366,7 @@ end
     @test_throws "block metadata is a block of the structure document" load_edited() do data
         data["metadata"] = Dict("author" => "x")
     end
+    @test_throws "version: 1 is not a block" load_edited(data -> data["version"] = 1)
 end
 
 @testset "an idx column repeats the row's position" begin
@@ -416,15 +417,27 @@ end
     for file in ("tether_wing.yaml", "wing_freefall.yaml", "wing_hanging.yaml")
         @test only(load_case(file).wings).name == "main_wing"
     end
-    system = load_with_point_wing("kcu", 0)
-    @test length(system.points) ==
-          length(load_kite("particle_structural_geometry.yaml").points)
+    @test structure_document(load_with_point_wing("kcu", 0)) ==
+          structure_document(load_with_point_wing("kcu", nothing))
 end
 
 @testset "a refusal is an error naming the row" begin
-    for file in ("cyclic.yaml", "shadow.yaml", "mismatch.yaml", "materials.yaml",
-                 "conflict.yaml", "tether_loop.yaml", "tether_stacked.yaml")
+    for (file, message) in (
+        "cyclic.yaml" => "Cyclic variable reference: a -> b -> a",
+        "shadow.yaml" => "Variable `anchor` has the same name as a component in block " *
+                         "`points`",
+        "mismatch.yaml" => "Variable `dyneema` defines damping_per_stiffness, " *
+                           "youngs_modulus, but the columns at that position are " *
+                           "youngs_modulus, compression_frac",
+        "materials.yaml" => "the `materials` block was removed",
+        "conflict.yaml" => "segment line: give either `unit_stiffness` or " *
+                           "`youngs_modulus`, not both",
+        "tether_loop.yaml" => "tether main_tether: the structure downstream of it " *
+                              "connects back to its anchor",
+        "tether_stacked.yaml" => "tether upper has neither endpoint on a fixed or winch " *
+                                 "point")
         @test_throws ErrorException load_case(file)
+        @test_throws message load_case(file)
     end
     @test_throws "point le_left is a point of station left of wing main_wing, but names " *
                  "no wing" load_with_point_wing("le_left", 0)
@@ -438,6 +451,10 @@ end
     @test wing.origin_idx == "kcu"
     @test wing.z_ref_points == ["kcu", "le_center"]
     @test wing.y_ref_points == ["le_right", "le_left"]
+    no_origin = ErrorException("particle wing main_wing needs an `origin_idx`")
+    @test_throws no_origin load_edited("particle_structural_geometry.yaml") do data
+        only(data["wings"]["data"])["origin_idx"] = nothing
+    end
 end
 
 foreach(model -> unregister_model!(model[1], model[2]), SAM_MODELS)

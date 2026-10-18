@@ -609,6 +609,8 @@ function read_wings(data)
         isnothing(yaml_field(row, :mass)) || error(
             "wing $name: the `mass` column was renamed to `extra_mass`")
         origin = yaml_field(row, :origin_idx)
+        dynamics == "PARTICLE_DYNAMICS" && isnothing(origin) &&
+            error("particle wing $name needs an `origin_idx`")
         push!(wings, Wing(; name, pos_ENU=zero(Vec3), model))
         push!(authored, AuthoringWing(
             dynamics == "PARTICLE_DYNAMICS",
@@ -835,8 +837,8 @@ shifted. `set` gives what a row leaves out: segment material, and every winch's 
 and drum radius. Each distinct line material is named after the multi-variable giving it,
 else after its first segment. `name` is the metadata name, the file's by default;
 `ignore_l0` makes every rest length the placed length. The `transforms`, and every other
-block it does not read but a table without rows, are kept as extra blocks; one named after a
-block of the structure document is refused.
+unread non-empty block, are kept as extra blocks; one named after a block of the structure
+document, or holding a single value, is refused.
 """
 function load_authoring(path; set::Settings, name=first(splitext(basename(path))),
                         ignore_l0=false)
@@ -851,6 +853,8 @@ function load_authoring(path; set::Settings, name=first(splitext(basename(path))
     extra_blocks = filter(key -> (key == "transforms" || !(key in AUTHORING_BLOCKS)) &&
                                  holds_rows(data[key]), sort!(collect(keys(data))))
     for key in extra_blocks
+        data[key] isa Union{AbstractDict, AbstractVector} ||
+            error("$key: $(repr(data[key])) is not a block")
         (key == "metadata" || haskey(BLOCKS, Symbol(key))) &&
             error("block $key is a block of the structure document, not of an authoring " *
                   "YAML")
@@ -904,21 +908,19 @@ function authored_frame(authored, point_names)
 end
 
 """
-    wing_body_pose(draft, wing, authored, members, point_names)
+    wing_body_pose(draft, authored, members, point_names)
         -> (origin, R, com_offset, inertia)
 
-The design pose of the body of `wing` of `draft`: its origin [m], its rotation into the
-world, the centre of its own mass in its frame [m], and its own inertia about that centre in
-its axes [kg*m²], `nothing` for none. A particle wing's body sits at its origin, framed by
-its reference points where it has them; a rigid wing's is framed by its reference points,
+The design pose of a wing's body: its origin [m], its rotation into the world, the centre of
+its own mass in its frame [m], and its own inertia about that centre in its axes [kg*m²],
+`nothing` for none. A particle wing's body sits at its origin, framed by its reference
+points where it has them; a rigid wing's is framed by its reference points,
 else at the centre of its own mass ([`wing_inertia`](@ref)) in the world's axes.
 """
-function wing_body_pose(draft, wing, authored, members, point_names)
+function wing_body_pose(draft, authored, members, point_names)
     pos = [point.pos_ENU for point in draft.points]
     frame = authored_frame(authored, point_names)
     if authored.particle
-        isnothing(authored.origin) &&
-            error("particle wing $(draft.wings[wing].name) needs an `origin_idx`")
         R = isnothing(frame) ? Mat3(I) : first(wing_frame(pos, frame))
         origin = ref_position(pos, resolve_ref_points(authored.origin, point_names))
         return origin, R, zero(Vec3), nothing
@@ -984,7 +986,7 @@ function design_pose(draft, set, point_wings, point_transforms, authored_wings,
         wing_mass!(draft, wing, authored, members, set)
         isempty(members) && continue
         body_pos[wing], body_R[wing], com_offset[wing], inertia =
-            wing_body_pose(draft, wing, authored, members, point_names)
+            wing_body_pose(draft, authored, members, point_names)
         isnothing(inertia) ||
             (draft.bodies[wing] = with_fields(draft.bodies[wing]; extra_inertia_KA=inertia))
     end
