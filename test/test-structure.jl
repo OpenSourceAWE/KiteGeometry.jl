@@ -337,7 +337,7 @@ end
                                   [line_segment()], system.spanwise_stations,
                                   system.pulleys, system.tethers, system.winches,
                                   system.wings, system.canopy_faces, system.bodies,
-                                  system.tubes, system.extras)
+                                  system.tubes, system.transforms, system.extras)
     @test structure_document(held_names) == structure_document(system)
     held_names.segments[1] = line_segment("nowhere")
     @test_throws "no points named nowhere" structure_document(held_names)
