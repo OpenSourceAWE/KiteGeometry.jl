@@ -157,8 +157,6 @@ function system_source(schema, blocks)
     for (block, _) in blocks
         push!(fields, (block, "Vector{$(type_name(block))}", "the rows of `$block`", "-"))
     end
-    push!(fields, ("transforms", "Vector{Transform}",
-                   "the transforms that place its points and bodies", "-"))
     push!(fields, ("extras", "OrderedDict{String, Any}",
            "blocks the schema does not name, in the order read", "-"))
     body = join(("    $field::$type" for (field, type) in fields), "\n")
@@ -168,8 +166,8 @@ function system_source(schema, blocks)
     optional_units = join(("    $block = $(optional_units_source(spec)),\n"
                            for (block, spec) in blocks))
     required = join((":$block" for block in schema["required"]), ", ")
-    description = "A structure document: its metadata, one vector per table block, its " *
-                  "transforms, and the blocks the schema does not name."
+    description = "A structure document: its metadata, one vector per table block, and " *
+                  "the blocks the schema does not name."
     return docstring("SystemDefinition", description, fields) *
            "struct SystemDefinition\n$body\nend\n\n" *
            "\"\"\"The component type of each table block, in schema order.\"\"\"\n" *

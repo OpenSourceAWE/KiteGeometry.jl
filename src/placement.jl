@@ -57,9 +57,6 @@ struct Placement
     tether_init::Vector{TetherInit}
 end
 
-"""The `Pose` of `placement`, sharing its vectors."""
-Pose(placement::Placement) = Pose(placement.pos, placement.body_pos, placement.body_R)
-
 # ==================== ROTATIONS ==================== #
 
 """Rotation matrix of the scalar-first quaternion `q`."""
@@ -113,21 +110,21 @@ end
 # ==================== PLACE ==================== #
 
 """
-    place!(placement::Placement; ignore_l0=false)
+    place_authored!(placement::Placement, transforms; ignore_l0=false)
 
-Place the system by its tethers' lengths and its transforms, from the design pose
+Place the system by its tethers' lengths and `transforms`, from the design pose
 `placement` holds: tethers to their stretched lengths, every unset rest length to the
 length it then has, tether and pulley rest lengths shared out, the transforms applied
 ([`place_transforms!`](@ref)), and each body's points carried with it. `ignore_l0` makes
 every rest length the placed length.
 """
-function place!(placement::Placement; ignore_l0=false)
+function place_authored!(placement::Placement, transforms; ignore_l0=false)
     design = copy(Pose(placement))
     apply_tether_init_stretched_lens!(placement)
     update_segment_lengths!(placement)
     apply_tether_init_forces!(placement)
     init_pulley_lengths!(placement)
-    place_transforms!(Pose(placement), design, placement.system)
+    place_transforms!(Pose(placement), design, transforms)
     carry_body_points!(placement)
     ignore_l0 && relax_segments!(placement)
     return placement

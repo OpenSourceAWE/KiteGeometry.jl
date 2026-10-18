@@ -4,12 +4,12 @@
 """
     Transform
 
-The rigid motion that takes the points and bodies of a system from the frame they are
-authored in to their pose in the world. It turns its object — the body of its `wing`, else
-its `rot_point` — to `elevation` and `azimuth` seen from its base, and about that radial to
-`heading`. The base is `base_pos`, where `base_point` is moved to, or the object that
-`base_transform` turns. References are names, or indices once a `SystemDefinition` holds
-the transform.
+The rigid motion that takes some of a system's points and bodies from the frame they are
+authored in to their pose in the world. It turns its object, the weighted `rot_point`
+else the position of `body`, to `elevation` and `azimuth` seen from its base, and about
+that radial until the frame of `body` has `heading`. The base is `base_pos`, where
+`base_point` is moved to, or the object `base_transform` turns. References are indices
+into the system's blocks and into the transforms.
 """
 mutable struct Transform
     "unique name of the transform"
@@ -18,7 +18,7 @@ mutable struct Transform
     elevation::Float64
     "azimuth of the turned object around the base, from east towards south [rad]"
     azimuth::Float64
-    "heading of the turned object's x axis in its tangential frame [rad]"
+    "heading of the x axis of `body` in its tangential frame [rad]"
     heading::Float64
     "rate of `elevation` [rad/s]"
     elevation_vel::Float64
@@ -29,49 +29,49 @@ mutable struct Transform
     "the position `base_point` is moved to [m], `nothing` where `base_transform` is set"
     base_pos::Union{Nothing, MVector{3, Float64}}
     "the point moved to `base_pos`"
-    base_point::Union{Nothing, NameRef}
+    base_point::Union{Nothing, Int}
     "the transform whose turned object is the base"
-    base_transform::Union{Nothing, NameRef}
-    "the wing whose body, the one sharing its name, the transform turns"
-    wing::Union{Nothing, NameRef}
-    "the point the transform turns where it names no wing"
-    rot_point::Union{Nothing, NameRef}
+    base_transform::Union{Nothing, Int}
+    "the points, weighted, whose position is the turned object, `nothing` for `body`"
+    rot_point::Union{Nothing, RefPoints}
+    "the body whose frame has `heading`, `nothing` for none"
+    body::Union{Nothing, Int}
     "the points the transform moves"
-    points::Vector{NameRef}
+    points::Vector{Int}
     "the bodies the transform moves"
-    bodies::Vector{NameRef}
+    bodies::Vector{Int}
 end
 
 """
     Transform(; name, elevation, azimuth, heading, base_pos=nothing, base_point=nothing,
-              base_transform=nothing, wing=nothing, rot_point=nothing, elevation_vel=0.0,
-              azimuth_vel=0.0, turn_rate=0.0, points=[], bodies=[])
+              base_transform=nothing, rot_point=nothing, body=nothing, elevation_vel=0.0,
+              azimuth_vel=0.0, turn_rate=0.0, points=Int[], bodies=Int[])
 
-A transform from its fields, angles in radians. Refuses one turning both or neither of a
-`wing` and a `rot_point`, one with both or neither of a `base_pos` and a `base_transform`,
-and a `base_pos` without its `base_point`.
+A transform from its fields, angles in radians. Refuses one turning neither a `rot_point`
+nor a `body`, one with both or neither of a `base_pos` and a `base_transform`, and a
+`base_pos` without its `base_point`.
 """
 function Transform(; name, elevation, azimuth, heading, base_pos=nothing,
-                   base_point=nothing, base_transform=nothing, wing=nothing,
-                   rot_point=nothing, elevation_vel=0.0, azimuth_vel=0.0, turn_rate=0.0,
-                   points=NameRef[], bodies=NameRef[])
-    isnothing(wing) == isnothing(rot_point) && throw(ArgumentError(
-        "transform $name turns a wing or a rot_point: give one"))
+                   base_point=nothing, base_transform=nothing, rot_point=nothing,
+                   body=nothing, elevation_vel=0.0, azimuth_vel=0.0, turn_rate=0.0,
+                   points=Int[], bodies=Int[])
+    isnothing(rot_point) && isnothing(body) && throw(ArgumentError(
+        "transform $name turns a rot_point or a body: give one"))
     isnothing(base_pos) == isnothing(base_transform) && throw(ArgumentError(
         "transform $name has a base_pos or a base_transform: give one"))
     !isnothing(base_pos) && isnothing(base_point) && throw(ArgumentError(
         "transform $name: a base_pos needs its base_point"))
     return Transform(name, elevation, azimuth, heading, elevation_vel, azimuth_vel,
-                     turn_rate, base_pos, base_point, base_transform, wing, rot_point,
+                     turn_rate, base_pos, base_point, base_transform, rot_point, body,
                      points, bodies)
 end
 
 """
     Pose
 
-Where the points and bodies of a system are: the position of each point [m], and the
-origin [m] and the rotation into the world of each body's frame, indexed as the system's
-blocks. The transform functions move it in place.
+Where the points and bodies of a system are: the position of each point [m], and a
+position [m] fixed in each body and the rotation of its frame into the world, indexed as
+the system's blocks. The transform functions move it in place.
 """
 struct Pose{P <: AbstractVector, B <: AbstractVector, R <: AbstractVector}
     pos::P
@@ -80,6 +80,20 @@ struct Pose{P <: AbstractVector, B <: AbstractVector, R <: AbstractVector}
 end
 
 Base.copy(pose::Pose) = Pose(copy(pose.pos), copy(pose.body_pos), copy(pose.body_R))
+
+"""
+    Pose(system::SystemDefinition)
+
+The pose `system` stands in, each body at the centre of its own mass.
+"""
+function Pose(system::SystemDefinition)
+    return Pose([Vec3(point.pos_ENU) for point in system.points],
+                [Vec3(body.pos_ENU) for body in system.bodies],
+                [quaternion_to_rotation_matrix(body.Q_KA2ENU) for body in system.bodies])
+end
+
+"""The `Pose` of `placement`, sharing its vectors."""
+Pose(placement::Placement) = Pose(placement.pos, placement.body_pos, placement.body_R)
 
 # ==================== ROTATIONS ==================== #
 
@@ -164,28 +178,17 @@ end
 
 # ==================== POSES ==================== #
 
-"""The index of the body `transform` turns, the one named as its wing, or `nothing` where
-it turns a point."""
-function turned_body(system, transform)
-    isnothing(transform.wing) && return nothing
-    name = system.wings[transform.wing].name
-    index = findfirst(body -> body.name == name, system.bodies)
-    isnothing(index) && throw(ArgumentError(
-        "transform $(transform.name): wing $name has no body of its name"))
-    return index
-end
-
 """Position [m] in `pose` of what `transform` turns."""
-function turned_position(pose, system, transform)
-    body = turned_body(system, transform)
-    return isnothing(body) ? pose.pos[transform.rot_point] : pose.body_pos[body]
+function turned_position(pose, transform)
+    isnothing(transform.rot_point) && return pose.body_pos[transform.body]
+    return ref_position(pose.pos, transform.rot_point)
 end
 
-"""Position [m] in `pose` of the base of `transform`: its base point, or what its base
-transform turns."""
-function base_position(pose, system, transform)
+"""Position [m] in `pose` of the base of `transform`, one of `transforms`: its base
+point, or what its base transform turns."""
+function base_position(pose, transforms, transform)
     isnothing(transform.base_transform) && return pose.pos[transform.base_point]
-    return turned_position(pose, system, system.transforms[transform.base_transform])
+    return turned_position(pose, transforms[transform.base_transform])
 end
 
 """Move the members of `transform` in `pose` by `shift` [m]."""
@@ -210,14 +213,15 @@ function rotate_members!(pose, transform, base_pos, k, θ)
 end
 
 """
-    turn_to_radial!(pose, system, transform, base_pos)
+    turn!(pose, transform, base_pos)
 
-Rotate the members of `transform` about `base_pos` [m] by the smallest rotation that puts
-what it turns on its [`radial_direction`](@ref). Refuses a turned object at the base, and
-warns at the zenith or nadir, where azimuth and heading are undefined.
+Rotate the members of `transform` about `base_pos` [m]: by the smallest rotation that puts
+what it turns on its [`radial_direction`](@ref), then about that radial until its `body`
+has its `heading`. Refuses a turned object at the base, and warns at the zenith or nadir,
+where azimuth and heading are undefined.
 """
-function turn_to_radial!(pose, system, transform, base_pos)
-    rel_pos = turned_position(pose, system, transform) - base_pos
+function turn!(pose, transform, base_pos)
+    rel_pos = turned_position(pose, transform) - base_pos
     norm(rel_pos) < 1e-6 && throw(ArgumentError(
         "transform $(transform.name): what it turns is at its base $base_pos, so it has " *
         "no elevation or azimuth"))
@@ -225,85 +229,98 @@ function turn_to_radial!(pose, system, transform, base_pos)
         @warn "Transform $(transform.name): elevation " *
               "$(round(rad2deg(transform.elevation); digits=2))° is at the zenith or " *
               "nadir, where azimuth and heading are undefined."
-    axis, angle = min_rotation(normalize(rel_pos), radial_direction(transform))
-    rotate_members!(pose, transform, base_pos, axis, angle)
-    return nothing
-end
-
-"""The body whose frame gives the heading of `transform`: the one it turns, else its
-first body, else `nothing`."""
-function heading_body(system, transform)
-    body = turned_body(system, transform)
-    isnothing(body) || return body
-    return isempty(transform.bodies) ? nothing : first(transform.bodies)
-end
-
-"""
-    turn_to_heading!(pose, system, transform, base_pos)
-
-Rotate the members of `transform` about the radial through `base_pos` [m] and its
-[`heading_body`](@ref) until that body's frame has the transform's `heading`; nothing
-where the transform moves no body.
-"""
-function turn_to_heading!(pose, system, transform, base_pos)
-    body = heading_body(system, transform)
-    isnothing(body) && return nothing
-    rel_pos = pose.body_pos[body] - base_pos
-    delta = wrap_to_pi(transform.heading - calc_heading(pose.body_R[body], rel_pos))
-    rotate_members!(pose, transform, base_pos, normalize(rel_pos), delta)
+    radial = radial_direction(transform)
+    rotate_members!(pose, transform, base_pos, min_rotation(normalize(rel_pos), radial)...)
+    isnothing(transform.body) && return nothing
+    heading = calc_heading(pose.body_R[transform.body], radial)
+    rotate_members!(pose, transform, base_pos, radial,
+                    wrap_to_pi(transform.heading - heading))
     return nothing
 end
 
 """
-    place_transforms!(pose::Pose, design::Pose, system)
+    place_transforms!(pose::Pose, design::Pose, transforms)
 
-Apply each of `system.transforms`, in order, to `pose`: shift its members so its base
-point is at its `base_pos`, or by how far what its base transform turns has moved from
-`design`; then [`turn_to_radial!`](@ref) and [`turn_to_heading!`](@ref) about that base.
+Apply each of `transforms`, in order, to `pose`: shift its members so its base point is
+at its `base_pos`, or by how far what its base transform turns has moved from `design`;
+then [`turn!`](@ref) them about that base.
 """
-function place_transforms!(pose::Pose, design::Pose, system)
-    for transform in system.transforms
+function place_transforms!(pose::Pose, design::Pose, transforms)
+    for transform in transforms
         base_pos, curr_base_pos = if isnothing(transform.base_transform)
             transform.base_pos, pose.pos[transform.base_point]
         else
-            base_position(pose, system, transform), base_position(design, system, transform)
+            base_position(pose, transforms, transform),
+            base_position(design, transforms, transform)
         end
         shift_members!(pose, transform, base_pos - curr_base_pos)
-        turn_to_radial!(pose, system, transform, base_pos)
-        turn_to_heading!(pose, system, transform, base_pos)
+        turn!(pose, transform, base_pos)
     end
     return pose
 end
 
 """
-    reposition!(pose::Pose, system)
+    place!(system::SystemDefinition, transforms)
 
-Turn the members of each of `system.transforms`, in order, to its current `elevation`,
-`azimuth` and `heading` about its base where it stands in `pose`, without moving that
-base.
+Apply `transforms` ([`place_transforms!`](@ref)) to `system` where it stands, writing
+its points, its bodies and the wings sharing their names in place.
 """
-function reposition!(pose::Pose, system)
-    for transform in system.transforms
-        base_pos = base_position(pose, system, transform)
-        turn_to_radial!(pose, system, transform, base_pos)
-        turn_to_heading!(pose, system, transform, base_pos)
+function place!(system::SystemDefinition, transforms)
+    design = Pose(system)
+    pose = place_transforms!(copy(design), design, transforms)
+    carry_wings!(system, design, pose)
+    for (point, pos) in zip(system.points, pose.pos)
+        point.pos_ENU .= pos
+    end
+    for (body, pos, R) in zip(system.bodies, pose.body_pos, pose.body_R)
+        body.pos_ENU .= pos
+        body.Q_KA2ENU .= rotation_matrix_to_quaternion(R)
+    end
+    return system
+end
+
+"""Move the KA frame of each wing of `system` as the body sharing its name moved from
+`before` to `after`."""
+function carry_wings!(system, before::Pose, after::Pose)
+    bodies = name_indices(system.bodies, :bodies)
+    for wing in system.wings
+        body = get(bodies, wing.name, nothing)
+        isnothing(body) && continue
+        R = after.body_R[body] * before.body_R[body]'
+        wing.pos_ENU .= after.body_pos[body] + R * (wing.pos_ENU - before.body_pos[body])
+        wing.Q_KA2ENU .= rotation_matrix_to_quaternion(
+            R * quaternion_to_rotation_matrix(wing.Q_KA2ENU))
+    end
+    return system
+end
+
+"""
+    reposition!(pose::Pose, transforms)
+
+[`turn!`](@ref) the members of each of `transforms`, in order, to its current
+`elevation`, `azimuth` and `heading` about its base where it stands in `pose`, without
+moving that base.
+"""
+function reposition!(pose::Pose, transforms)
+    for transform in transforms
+        turn!(pose, transform, base_position(pose, transforms, transform))
     end
     return pose
 end
 
 """
-    transform_velocities(pose::Pose, system) -> (point_vel, body_vel, body_spin)
+    transform_velocities(pose::Pose, transforms) -> (point_vel, body_vel, body_spin)
 
-The velocity [m/s] of each point and body origin, and the angular velocity [rad/s] of
+The velocity [m/s] of each point and body position, and the angular velocity [rad/s] of
 each body in the world, of the rigid rotation about its base ([`spherical_spin`](@ref))
-each transform gives its members in `pose`; zero for what no transform moves.
+each of `transforms` gives its members in `pose`; zero for what none moves.
 """
-function transform_velocities(pose::Pose, system)
+function transform_velocities(pose::Pose, transforms)
     point_vel = fill(zero(Vec3), length(pose.pos))
     body_vel = fill(zero(Vec3), length(pose.body_pos))
     body_spin = fill(zero(Vec3), length(pose.body_pos))
-    for transform in system.transforms
-        base_pos = base_position(pose, system, transform)
+    for transform in transforms
+        base_pos = base_position(pose, transforms, transform)
         spin = spherical_spin(transform)
         for index in transform.points
             point_vel[index] = cross(spin, pose.pos[index] - base_pos)

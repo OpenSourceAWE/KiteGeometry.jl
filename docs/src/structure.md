@@ -45,10 +45,30 @@ KiteGeometry.definition
 
 ## SymbolicAWEModels' authoring YAML
 
-SymbolicAWEModels authors a system in its wing's KA frame: points at `pos_cad`, tethers by their segment count and stretched length, `variables` shared between rows, and `transforms` that turn the whole to an elevation, azimuth and heading. `load_authoring` converts that dialect into a `SystemDefinition` with the kite at zenith, so `structure_document` writes it as the full-form document. Each segment's stiffness and density become a `linear` material and a tube's `breukels2011` law SymbolicAWEModels' Breukels constants. The columns the schema left to tools, such as a point's `type` and drag, are read only by the models SymbolicAWEModels registers. A `canopy_faces` table with the schema's own columns states each wing's canopy: a face's wing, and its corners by name or index. A filled cell that neither the loader nor the row's model reads is refused, as `load_structure` refuses one, naming the block and its columns, and so is a block it does not read that holds rows; a row's `idx`, where it has one, must be its position. A column a dict row leaves out is an unset cell, which a model field holds only where it admits `nothing`.
+SymbolicAWEModels authors a system in its wing's KA frame: points at `pos_cad`, tethers by their segment count and stretched length, `variables` shared between rows, and `transforms` that turn the whole to an elevation, azimuth and heading. `load_authoring` converts that dialect into a `SystemDefinition` placed by its transforms, and returns those transforms beside it, so `structure_document` writes the full-form document with no transforms in it. Each segment's stiffness and density become a `linear` material and a tube's `breukels2011` law SymbolicAWEModels' Breukels constants. The columns the schema left to tools, such as a point's `type` and drag, are read only by the models SymbolicAWEModels registers. A `canopy_faces` table with the schema's own columns states each wing's canopy: a face's wing, and its corners by name or index. A filled cell that neither the loader nor the row's model reads is refused, as `load_structure` refuses one, naming the block and its columns, and so is a block it does not read that holds rows; a row's `idx`, where it has one, must be its position. A column a dict row leaves out is an unset cell, which a model field holds only where it admits `nothing`.
 
 ```@docs
 load_authoring
+```
+
+## Transforms
+
+A transform turns some of a system's points and bodies, its members, about a base: what it turns goes to an elevation and azimuth seen from that base, and the body it heads to a heading about the radial. Its base is a point moved to a base position, or what another transform turns, so one transform can be chained on another. The transforms are kept beside the definition rather than in it: `place!` applies changed ones to a definition before a run, and `reposition!` and `transform_velocities` act on a `Pose`, the positions and body frames a run holds.
+
+```julia
+system, transforms = load_authoring("kite.yaml"; set)
+transforms[1].elevation = deg2rad(40)
+place!(system, transforms)
+```
+
+```@docs
+Transform
+Pose
+place!
+place_transforms!
+reposition!
+transform_velocities
+calc_heading
 ```
 
 ## Components

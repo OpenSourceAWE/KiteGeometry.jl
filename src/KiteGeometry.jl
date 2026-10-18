@@ -24,7 +24,8 @@ using YAML: YAML
 
 export SystemDefinition, Metadata, Material, Point, Segment, SpanwiseStation, Pulley,
        Tether, Winch, Wing, CanopyFace, Body, Tube, pos_KA
-export Transform, Pose, place_transforms!, reposition!, transform_velocities, calc_heading
+export Transform, Pose, place!, place_transforms!, reposition!, transform_velocities,
+       calc_heading
 export NameRef, AbstractModel, NoModel, SegmentSpring, register_model!, model_type,
        model_columns
 export load_structure, load_authoring, structure_document, connectivity_sha
@@ -46,12 +47,12 @@ Supertype of the row types of the table blocks.
 """
 abstract type Component end
 
-include("transforms.jl")
 include("models.jl")
 include("_structure.jl")
 include("components.jl")
 include("document.jl")
 include("placement.jl")
+include("transforms.jl")
 include("authoring.jl")
 
 function __init__()

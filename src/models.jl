@@ -120,8 +120,8 @@ function Base.propertynames(component::Component)
     return (fieldnames(typeof(component))..., propertynames(component.model)...)
 end
 
-"""Rows, models and transforms of one type are equal where every field is."""
-const ByValue = Union{Component, AbstractModel, Transform}
+"""Rows, and models, of one type are equal where every field is."""
+const ByValue = Union{Component, AbstractModel}
 function Base.:(==)(a::T, b::T) where {T <: ByValue}
     return all(getfield(a, field) == getfield(b, field) for field in fieldnames(T))
 end

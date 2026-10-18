@@ -290,8 +290,8 @@ end
 """
     SystemDefinition
 
-A structure document: its metadata, one vector per table block, its transforms, and the
-blocks the schema does not name.
+A structure document: its metadata, one vector per table block, and the blocks the schema
+does not name.
 
 - `metadata::Metadata`: the document's metadata
 - `materials::Vector{Material}`: the rows of `materials`
@@ -305,7 +305,6 @@ blocks the schema does not name.
 - `canopy_faces::Vector{CanopyFace}`: the rows of `canopy_faces`
 - `bodies::Vector{Body}`: the rows of `bodies`
 - `tubes::Vector{Tube}`: the rows of `tubes`
-- `transforms::Vector{Transform}`: the transforms that place its points and bodies
 - `extras::OrderedDict{String, Any}`: blocks the schema does not name, in the order read
 """
 struct SystemDefinition
@@ -321,7 +320,6 @@ struct SystemDefinition
     canopy_faces::Vector{CanopyFace}
     bodies::Vector{Body}
     tubes::Vector{Tube}
-    transforms::Vector{Transform}
     extras::OrderedDict{String, Any}
 end
 

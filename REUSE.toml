@@ -14,11 +14,17 @@ SPDX-FileCopyrightText = "2025 Airborne Wind Energy Research Group"
 SPDX-License-Identifier = "MIT"
 
 [[annotations]]
-path = ["test/data/2plate_kite/*.yaml", "test/data/2plate_kite_structure.yml"]
+path = ["test/data/2plate_kite/*.yaml", "test/data/2plate_kite_structure.yml",
+        "test/data/weighted_ref.yaml"]
 SPDX-FileCopyrightText = "2025 Bart van de Lint, Jelle Poland, Uwe Fechner"
 SPDX-License-Identifier = "MIT"
 
 [[annotations]]
 path = ["test/data/v3_psm/*.yaml"]
 SPDX-FileCopyrightText = "2026 Jelle Poland, Bart van de Lint, Uwe Fechner"
+SPDX-License-Identifier = "MIT"
+
+[[annotations]]
+path = ["test/data/chained_transforms.yaml", "test/data/sam_placed.yml"]
+SPDX-FileCopyrightText = "2026 Bart van de Lint"
 SPDX-License-Identifier = "MIT"

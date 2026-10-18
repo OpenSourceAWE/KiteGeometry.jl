@@ -9,11 +9,13 @@ SPDX-License-Identifier: MIT
 
 ### Added
 
+- `Transform`, kept beside a `SystemDefinition`: the points and bodies it moves, its base, and its elevation, azimuth and heading with their rates. A transform can be chained on another. `place!(system, transforms)` applies changed transforms to a definition, and `reposition!` and `transform_velocities` act on a `Pose`, the positions and body frames of a run.
 - `model_columns(M)` names the fields of a model type that are document columns, all of them unless a method says fewer; a model may keep fields of its own that are neither read nor written.
 
 ### Changed
 
 - BREAKING: Rows are mutable: `point.extra_mass = 2.5` and `point.pos_ENU .= [1, 2, 3]` change a row in place, and a field of its model is set through the row (`tube.EA = 3e5`). Vector and matrix fields are `MVector`/`MMatrix`. Rows and models compare and hash by their fields.
+- BREAKING: `load_authoring` returns the definition and its transforms, and places the system by its transforms' elevation, azimuth and heading, as SymbolicAWEModels does, rather than at zenith. It reads chained transforms (`base_transform_idx`), and the transforms are no longer kept as an extra block of the definition.
 
 ## KiteGeometry v0.2.0 2026-10-16
 
