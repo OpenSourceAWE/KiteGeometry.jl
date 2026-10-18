@@ -867,7 +867,7 @@ after a block of the structure document, or holding a single value, is refused.
 """
 function load_authoring(path; set::Settings, name=first(splitext(basename(path))),
                         ignore_l0=false)
-    authored = YAML.load_file(path)
+    authored = YAML.load_file(path; dicttype=OrderedDict{String, Any})
     variables = yaml_variables(authored)
     data = resolve_yaml_variables(authored, variables)
     for key in ("materials", "elements", "segment_properties")

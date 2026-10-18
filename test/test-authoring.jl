@@ -476,6 +476,7 @@ end
 @testset "a refusal is an error naming the row" begin
     for (file, message) in (
         "cyclic.yaml" => "Cyclic variable reference: a -> b -> a",
+        "cyclic_reversed.yaml" => "Cyclic variable reference: b -> a -> b",
         "shadow.yaml" => "Variable `anchor` has the same name as a component in block " *
                          "`points`",
         "mismatch.yaml" => "Variable `dyneema` defines damping_per_stiffness, " *
