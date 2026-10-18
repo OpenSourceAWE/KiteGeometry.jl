@@ -5,11 +5,11 @@ SPDX-License-Identifier: MIT
 
 # Changelog
 
-## Unreleased
+## KiteGeometry v0.3.0 2026-10-18
 
 ### Added
 
-- Rows are mutable: `point.extra_mass = 2.5` and `point.pos_ENU .= [1, 2, 3]` change a row in place, and a field of its model is set through the row (`tube.EA = 3e5`). Vector and matrix fields are `MVector`/`MMatrix`. Rows and models compare and hash by their fields.
+- Rows are mutable: `point.extra_mass = 2.5` and `point.pos_ENU .= [1, 2, 3]` change a row in place, and a field of its model is set through the row (`tube.EA = 3e5`). BREAKING: rows are `mutable struct`s, and vector and matrix fields are `MVector`/`MMatrix` rather than `SVector`/`SMatrix`, so reading one gives the row's own array and not a copy. Rows and models compare and hash by their fields.
 - `model_columns(M)` names the fields of a model type that are document columns, all of them unless a method says fewer; a model may keep fields of its own that are neither read nor written.
 
 ## KiteGeometry v0.2.0 2026-10-16
