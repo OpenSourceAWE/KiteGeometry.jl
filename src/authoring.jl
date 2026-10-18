@@ -364,6 +364,14 @@ function authoring_model(block, row)
     end
 end
 
+"""The model of a row the loader adds to `block`: the block's default with every column
+unset, `NoModel` where that default needs a column filled."""
+function added_row_model(block)
+    M = model_type(block, default_model(block))
+    all(field -> Nothing <: fieldtype(M, field), model_columns(M)) || return NoModel()
+    return authoring_model(block, (;))
+end
+
 # ==================== MATERIAL ==================== #
 
 """
@@ -727,7 +735,8 @@ function expand_tether!(points, segments, point_transforms, name, start_point, e
     point_names = [start_point; ["$(name)_point_$i" for i in 1:(n - 1)]; end_point]
     for i in 1:(n - 1)
         push!(points, Point(; name=point_names[i + 1], extra_mass=0.0,
-                            pos_ENU=start_pos + i / n * (end_pos - start_pos)))
+                            pos_ENU=start_pos + i / n * (end_pos - start_pos),
+                            model=added_row_model(:points)))
         push!(point_transforms, transform)
     end
     segment_names = ["$(name)_seg_$i" for i in 1:n]
@@ -868,7 +877,7 @@ function load_authoring(path; set::Settings, name=first(splitext(basename(path))
     tubes = read_tubes(data, materials)
     wing_bodies = [Body(; name=wing.name, pos_ENU=something(authored.pos_cad, zero(Vec3)),
                         extra_mass=authored.particle ? 0.0 : authored.extra_mass,
-                        extra_inertia_KA=zero(Mat3))
+                        extra_inertia_KA=zero(Mat3), model=added_row_model(:bodies))
                    for (wing, authored) in zip(wings, authored_wings)]
     metadata = Metadata(name, "", "", AWESIO_VERSION, "structure_schema.yml",
                         length(points), "")

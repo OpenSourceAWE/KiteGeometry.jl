@@ -21,6 +21,7 @@ SPDX-License-Identifier: MIT
 
 - `load_authoring` reads `0` in an optional reference column (`wing_idx`, `transform_idx`, `body_idx`) as none, as SymbolicAWEModels writes it.
 - A model field typed `Any` no longer overflows the stack when it is filled.
+- The points `load_authoring` adds along a tether and the body it adds for each wing carry their block's default model, where that model needs no column filled, so the definition reads back from its own YAML with the same models.
 
 ## KiteGeometry v0.2.0 2026-10-16
 

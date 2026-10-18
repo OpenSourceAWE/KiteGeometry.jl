@@ -303,8 +303,8 @@ end
     @test isnothing(validate(SCHEMA, document))
     damping = column(authored, "body_frame_damping")
     @test column(document["points"], "body_frame_damping")[eachindex(damping)] == damping
-    @test column(document["points"], "model")[eachindex(damping)] == fill("sam_point",
-                                                                            length(damping))
+    @test isnothing(column(document["points"], "model"))
+    @test from_yaml(to_yaml(system)).points[1] isa Point{SamPoint}
     tubes = document["tubes"]
     @test [column(tubes, header) for header in ("model", "EI", "GJ", "shear_coeff")] ==
           [["timoshenko"], [120.0], [80.0], [0.85]]
@@ -454,6 +454,19 @@ end
     no_origin = ErrorException("particle wing main_wing needs an `origin_idx`")
     @test_throws no_origin load_edited("particle_structural_geometry.yaml") do data
         only(data["wings"]["data"])["origin_idx"] = nothing
+    end
+end
+
+"""The type of the model of each component of each block of `system`."""
+model_types(system) = [typeof.(getfield.(getfield(system, block), :model))
+                       for block in keys(KiteGeometry.BLOCKS)]
+
+@testset "a row the loader adds carries its block's default model" begin
+    for system in (load_kite("particle_structural_geometry.yaml"),
+                   load_case("tether_wing.yaml"))
+        @test model_types(from_yaml(to_yaml(system))) == model_types(system)
+        @test all(point -> point.model isa SamPoint, system.points)
+        @test all(body -> body.model isa SamBody, system.bodies)
     end
 end
 
