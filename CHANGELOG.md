@@ -9,11 +9,8 @@ SPDX-License-Identifier: MIT
 
 ### Added
 
+- Rows are mutable: `point.extra_mass = 2.5` and `point.pos_ENU .= [1, 2, 3]` change a row in place, and a field of its model is set through the row (`tube.EA = 3e5`). Vector and matrix fields are `MVector`/`MMatrix`. Rows and models compare and hash by their fields.
 - `model_columns(M)` names the fields of a model type that are document columns, all of them unless a method says fewer; a model may keep fields of its own that are neither read nor written.
-
-### Changed
-
-- BREAKING: Rows are mutable: `point.extra_mass = 2.5` and `point.pos_ENU .= [1, 2, 3]` change a row in place, and a field of its model is set through the row (`tube.EA = 3e5`). Vector and matrix fields are `MVector`/`MMatrix`. Rows and models compare and hash by their fields.
 
 ## KiteGeometry v0.2.0 2026-10-16
 
