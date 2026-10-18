@@ -1,0 +1,31 @@
+variables:
+  test_mat:
+    unit_damping: 0.0
+    density: 724.0
+
+points:
+  headers: [name, pos_cad, type, wing_idx, transform_idx,
+            extra_mass, body_frame_damping, world_frame_damping,
+            area, drag_coeff]
+  data:
+    - [ground, [0.0, 0.0, 0.0], STATIC, nothing, nothing,
+       0.0, 0.0, 0.0, 0.0, 0.0]
+    - [top, [0.0, 0.0, -100.0], DYNAMIC, nothing, nothing,
+       1.0, 0.0, 0.0, 0.0, 0.0]
+
+segments:
+  headers: [name, point_i, point_j, l0, diameter_mm,
+            unit_stiffness, unit_damping, compression_frac]
+  data:
+    - [back_loop, top, ground, 100.0, 4.0, 120000.0, 350.0, 0.0]
+
+tethers:
+  headers: [name, start_point, end_point, n_segments, unit_damping,
+            density, init_stretched_length]
+  data:
+    - [main_tether, ground, top, 2, test_mat, 100.0]
+
+winches:
+  headers: [name, tether_idxs, winch_point]
+  data:
+    - [main_winch, [main_tether], ground]

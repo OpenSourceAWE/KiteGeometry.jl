@@ -28,3 +28,8 @@ SPDX-License-Identifier = "MIT"
 path = ["test/data/chained_transforms.yaml", "test/data/sam_placed.yml"]
 SPDX-FileCopyrightText = "2026 Bart van de Lint"
 SPDX-License-Identifier = "MIT"
+
+[[annotations]]
+path = ["test/data/sam_cases/*.yaml"]
+SPDX-FileCopyrightText = "2025 Bart van de Lint"
+SPDX-License-Identifier = "MIT"

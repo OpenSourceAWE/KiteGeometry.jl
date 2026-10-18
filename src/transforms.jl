@@ -55,12 +55,12 @@ function Transform(; name, elevation, azimuth, heading, base_pos=nothing,
                    base_point=nothing, base_transform=nothing, rot_point=nothing,
                    body=nothing, elevation_vel=0.0, azimuth_vel=0.0, turn_rate=0.0,
                    points=Int[], bodies=Int[])
-    isnothing(rot_point) && isnothing(body) && throw(ArgumentError(
-        "transform $name turns a rot_point or a body: give one"))
-    isnothing(base_pos) == isnothing(base_transform) && throw(ArgumentError(
-        "transform $name has a base_pos or a base_transform: give one"))
-    !isnothing(base_pos) && isnothing(base_point) && throw(ArgumentError(
-        "transform $name: a base_pos needs its base_point"))
+    isnothing(rot_point) && isnothing(body) &&
+        error("transform $name turns a rot_point or a body: give one")
+    isnothing(base_pos) == isnothing(base_transform) &&
+        error("transform $name has a base_pos or a base_transform: give one")
+    !isnothing(base_pos) && isnothing(base_point) &&
+        error("transform $name: a base_pos needs its base_point")
     return Transform(name, elevation, azimuth, heading, elevation_vel, azimuth_vel,
                      turn_rate, base_pos, base_point, base_transform, rot_point, body,
                      points, bodies)
@@ -193,9 +193,9 @@ where azimuth and heading are undefined.
 """
 function turn!(pose, transform, base_pos)
     rel_pos = turned_position(pose, transform) - base_pos
-    norm(rel_pos) < 1e-6 && throw(ArgumentError(
+    norm(rel_pos) < 1e-6 && error(
         "transform $(transform.name): what it turns is at its base $base_pos, so it has " *
-        "no elevation or azimuth"))
+        "no elevation or azimuth")
     abs(abs(transform.elevation) - π / 2) < 1e-6 &&
         @warn "Transform $(transform.name): elevation " *
               "$(round(rad2deg(transform.elevation); digits=2))° is at the zenith or " *
