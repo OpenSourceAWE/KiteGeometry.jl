@@ -5,7 +5,7 @@ SPDX-License-Identifier: MIT
 
 # Changelog
 
-## Unreleased
+## KiteGeometry v0.3.0 2026-10-18
 
 ### Added
 
