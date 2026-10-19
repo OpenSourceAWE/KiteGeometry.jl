@@ -5,13 +5,18 @@ SPDX-License-Identifier: MIT
 
 # Changelog
 
-## KiteGeometry v0.3.1 2026-10-19
+## Unreleased
 
 ### Added
 
 - A block's rows are `Rows`, found by their name as well as their position: `system.points[:kite]` and `system.points["kite"]`. `load_authoring` returns its transforms as `Rows` too.
 - `load_authoring(authored::AbstractDict; set, name)` loads a parsed authoring document, so a tool can build one in code rather than write a file.
 - `load_authoring(...; place=false)` leaves the definition in its design pose, for a tool that places it itself.
+
+## KiteGeometry v0.3.1 2026-10-19
+
+### Added
+
 - `Metadata(; name, n_points)` builds metadata by keyword, with the other fields defaulting to an empty description and note, the awesIO version this package reads, the structure schema, and an empty `connectivity_sha`.
 
 ## KiteGeometry v0.3.0 2026-10-18
