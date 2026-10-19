@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 using KiteGeometry: radial_direction
-using KiteUtils: Settings, set_data_path
+using KiteUtils: KiteUtils, Settings, set_data_path
 using LinearAlgebra: norm, normalize
 using YAML
 
@@ -134,4 +134,10 @@ end
         @test iszero(point_vel[1])
         @test iszero(body_spin[1]) == (moving == 1)
     end
+end
+
+@testset "calc_heading is one function shared with KiteUtils" begin
+    probe = Module()
+    Core.eval(probe, :(using KiteUtils, KiteGeometry))
+    @test Core.eval(probe, :calc_heading) === KiteUtils.calc_heading
 end

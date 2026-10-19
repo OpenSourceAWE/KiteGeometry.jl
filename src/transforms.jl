@@ -117,7 +117,7 @@ Heading [rad] of the frame `R_b_to_w` at `pos` [m] from the base: the angle of i
 in the tangential plane, from the elevation direction towards the azimuthal one; zero
 with the nose towards the base.
 """
-function calc_heading(R_b_to_w, pos)
+function KiteUtils.calc_heading(R_b_to_w, pos)
     e_x_t = calc_R_t_to_w(pos)' * R_b_to_w[:, 1]
     return atan(e_x_t[2], e_x_t[1])
 end

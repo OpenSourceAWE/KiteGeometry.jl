@@ -11,6 +11,10 @@ SPDX-License-Identifier: MIT
 
 - `Metadata(; name, n_points)` builds metadata by keyword, with the other fields defaulting to an empty description and note, the awesIO version this package reads, the structure schema, and an empty `connectivity_sha`.
 
+### Fixed
+
+- `calc_heading(R_b_to_w, pos)` is a method of KiteUtils' `calc_heading`, so `using KiteUtils, KiteGeometry` no longer leaves `calc_heading` ambiguous and both forms are callable unqualified.
+
 ## KiteGeometry v0.3.0 2026-10-18
 
 ### Added
