@@ -1,0 +1,8 @@
+variables:
+  b: a
+  a: b
+
+points:
+  headers: [name, pos_cad, type]
+  data:
+    - [anchor, [0.0, 0.0, 0.0], STATIC]

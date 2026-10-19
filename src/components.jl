@@ -44,8 +44,10 @@ end
 to_field(T, value) = convert(T, value)
 to_field(::Type{Union{Nothing, T}}, value) where {T} = isnothing(value) ? nothing :
                                                     to_field(T, value)
+to_field(::Type{Any}, value) = value
 to_field(T::Type{<:Tuple}, value::AbstractVector) = convert(T, Tuple(value))
-to_field(T::Type{<:SMatrix}, rows::AbstractVector) = T(permutedims(reduce(hcat, rows)))
+to_field(T::Type{<:StaticMatrix}, rows::AbstractVector) =
+    T(permutedims(reduce(hcat, rows)))
 to_field(T::Type{<:OrderedDict}, value::AbstractDict) = T(value)
 to_field(::Type{Union{Nothing, Float64, Vector{Float64}}}, value::Real) = Float64(value)
 function to_field(::Type{Union{Nothing, Float64, Vector{Float64}}}, value::AbstractVector)

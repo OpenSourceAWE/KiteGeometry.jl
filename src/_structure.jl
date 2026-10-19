@@ -61,7 +61,7 @@ naming it.
   law gives them.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
-struct Material{M <: AbstractModel} <: Component
+mutable struct Material{M <: AbstractModel} <: Component
     name::String
     law::String
     parameters::OrderedDict{String, Any}
@@ -79,16 +79,16 @@ A row of the `points` block. Mass points.
   with its `body`.
 - `body::Union{Nothing, NameRef}`: The rigid body the point is fixed in, moving with it and
   passing its force and moment on to it; null for a point of its own.
-- `pos_ENU::SVector{3, Float64}` [m]: Position in the world.
+- `pos_ENU::MVector{3, Float64}` [m]: Position in the world.
 - `extra_mass::Union{Nothing, Float64}` [kg]: Optional. Mass the point carries beyond its
   segments and canopy faces.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
-struct Point{M <: AbstractModel} <: Component
+mutable struct Point{M <: AbstractModel} <: Component
     name::String
     fixed::Bool
     body::Union{Nothing, NameRef}
-    pos_ENU::SVector{3, Float64}
+    pos_ENU::MVector{3, Float64}
     extra_mass::Union{Nothing, Float64}
     model::M
 end
@@ -106,7 +106,7 @@ A row of the `segments` block. Straight elastic elements between two points.
 - `material::Union{Nothing, NameRef}`: Optional. The material the line is made of.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
-struct Segment{M <: AbstractModel} <: Component
+mutable struct Segment{M <: AbstractModel} <: Component
     name::String
     points::NTuple{2, NameRef}
     rest_length::Union{Nothing, Float64}
@@ -130,7 +130,7 @@ wing's stations run from +y to -y of its KA frame.
 - `points::Vector{NameRef}`: The points the section is made of.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
-struct SpanwiseStation{M <: AbstractModel} <: Component
+mutable struct SpanwiseStation{M <: AbstractModel} <: Component
     name::String
     wing::NameRef
     points::Vector{NameRef}
@@ -146,7 +146,7 @@ A row of the `pulleys` block.
 - `segments::NTuple{2, NameRef}`: The two segments the pulley trades length between.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
-struct Pulley{M <: AbstractModel} <: Component
+mutable struct Pulley{M <: AbstractModel} <: Component
     name::String
     segments::NTuple{2, NameRef}
     model::M
@@ -166,7 +166,7 @@ its segments' `rest_length`.
   `end_point`.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
-struct Tether{M <: AbstractModel} <: Component
+mutable struct Tether{M <: AbstractModel} <: Component
     name::String
     start_point::NameRef
     end_point::NameRef
@@ -186,7 +186,7 @@ A row of the `winches` block.
 - `drum_radius::Union{Nothing, Float64}` [m]: Optional. Radius of the drum.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
-struct Winch{M <: AbstractModel} <: Component
+mutable struct Winch{M <: AbstractModel} <: Component
     name::String
     tethers::Vector{NameRef}
     winch_point::NameRef
@@ -202,17 +202,17 @@ A row of the `wings` block. Lifting surfaces, each with the stations that sectio
 most one canopy, meshed by the `canopy_faces` that name the wing.
 
 - `name::String`: Unique name of the wing.
-- `pos_ENU::SVector{3, Float64}` [m]: The origin of the wing's KA frame, the frame its
+- `pos_ENU::MVector{3, Float64}` [m]: The origin of the wing's KA frame, the frame its
   aerodynamic mesh is drawn in, in the world. A position, not necessarily a point.
-- `Q_KA2ENU::SVector{4, Float64}` [-]: Rotation from the wing's KA frame into the world.
+- `Q_KA2ENU::MVector{4, Float64}` [-]: Rotation from the wing's KA frame into the world.
 - `canopy_material::Union{Nothing, NameRef}`: Optional. The material every face of the
   wing's canopy is made of, or null where the wing has no canopy.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
-struct Wing{M <: AbstractModel} <: Component
+mutable struct Wing{M <: AbstractModel} <: Component
     name::String
-    pos_ENU::SVector{3, Float64}
-    Q_KA2ENU::SVector{4, Float64}
+    pos_ENU::MVector{3, Float64}
+    Q_KA2ENU::MVector{4, Float64}
     canopy_material::Union{Nothing, NameRef}
     model::M
 end
@@ -229,7 +229,7 @@ membrane or as springs along its edges, is the reader's model.
 - `points::Vector{NameRef}`: The face's three or four corners, in order around it.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
-struct CanopyFace{M <: AbstractModel} <: Component
+mutable struct CanopyFace{M <: AbstractModel} <: Component
     name::String
     wing::NameRef
     points::Vector{NameRef}
@@ -244,22 +244,22 @@ docs/source/conventions.rst defines `_KA` where the body has wing geometry, and 
 writer likes where it has no leading edge.
 
 - `name::String`: Unique name of the body.
-- `pos_ENU::SVector{3, Float64}` [m]: The body's origin, the centre of its own mass, in the
+- `pos_ENU::MVector{3, Float64}` [m]: The body's origin, the centre of its own mass, in the
   world.
-- `Q_KA2ENU::SVector{4, Float64}` [-]: Rotation from the body's KA frame into the world.
+- `Q_KA2ENU::MVector{4, Float64}` [-]: Rotation from the body's KA frame into the world.
 - `extra_mass::Union{Nothing, Float64}` [kg]: Optional. Mass the body carries beyond the
   points fixed to it.
-- `extra_inertia_KA::Union{Nothing, SMatrix{3, 3, Float64, 9}}` [kg*m^2]: Optional. Inertia
+- `extra_inertia_KA::Union{Nothing, MMatrix{3, 3, Float64, 9}}` [kg*m^2]: Optional. Inertia
   tensor of `extra_mass` about the body's origin, in its KA axes. Principal moments are the
   case where the KA axes are the principal axes and the tensor is diagonal.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
-struct Body{M <: AbstractModel} <: Component
+mutable struct Body{M <: AbstractModel} <: Component
     name::String
-    pos_ENU::SVector{3, Float64}
-    Q_KA2ENU::SVector{4, Float64}
+    pos_ENU::MVector{3, Float64}
+    Q_KA2ENU::MVector{4, Float64}
     extra_mass::Union{Nothing, Float64}
-    extra_inertia_KA::Union{Nothing, SMatrix{3, 3, Float64, 9}}
+    extra_inertia_KA::Union{Nothing, MMatrix{3, 3, Float64, 9}}
     model::M
 end
 
@@ -278,7 +278,7 @@ element: only a shape its material's law cannot hold, or a taper, is a chain of 
   derived from, at its diameter and pressure.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
-struct Tube{M <: AbstractModel} <: Component
+mutable struct Tube{M <: AbstractModel} <: Component
     name::String
     bodies::NTuple{2, NameRef}
     diameter::Union{Nothing, Float64}

@@ -16,7 +16,7 @@ structure_document
 
 ## Frames
 
-Positions are in the ENU world frame, with the kite at zenith by convention. Each wing gives the origin and rotation of its KA frame, the frame its aerodynamic mesh is drawn in, and `pos_KA` puts a world position into it.
+Positions are in the ENU world frame. Each wing gives the origin and rotation of its KA frame, the frame its aerodynamic mesh is drawn in, and `pos_KA` puts a world position into it.
 
 ```@docs
 pos_KA
@@ -45,10 +45,30 @@ KiteGeometry.definition
 
 ## SymbolicAWEModels' authoring YAML
 
-SymbolicAWEModels authors a system in its wing's KA frame: points at `pos_cad`, tethers by their segment count and stretched length, `variables` shared between rows, and `transforms` that turn the whole to an elevation, azimuth and heading. `load_authoring` converts that dialect into a `SystemDefinition` with the kite at zenith, so `structure_document` writes it as the full-form document. Each segment's stiffness and density become a `linear` material and a tube's `breukels2011` law SymbolicAWEModels' Breukels constants. The columns the schema left to tools, such as a point's `type` and drag, are read only by the models SymbolicAWEModels registers. A `canopy_faces` table with the schema's own columns states each wing's canopy: a face's wing, and its corners by name or index. A filled cell that neither the loader nor the row's model reads is refused, as `load_structure` refuses one, naming the block and its columns, and so is a block it does not read that holds rows; a row's `idx`, where it has one, must be its position. A column a dict row leaves out is an unset cell, which a model field holds only where it admits `nothing`.
+SymbolicAWEModels authors a system in its wing's KA frame: points at `pos_cad`, tethers by their segment count and stretched length, `variables` shared between rows, and `transforms` that turn the whole to an elevation, azimuth and heading. `load_authoring` converts that dialect into a `SystemDefinition` placed by its transforms, and returns those transforms beside it, so `structure_document` writes the full-form document with no transforms in it. Each segment's stiffness and density become a `linear` material and a tube's `breukels2011` law SymbolicAWEModels' Breukels constants. The columns the schema left to tools, such as a point's `type` and drag, are read only by the models SymbolicAWEModels registers. A `canopy_faces` table with the schema's own columns states each wing's canopy: a face's wing, and its corners by name or index. A filled cell that neither the loader nor the row's model reads is refused, as `load_structure` refuses one, naming the block and its columns, and so is a block it does not read that holds rows; a row's `idx`, where it has one, must be its position. A column a dict row leaves out is an unset cell, which a model field holds only where it admits `nothing`.
 
 ```@docs
 load_authoring
+```
+
+## Transforms
+
+A transform turns some of a system's points and bodies, its members, about a base: what it turns goes to an elevation and azimuth seen from that base, and the body it heads to a heading about the radial. Its base is a point moved to a base position, or what another transform turns, so one transform can be chained on another. The transforms are kept beside the definition rather than in it: `place!` applies changed ones to a definition before a run, and `reposition!` and `transform_velocities` act on a `Pose`, the positions and body frames a run holds.
+
+```julia
+system, transforms = load_authoring("kite.yaml"; set)
+transforms[1].elevation = deg2rad(40)
+place!(system, transforms)
+```
+
+```@docs
+Transform
+Pose
+place!
+place_transforms!
+reposition!
+transform_velocities
+calc_heading
 ```
 
 ## Components
@@ -70,12 +90,13 @@ NameRef
 
 ## Models
 
-Every component `T{M}` carries a `model::M`: the parameters a tool attaches to a row by naming a registered model in its `model` column, one extra column per field of `M`, in the units the model was registered with. A table without a `model` column reads the model registered for its block with `default=true`; the writer leaves the `model` column out where every row reads that default, and names each row's model otherwise. A row whose `model` cell is unset or names no registered model, or whose table has no `model` column and whose block has no default, is a `NoModel` component. A model column a table leaves out is unset, refused where its field cannot be `nothing`, and the writer leaves out a model column no row fills. Reading refuses a filled cell in a column neither the schema nor the row's model names, an unregistered model's name included; `strict=false` drops those columns with a warning instead. A component reaches its model's fields as its own, so `tube.EA` reads `tube.model.EA`.
+Every component `T{M}` carries a `model::M`: the parameters a tool attaches to a row by naming a registered model in its `model` column, one extra column per field of `M` that `model_columns(M)` names, in the units the model was registered with. A table without a `model` column reads the model registered for its block with `default=true`; the writer leaves the `model` column out where every row reads that default, and names each row's model otherwise. A row whose `model` cell is unset or names no registered model, or whose table has no `model` column and whose block has no default, is a `NoModel` component. A model column a table leaves out is unset, refused where its field cannot be `nothing`, and the writer leaves out a model column no row fills. Reading refuses a filled cell in a column neither the schema nor the row's model names, an unregistered model's name included; `strict=false` drops those columns with a warning instead. A component reaches its model's fields as its own, so `tube.EA` reads `tube.model.EA` and `tube.EA = 3e5` sets it.
 
 ```@docs
 AbstractModel
 NoModel
 register_model!
+model_columns
 model_type
 SegmentSpring
 ```

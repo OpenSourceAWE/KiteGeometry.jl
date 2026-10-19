@@ -4,7 +4,7 @@
 using KiteGeometry: AWESIO_VERSION, BLOCKS, REFERENCES, NameRef, connectivity_sha
 using JSON
 using OrderedCollections: OrderedDict
-using StaticArrays: SVector
+using StaticArrays: MVector
 using YAML
 
 include("models.jl")
@@ -22,6 +22,15 @@ end
 struct ShadowingBeam <: AbstractModel
     diameter::Float64
 end
+
+"""A tube model with a field of its own beside its columns `EA` and `EI`."""
+mutable struct LinkedBeam <: AbstractModel
+    EA::Float64
+    EI::Float64
+    scratch::Vector{Float64}
+end
+LinkedBeam(EA, EI) = LinkedBeam(EA, EI, Float64[])
+KiteGeometry.model_columns(::Type{LinkedBeam}) = (:EA, :EI)
 
 const FIXTURE = joinpath(@__DIR__, "data", "v3_beam_structure.yml")
 const FIXTURES = (FIXTURE, joinpath(@__DIR__, "data", "v3_psm_structure.yml"))
@@ -75,7 +84,7 @@ end
     @test system.bodies[point.body].name == document["points"]["data"][1][3]
     @test system.materials[system.segments[1].material].law == "linear"
     @test system.materials[system.tubes[1].material].parameters["C19"] == 0.0918
-    @test point.pos_ENU isa SVector{3, Float64}
+    @test point.pos_ENU isa MVector{3, Float64}
     @test all(tube -> tube isa Tube{NoModel}, system.tubes)
     face = system.canopy_faces[1]
     @test system.wings[face.wing].name == document["canopy_faces"]["data"][1][2]
@@ -224,6 +233,50 @@ end
                  model=TestBeam(1, 2))
     @test built isa Tube{TestBeam}
     @test built.EI == 2
+end
+
+"""`f()` with `LinkedBeam` registered as the tube model `test_beam`."""
+function with_linked_beam(f)
+    register_model!(:tubes, "test_beam", LinkedBeam, ("N", "N*m^2"))
+    try
+        return f()
+    finally
+        unregister_model!(:tubes, "test_beam")
+    end
+end
+
+@testset "a model's fields beyond its columns are neither read nor written" begin
+    document = modelled_document()
+    system = with_linked_beam(() -> SystemDefinition(document))
+    tube = system.tubes[1]
+    @test tube.model isa LinkedBeam
+    @test isempty(tube.scratch)
+    push!(tube.scratch, 1.0)
+    @test with_linked_beam(() -> structure_document(system)) == document
+end
+
+@testset "a row's fields and its model's are set in place" begin
+    system = with_linked_beam(() -> SystemDefinition(modelled_document()))
+    point = system.points[1]
+    point.extra_mass = 2.5
+    point.pos_ENU .= [1, 2, 3]
+    @test point.extra_mass == 2.5
+    @test point.pos_ENU == [1, 2, 3]
+    tube = system.tubes[1]
+    tube.EA = 3e5
+    @test tube.model.EA == 3e5
+    written = with_linked_beam(() -> structure_document(system))
+    @test written["points"]["data"][1][4] == [1, 2, 3]
+    @test written["tubes"]["data"][1][end - 1] == 3e5
+end
+
+@testset "rows and models are equal, and hash alike, where every field is" begin
+    one, other = load_structure(FIXTURE), load_structure(FIXTURE)
+    @test one.points == other.points
+    @test hash(one.points[1]) == hash(other.points[1])
+    other.points[1].extra_mass = something(one.points[1].extra_mass, 0.0) + 1
+    @test one.points[1] != other.points[1]
+    @test LinkedBeam(1, 2) == LinkedBeam(1, 2)
 end
 
 @testset "a table without a model column reads the block's default model" begin
