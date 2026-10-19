@@ -139,5 +139,13 @@ end
 @testset "calc_heading is one function shared with KiteUtils" begin
     probe = Module()
     Core.eval(probe, :(using KiteUtils, KiteGeometry))
-    @test Core.eval(probe, :calc_heading) === KiteUtils.calc_heading
+    heading = Core.eval(probe, :calc_heading)
+    @test heading === KiteUtils.calc_heading
+    yawed = [0.0 -1 0; 1 0 0; 0 0 1]
+    @test parentmodule(which(heading, Tuple{Matrix{Float64}, Vector{Float64}})) ==
+          KiteGeometry
+    @test heading(yawed, [0.0, 0, 1]) ≈ π / 2
+    @test parentmodule(which(heading, Tuple{Matrix{Float64}, Float64, Float64})) ==
+          KiteUtils
+    @test isfinite(heading(yawed, deg2rad(30), 0.0))
 end
