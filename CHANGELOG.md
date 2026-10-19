@@ -5,6 +5,12 @@ SPDX-License-Identifier: MIT
 
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `Metadata(; name, n_points)` builds metadata by keyword, with the other fields defaulting to an empty description and note, the awesIO version this package reads, the structure schema, and an empty `connectivity_sha`.
+
 ## KiteGeometry v0.3.0 2026-10-18
 
 ### Added
