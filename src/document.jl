@@ -5,22 +5,25 @@
 const REFERENCES = Dict(
     (:points, :body) => :bodies,
     (:segments, :points) => :points,
-    (:stations, :wing) => :wings,
-    (:stations, :points) => :points,
+    (:segments, :material) => :materials,
+    (:spanwise_stations, :wing) => :wings,
+    (:spanwise_stations, :points) => :points,
     (:pulleys, :segments) => :segments,
     (:tethers, :start_point) => :points,
     (:tethers, :end_point) => :points,
     (:tethers, :segments) => :segments,
     (:winches, :tethers) => :tethers,
     (:winches, :winch_point) => :points,
+    (:wings, :canopy_material) => :materials,
     (:canopy_faces, :wing) => :wings,
     (:canopy_faces, :points) => :points,
     (:tubes, :bodies) => :bodies,
+    (:tubes, :material) => :materials,
 )
 
 """
-    SystemDefinition(; metadata, points, segments, stations, pulleys, tethers, winches,
-                     wings, canopy_faces, bodies, tubes, extras)
+    SystemDefinition(; metadata, materials, points, segments, spanwise_stations, pulleys,
+                     tethers, winches, wings, canopy_faces, bodies, tubes, extras)
 
 A system definition from its components, every reference resolved to the index of the
 component it names. Absent blocks are empty; `extras` holds the blocks the schema does not
@@ -200,6 +203,27 @@ The `SystemDefinition` in the JSON structure document a log carries under the ke
 definition(topology::AbstractString; strict=true) = from_json(topology; strict)
 
 """
+    definition(log::SysLog; strict=true)
+
+The `SystemDefinition` a log loaded by `load_log` carries under its metadata key
+`topology`.
+"""
+definition(log::SysLog; strict=true) = definition(log.metadata["topology"]; strict)
+
+"""
+    save_log(logger::Logger, system::SystemDefinition, name="sim_log", compress=true;
+             metadata=Dict{String, String}(), kwargs...)
+
+`save_log(logger, name, compress; metadata, kwargs...)` with `system` added to
+`metadata` as JSON under the key `topology`, which `KiteGeometry.definition` reads back.
+"""
+function KiteUtils.save_log(logger::Logger, system::SystemDefinition, name="sim_log",
+                            compress=true; metadata=Dict{String, String}(), kwargs...)
+    metadata = merge(metadata, Dict("topology" => to_json(system)))
+    return save_log(logger, name, compress; metadata, kwargs...)
+end
+
+"""
     to_yaml(system::SystemDefinition)
 
 `structure_document(system)` as YAML text.
@@ -213,16 +237,17 @@ to_yaml(system::SystemDefinition) = YAML.write(structure_document(system))
 """
 to_json(system::SystemDefinition) = JSON.json(structure_document(system); pretty=true)
 
-"""The names of the columns of `T` that the schema requires, in order."""
-required_columns(T) = filter(!=(:model), fieldnames(T))
+"""The names of the columns of `block` that the schema requires, in order."""
+required_columns(block) = fieldnames(BLOCKS[block])[eachindex(UNITS[block])]
 
-"""The components in the `headers`/`units`/`data` table of `block`, refusing a filled
-column they do not read unless `strict` is false, which warns."""
+"""The components in the `headers`/`units`/`data` table of `block`: the required columns
+leading, then optional and model columns by header. Refuses a filled column they do not read
+unless `strict` is false, which warns."""
 function read_table(block, table, strict)
     T = BLOCKS[block]
     headers = table["headers"]
     units = get(table, "units", nothing)
-    columns = required_columns(T)
+    columns = required_columns(block)
     n = length(columns)
     length(headers) >= n && Symbol.(headers[1:n]) == collect(columns) ||
         throw(ArgumentError("$block headers must open with $(join(columns, ", "))"))
@@ -234,6 +259,9 @@ function read_table(block, table, strict)
         length(row) == length(headers) || throw(ArgumentError(
             "a $block row has $(length(row)) of $(length(headers)) cells"))
     end
+    optional = optional_column_indices(block, headers, units)
+    open_columns = [index for index in (n + 1):length(headers)
+                    if !(index in values(optional))]
     model_column = findfirst(==("model"), headers)
     components = T[]
     unread = OrderedSet{String}()
@@ -242,8 +270,9 @@ function read_table(block, table, strict)
         model = row_model(block, name) do M, field, unit
             model_field(M, field, unit, headers, units, row)
         end
-        push!(components, T(; zip(columns, row[1:n])..., model))
-        union!(unread, unread_columns(headers[(n + 1):end], row[(n + 1):end], model))
+        push!(components, T(; zip(columns, row[1:n])...,
+                            (field => row[index] for (field, index) in optional)..., model))
+        union!(unread, unread_columns(headers[open_columns], row[open_columns], model))
     end
     isempty(unread) && return components
     message = "$block columns $(join(unread, ", ")) name no field of the schema or of a " *
@@ -253,21 +282,35 @@ function read_table(block, table, strict)
     return components
 end
 
+"""The index of each optional column of `block` among `headers`, refusing one whose unit
+is not the schema's."""
+function optional_column_indices(block, headers, units)
+    indices = Dict{Symbol, Int}()
+    for (field, unit) in pairs(OPTIONAL_UNITS[block])
+        index = findfirst(==(String(field)), headers)
+        isnothing(index) && continue
+        units[index] == unit ||
+            throw(ArgumentError("the $field column of $block must be in $unit"))
+        indices[field] = index
+    end
+    return indices
+end
+
 """The `headers` of the filled `cells` that `model` does not read."""
 function unread_columns(headers, cells, model)
-    read = model isa NoModel ? () : ("model", String.(fieldnames(typeof(model)))...)
+    read = model isa NoModel ? () : ("model", String.(model_columns(typeof(model)))...)
     return (header for (header, cell) in zip(headers, cells)
             if !isnothing(cell) && !(header in read))
 end
 
-"""The `field` of the model `M` in `row`, from the column of that name. Refuses a column
-that is absent or not in the registered `unit`."""
+"""The `field` of the model `M` in `row`, from the column of that name, unset where the
+column is absent. Refuses a column not in the registered `unit`."""
 function model_field(M, field, unit, headers, units, row)
     column = findfirst(==(String(field)), headers)
-    isnothing(column) && throw(ArgumentError("model $M needs a $field column"))
+    isnothing(column) && return model_value(M, field, nothing)
     units[column] == unit ||
         throw(ArgumentError("the $field column of model $M must be in $unit"))
-    return to_field(fieldtype(M, field), row[column])
+    return model_value(M, field, row[column])
 end
 
 """
@@ -275,8 +318,8 @@ end
 
 The awesIO structure document of `system`, as `SystemDefinition` reads it: references by
 name, model columns after the schema's, extra blocks after the schema's, empty optional
-blocks left out. Its `awesIO_version` is `AWESIO_VERSION` and its `connectivity_sha` that of
-`system`'s own tables, whatever `system.metadata` holds.
+blocks and unset optional columns left out. Its `awesIO_version` is `AWESIO_VERSION` and its
+`connectivity_sha` that of `system`'s own tables, whatever `system.metadata` holds.
 """
 function structure_document(system::SystemDefinition)
     metadata = OrderedDict{String, Any}(String(field) => getfield(system.metadata, field)
@@ -292,15 +335,21 @@ function structure_document(system::SystemDefinition)
     return merge!(document, system.extras)
 end
 
-"""The `headers`/`units`/`data` table of the components `rows` of `block`: the schema's
-columns, then the `model` column and the columns of each row's model where a row has one."""
+"""The `headers`/`units`/`data` table of the components `rows` of `block`: the required
+columns and the optional columns a row fills, then each column of a row's model that a row
+fills, after the `model` column unless every row reads the block's default model."""
 function write_table(system, block, rows)
-    columns = required_columns(BLOCKS[block])
+    filled = [field for field in keys(OPTIONAL_UNITS[block])
+              if any(row -> !isnothing(getfield(row, field)), rows)]
+    columns = (required_columns(block)..., filled...)
     registrations = [model_registration(block, typeof(row.model)) for row in rows]
     model_units = OrderedDict{String, String}()
+    any(!isnothing, registrations) &&
+        !all(reads_default.(registrations, block)) && (model_units["model"] = "-")
     for model in unique(filter(!isnothing, registrations))
-        model_units["model"] = "-"
-        for (field, unit) in zip(fieldnames(model.type), model.units)
+        for (field, unit) in zip(model_columns(model.type), model.units)
+            any(row -> row.model isa model.type && !isnothing(getfield(row.model, field)),
+                rows) || continue
             get!(model_units, String(field), unit) == unit || throw(ArgumentError(
                 "two $block models give the column $field different units"))
         end
@@ -313,23 +362,30 @@ function write_table(system, block, rows)
             for (row, registration) in zip(rows, registrations)]
     return OrderedDict{String, Any}(
         "headers" => [String.(columns)..., keys(model_units)...],
-        "units" => [UNITS[block]..., values(model_units)...],
+        "units" => [UNITS[block]..., (OPTIONAL_UNITS[block][field] for field in filled)...,
+                    values(model_units)...],
         "data" => data)
+end
+
+"""Whether a row registered as `registration` reads the default model of `block`."""
+function reads_default(registration, block)
+    return !isnothing(registration) && registration.name == default_model(block)
 end
 
 """The cell of `model`, registered as `registration`, in the model column `header`: the
 registered name for `model`, else the field of that name, `nothing` where it has none."""
 function model_cell(model, registration, header)
     header == "model" && return isnothing(registration) ? nothing : registration.name
-    hasfield(typeof(model), Symbol(header)) || return nothing
+    Symbol(header) in model_columns(typeof(model)) || return nothing
     return document_value(getfield(model, Symbol(header)), nothing, nothing)
 end
 
 """`value` as a structure document writes it, a reference into `target` by name."""
 document_value(value, ::Nothing, system) = value
-document_value(value::DynamicsType, ::Nothing, system) = string(value)
-document_value(value::SVector, ::Nothing, system) = collect(value)
-document_value(value::SMatrix, ::Nothing, system) = [collect(row) for row in eachrow(value)]
+document_value(value::StaticVector, ::Nothing, system) = collect(value)
+function document_value(value::StaticMatrix, ::Nothing, system)
+    return [collect(row) for row in eachrow(value)]
+end
 document_value(::Nothing, target::Symbol, system) = nothing
 document_value(index::Int, target::Symbol, system) = getfield(system, target)[index].name
 document_value(name::String, target::Symbol, system) = name

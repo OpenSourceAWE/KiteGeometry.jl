@@ -6,20 +6,20 @@ const IDENTITY_QUATERNION = SVector(1.0, 0.0, 0.0, 0.0)
 """
     defaults(T)
 
-The keyword arguments a `T(; kwargs...)` constructor fills in when they are not given.
+The keyword arguments a `T(; kwargs...)` constructor fills in when they are not given: every
+optional column unset, `default_values(T)`, and no model.
 """
-defaults(::Type{<:Component}) = (; model=NoModel())
-function defaults(::Type{<:Point})
-    return (; type=DYNAMIC, body=nothing, extra_mass=0.0, drag_area=0.0,
-            drag_coefficient=0.0, defaults(Component)...)
+function defaults(T::Type{<:Component})
+    block = findfirst(==(Base.typename(T).wrapper), BLOCKS)
+    unset = NamedTuple(field => nothing for field in keys(OPTIONAL_UNITS[block]))
+    return (; unset..., default_values(T)..., model=NoModel())
 end
-defaults(::Type{<:Station}) = (; type=DYNAMIC, defaults(Component)...)
-defaults(::Type{<:Pulley}) = (; type=DYNAMIC, efficiency=1.0, defaults(Component)...)
-defaults(::Type{<:Winch}) = (; gear_ratio=1.0, defaults(Component)...)
-function defaults(::Type{<:Body})
-    return (; type=DYNAMIC, Q_KA_to_ENU=IDENTITY_QUATERNION, extra_mass=0.0,
-            extra_inertia_KA=zeros(SMatrix{3, 3, Float64}), defaults(Component)...)
-end
+
+"""The required columns of `T` its constructor fills in: a free point of its own, and the
+identity rotation of a wing's or a body's frame."""
+default_values(::Type{<:Component}) = (;)
+default_values(::Type{<:Point}) = (; fixed=false, body=nothing)
+default_values(::Type{<:Union{Wing, Body}}) = (; Q_KA2ENU=IDENTITY_QUATERNION)
 
 """
     T(; kwargs...) where {T <: Component}
@@ -42,12 +42,24 @@ end
 `value`, as a keyword argument or a structure document gives it, as a field of type `T`.
 """
 to_field(T, value) = convert(T, value)
-function to_field(::Type{DynamicsType}, name::AbstractString)
-    for type in instances(DynamicsType)
-        string(type) == name && return type
-    end
-    throw(ArgumentError("no dynamics type $name"))
-end
+to_field(::Type{Union{Nothing, T}}, value) where {T} = isnothing(value) ? nothing :
+                                                    to_field(T, value)
+to_field(::Type{Any}, value) = value
 to_field(T::Type{<:Tuple}, value::AbstractVector) = convert(T, Tuple(value))
-to_field(T::Type{<:SMatrix}, rows::AbstractVector) = T(permutedims(reduce(hcat, rows)))
-to_field(::Type{Union{Float64, String}}, value::Real) = Float64(value)
+to_field(T::Type{<:StaticMatrix}, rows::AbstractVector) =
+    T(permutedims(reduce(hcat, rows)))
+to_field(T::Type{<:OrderedDict}, value::AbstractDict) = T(value)
+to_field(::Type{Union{Nothing, Float64, Vector{Float64}}}, value::Real) = Float64(value)
+function to_field(::Type{Union{Nothing, Float64, Vector{Float64}}}, value::AbstractVector)
+    return Vector{Float64}(value)
+end
+
+"""
+    pos_KA(wing::Wing, pos_ENU)
+
+The position `pos_ENU` [m] in the world, in `wing`'s KA frame: `Rᵀ (pos_ENU − o)`, with `o`
+the wing's `pos_ENU` and `R` the rotation of its `Q_KA2ENU`.
+"""
+function pos_KA(wing::Wing, pos_ENU)
+    return quaternion_to_rotation_matrix(wing.Q_KA2ENU)' * (pos_ENU - wing.pos_ENU)
+end

@@ -1,0 +1,15 @@
+variables:
+  dyneema:
+    youngs_modulus: 55.0e9
+    damping_per_stiffness: 0.00077
+
+points:
+  headers: [name, pos_cad, type]
+  data:
+    - [anchor, [0.0, 0.0, 0.0], STATIC]
+    - [top, [0.0, 0.0, -10.0], DYNAMIC]
+
+segments:
+  headers: [name, point_i, point_j, youngs_modulus, compression_frac]
+  data:
+    - [line, anchor, top, dyneema, 0.01]

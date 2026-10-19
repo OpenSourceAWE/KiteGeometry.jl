@@ -27,18 +27,14 @@ COLUMN_TYPES = Dict(
     "name_pair" => "NTuple{2, NameRef}",
     "name_list" => "Vector{NameRef}",
     "face_corners" => "Vector{NameRef}",
-    "vec3" => "SVector{3, Float64}",
-    "matrix3" => "SMatrix{3, 3, Float64, 9}",
-    "quaternion" => "SVector{4, Float64}",
+    "vec3" => "MVector{3, Float64}",
+    "matrix3" => "MMatrix{3, 3, Float64, 9}",
+    "quaternion" => "MVector{4, Float64}",
     "length" => "Float64",
-    "density" => "Float64",
     "non_negative" => "Float64",
-    "fraction" => "Float64",
-    "rigidity" => "Union{Float64, String}",
-    "model_name" => "String",
-    "dynamics_type" => "DynamicsType",
 )
-METADATA_TYPES = Dict("string" => "String", "integer" => "Int")
+JSON_TYPES = Dict("string" => "String", "integer" => "Int", "boolean" => "Bool",
+                  "object" => "OrderedDict{String, Any}")
 
 """Julia type name of the rows of `block`: `bodies` gives `Body`, `canopy_faces`
 `CanopyFace`."""
@@ -80,9 +76,10 @@ end
 """Definition name a `data` item refers to, from its `\$ref`."""
 definition(item) = last(split(item["\$ref"], "/"))
 
-"""Julia type of a `data` item: its definition's, or that or `nothing` for a `oneOf`
-of a definition and null."""
+"""Julia type of a `data` item: its JSON type's, its definition's, or that or `nothing`
+for a `oneOf` of a definition and null."""
 function column_type(item)
+    haskey(item, "type") && return JSON_TYPES[item["type"]]
     haskey(item, "oneOf") || return COLUMN_TYPES[definition(item)]
     options = item["oneOf"]
     references = filter(option -> haskey(option, "\$ref"), options)
@@ -110,15 +107,34 @@ function columns(block, spec)
     return fields
 end
 
+"""`type` or `nothing`, as Julia source."""
+optional_type(type) = startswith(type, "Union{Nothing, ") ? type : "Union{Nothing, $type}"
+
+"""`(header, Julia type, description, unit)` of every optional column of a block's `spec`,
+its type admitting `nothing`."""
+function optional_columns(spec)
+    return [(name, optional_type(column_type(column["value"])),
+             "Optional. " * column["description"], column["unit"])
+            for (name, column) in get(spec, "optionalColumns", ())]
+end
+
+"""Source of the named tuple of the unit of each optional column of a block's `spec`."""
+function optional_units_source(spec)
+    entries = ["$name = $(repr(unit))" for (name, _, _, unit) in optional_columns(spec)]
+    isempty(entries) && return "(;)"
+    length(entries) == 1 && return "($(only(entries)),)"
+    return "($(join(entries, ", ")))"
+end
+
 """Source of the struct holding one row of `block`."""
 function component_source(block, spec)
-    fields = columns(block, spec)
+    fields = [columns(block, spec); optional_columns(spec)]
     push!(fields, ("model", "M", "the model the `model` column names, else `NoModel`", "-"))
     name = type_name(block)
     description = "A row of the `$block` block. " * get(spec, "description", "")
     body = join(("    $field::$type" for (field, type) in fields), "\n")
     return docstring("$name{M}", description, fields) *
-           "struct $name{M <: AbstractModel} <: Component\n$body\nend\n"
+           "mutable struct $name{M <: AbstractModel} <: Component\n$body\nend\n"
 end
 
 """Source of `Metadata`, from the schema's `metadata` object."""
@@ -126,7 +142,7 @@ function metadata_source(spec)
     fields = Tuple{String, String, String, String}[]
     for name in spec["required"]
         property = spec["properties"][name]
-        type = METADATA_TYPES[property["type"]]
+        type = JSON_TYPES[property["type"]]
         push!(fields, (name, type, get(property, "description", ""), "-"))
     end
     body = join(("    $field::$type" for (field, type) in fields), "\n")
@@ -134,15 +150,8 @@ function metadata_source(spec)
            "struct Metadata\n$body\nend\n"
 end
 
-"""Source of `DynamicsType`, from the schema's `dynamics_type` definition."""
-function enum_source(spec)
-    values = join(spec["enum"], " ")
-    return "\"\"\"\n    DynamicsType\n\n$(wrap(spec["description"]))\n\"\"\"\n" *
-           "@enum DynamicsType $values\n"
-end
-
-"""Source of `SystemDefinition`, one vector per table block, and of `BLOCKS` and
-`UNITS`."""
+"""Source of `SystemDefinition`, one vector per table block, and of `BLOCKS`, `UNITS`
+and `OPTIONAL_UNITS`."""
 function system_source(schema, blocks)
     fields = [("metadata", "Metadata", "the document's metadata", "-")]
     for (block, _) in blocks
@@ -154,6 +163,8 @@ function system_source(schema, blocks)
     table = join(("    $block = $(type_name(block)),\n" for (block, _) in blocks))
     units = join(("    $block = ($(join(repr.(last.(columns(block, spec))), ", "))),\n"
                   for (block, spec) in blocks))
+    optional_units = join(("    $block = $(optional_units_source(spec)),\n"
+                           for (block, spec) in blocks))
     required = join((":$block" for block in schema["required"]), ", ")
     description = "A structure document: its metadata, one vector per table block, and " *
                   "the blocks the schema does not name."
@@ -163,6 +174,8 @@ function system_source(schema, blocks)
            "const BLOCKS = (\n$table)\n\n" *
            "\"\"\"The unit of each required column of each table block, in order.\"\"\"\n" *
            "const UNITS = (\n$units)\n\n" *
+           "\"\"\"The unit of each optional column of each table block, by name.\"\"\"\n" *
+           "const OPTIONAL_UNITS = (\n$optional_units)\n\n" *
            "\"\"\"The blocks a structure document must carry.\"\"\"\n" *
            "const REQUIRED_BLOCKS = ($required)\n"
 end
@@ -177,8 +190,7 @@ end
 function structure_source(schema)
     properties = schema["properties"]
     blocks = [(name, spec) for (name, spec) in properties if name != "metadata"]
-    parts = [HEADER, version_source(), enum_source(schema["definitions"]["dynamics_type"]),
-             metadata_source(properties["metadata"]),
+    parts = [HEADER, version_source(), metadata_source(properties["metadata"]),
              (component_source(block, spec) for (block, spec) in blocks)...,
              system_source(schema, blocks)]
     return join(parts, "\n")
