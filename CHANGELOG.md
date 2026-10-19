@@ -11,6 +11,7 @@ SPDX-License-Identifier: MIT
 
 - A block's rows are `Rows`, found by their name as well as their position: `system.points[:kite]` and `system.points["kite"]`. `load_authoring` returns its transforms as `Rows` too.
 - `load_authoring(authored::AbstractDict; set, name)` loads a parsed authoring document, so a tool can build one in code rather than write a file.
+- `Metadata(; name, n_points)` builds metadata by keyword, with the other fields defaulting to an empty description and note, the awesIO version this package reads, the structure schema, and an empty `connectivity_sha`.
 
 ## KiteGeometry v0.3.0 2026-10-18
 
@@ -57,7 +58,7 @@ SPDX-License-Identifier: MIT
 
 - `save_log(logger, system, name)` saves a KiteUtils log with the `SystemDefinition` `system` in its metadata under `topology`, and `KiteGeometry.definition(log)` reads it back from a log `load_log` loaded.
 
-## KiteGeometry v0.1.0 09-10-2026
+## KiteGeometry v0.1.0 2026-10-09
 
 ### Added
 

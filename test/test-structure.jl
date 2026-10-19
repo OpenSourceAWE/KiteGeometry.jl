@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Bart van de Lint
 # SPDX-License-Identifier: MIT
 
-using KiteGeometry: BLOCKS, REFERENCES, NameRef, connectivity_sha
+using KiteGeometry: AWESIO_VERSION, BLOCKS, REFERENCES, NameRef, connectivity_sha
 using JSON
 using OrderedCollections: OrderedDict
 using StaticArrays: MVector
@@ -66,7 +66,7 @@ function line_segment(kite="kite")
 end
 
 function small_system(; kwargs...)
-    metadata = Metadata("small", "", "", "0.1.0", "structure_schema.yml", 2, "0"^64)
+    metadata = Metadata(; name="small", n_points=2, connectivity_sha="0"^64)
     points = [Point(; name="anchor", fixed=true, pos_ENU=[0, 0, 0]),
               Point(; name="kite", pos_ENU=[0, 0, 100])]
     return SystemDefinition(; metadata, points, segments=[line_segment()], kwargs...)
@@ -334,9 +334,14 @@ end
     @test system.segments[:spare].points == (1, 2)
 end
 
+@testset "metadata by keyword defaults to this awesIO version and an empty checksum" begin
+    @test Metadata(; name="small", n_points=2) ==
+          Metadata("small", "", "", AWESIO_VERSION, "structure_schema.yml", 2, "")
+end
+
 @testset "a point count the points disagree with is refused" begin
     points = small_system().points
-    metadata = Metadata("small", "", "", "0.1.0", "structure_schema.yml", 3, "0"^64)
+    metadata = Metadata(; name="small", n_points=3, connectivity_sha="0"^64)
     @test_throws ArgumentError SystemDefinition(; metadata, points)
 end
 

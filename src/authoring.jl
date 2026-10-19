@@ -902,8 +902,7 @@ function load_authoring(authored::AbstractDict; set::Settings, name::AbstractStr
                         extra_mass=authored.particle ? 0.0 : authored.extra_mass,
                         extra_inertia_KA=zero(Mat3), model=added_row_model(:bodies))
                    for (wing, authored) in zip(wings, authored_wings)]
-    metadata = Metadata(name, "", "", AWESIO_VERSION, "structure_schema.yml",
-                        length(points), "")
+    metadata = Metadata(; name, n_points=length(points))
     authored_transforms = read_transforms(data)
     first_transform = isempty(authored_transforms) ? nothing : 1
     body_transforms = [[something(wing.transform, Some(first_transform))
