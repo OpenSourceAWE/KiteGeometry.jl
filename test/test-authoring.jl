@@ -265,6 +265,17 @@ end
     @test model_type(:segments, "spring") === SegmentSpring
 end
 
+@testset "place=false leaves every authored point where its YAML puts it" begin
+    for file in AUTHORING_SYSTEMS
+        authored = YAML.load_file(joinpath(KITE, file))["points"]
+        system, transforms = load_authoring(joinpath(KITE, file); set=kite_settings(),
+                                            place=false)
+        @test all(system.points[name].pos_ENU == pos_cad for (name, pos_cad) in
+                  zip(column(authored, "name"), column(authored, "pos_cad")))
+        @test rad2deg(only(transforms).elevation) ≈ 50
+    end
+end
+
 @testset "the tether is placed at its stretched length, its points evenly along it" begin
     system = load_kite("particle_structural_geometry.yaml")
     tether = only(system.tethers)

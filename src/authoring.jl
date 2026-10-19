@@ -851,8 +851,10 @@ function holds_rows(table)
 end
 
 """
-    load_authoring(path; set::Settings, name, ignore_l0=false) -> (system, transforms)
-    load_authoring(authored::AbstractDict; set::Settings, name, ignore_l0=false)
+    load_authoring(path; set::Settings, name, ignore_l0=false, place=true)
+        -> (system, transforms)
+    load_authoring(authored::AbstractDict; set::Settings, name, ignore_l0=false,
+                   place=true)
 
 The `SystemDefinition` SymbolicAWEModels' authoring YAML at `path` describes, or the parsed
 authoring document `authored`, and its `Transform`s, as `Rows`. The definition is placed:
@@ -864,17 +866,18 @@ body its wing's, else the first transform.
 radius. Each distinct line material is named after the multi-variable giving it, else
 after its first segment.
 `name` is the metadata name, the file's by default for a path; `ignore_l0` makes every rest
-length the placed length. Each non-empty block it does not read is kept as an extra block;
+length the placed length. With `place=false` the definition is left in its design pose,
+for a tool that places it itself. Each non-empty block it does not read is kept as an extra block;
 one named after a block of the structure document, or holding a single value, is refused.
 """
 function load_authoring(path::AbstractString; set::Settings,
-                        name=first(splitext(basename(path))), ignore_l0=false)
+                        name=first(splitext(basename(path))), ignore_l0=false, place=true)
     authored = YAML.load_file(path; dicttype=OrderedDict{String, Any})
-    return load_authoring(authored; set, name, ignore_l0)
+    return load_authoring(authored; set, name, ignore_l0, place)
 end
 
 function load_authoring(authored::AbstractDict; set::Settings, name::AbstractString,
-                        ignore_l0=false)
+                        ignore_l0=false, place=true)
     variables = yaml_variables(authored)
     data = resolve_yaml_variables(authored, variables)
     for key in ("materials", "elements", "segment_properties")
@@ -919,7 +922,7 @@ function load_authoring(authored::AbstractDict; set::Settings, name::AbstractStr
                                     point_transforms, body_transforms)
     placement = design_pose(draft, set, point_wings, authored_wings, authored_bodies, inits)
     design = copy(Pose(placement))
-    place_authored!(placement, design, transforms; ignore_l0)
+    place && place_authored!(placement, design, transforms; ignore_l0)
     return placed_definition(placement, design), Rows{Transform}(transforms)
 end
 
