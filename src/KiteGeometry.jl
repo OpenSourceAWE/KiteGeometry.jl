@@ -35,10 +35,10 @@ public definition
 """
     NameRef
 
-A reference to another component: its name as a document writes it, or its index into
-its block once a `SystemDefinition` has resolved it.
+A reference to another component: its name, as a `Symbol`, or its index into its block
+once a `SystemDefinition` has resolved it.
 """
-const NameRef = Union{Int, String}
+const NameRef = Union{Int, Symbol}
 
 """
     Component

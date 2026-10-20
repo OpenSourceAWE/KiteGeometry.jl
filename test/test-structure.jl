@@ -81,13 +81,13 @@ end
     @test system.metadata.n_points == length(system.points)
     point = system.points[1]
     @test !point.fixed
-    @test system.bodies[point.body].name == document["points"]["data"][1][3]
+    @test system.bodies[point.body].name == Symbol(document["points"]["data"][1][3])
     @test system.materials[system.segments[1].material].law == "linear"
     @test system.materials[system.tubes[1].material].parameters["C19"] == 0.0918
     @test point.pos_ENU isa MVector{3, Float64}
     @test all(tube -> tube isa Tube{NoModel}, system.tubes)
     face = system.canopy_faces[1]
-    @test system.wings[face.wing].name == document["canopy_faces"]["data"][1][2]
+    @test system.wings[face.wing].name == Symbol(document["canopy_faces"]["data"][1][2])
     @test system.spanwise_stations[1].wing == face.wing
     @test system.wings[face.wing].Q_KA2ENU == [1, 0, 0, 0]
     @test isempty(system.extras)

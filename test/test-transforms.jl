@@ -44,10 +44,10 @@ end
 @testset "each transform holds the points and bodies naming it" begin
     system, (main_tf, kite_tilt) = load_chained()
     @test row_names(main_tf.points, system.points) ==
-          ["kcu", "nose", ("main_tether_point_$i" for i in 1:3)...]
+          [:kcu, :nose, (Symbol("main_tether_point_", i) for i in 1:3)...]
     @test row_names(kite_tilt.points, system.points) ==
-          ["top", "left", "right", "kite_origin"]
-    @test isempty(main_tf.bodies) && row_names(kite_tilt.bodies, system.bodies) == ["kite"]
+          [:top, :left, :right, :kite_origin]
+    @test isempty(main_tf.bodies) && row_names(kite_tilt.bodies, system.bodies) == [:kite]
     @test kite_tilt.base_transform == 1 && kite_tilt.rot_point == [7 => 1.0]
     @test isnothing(main_tf.body) && kite_tilt.body == 1
     @test rad2deg(kite_tilt.heading) ≈ 25

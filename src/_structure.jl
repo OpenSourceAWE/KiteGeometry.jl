@@ -54,7 +54,7 @@ Any other law is free: it names a model its readers implement, and that model fi
 parameters. A reader that does not implement a material's law cannot build the elements
 naming it.
 
-- `name::String`: Unique name of the material.
+- `name::Symbol`: Unique name of the material.
 - `law::String`: Name of the stiffness law: `linear`, `membrane` or `breukels2011` as
   defined below, or any law its readers implement.
 - `parameters::OrderedDict{String, Any}`: The law's parameters, by name, in the units the
@@ -62,7 +62,7 @@ naming it.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct Material{M <: AbstractModel} <: Component
-    name::String
+    name::Symbol
     law::String
     parameters::OrderedDict{String, Any}
     model::M
@@ -73,7 +73,7 @@ end
 
 A row of the `points` block. Mass points.
 
-- `name::String`: Unique name of the point. A writer whose geometry is index-keyed writes
+- `name::Symbol`: Unique name of the point. A writer whose geometry is index-keyed writes
   the index as a string, "1" upwards.
 - `fixed::Bool`: True where the point is held in the world, false where it is free or moves
   with its `body`.
@@ -85,7 +85,7 @@ A row of the `points` block. Mass points.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct Point{M <: AbstractModel} <: Component
-    name::String
+    name::Symbol
     fixed::Bool
     body::Union{Nothing, NameRef}
     pos_ENU::MVector{3, Float64}
@@ -98,7 +98,7 @@ end
 
 A row of the `segments` block. Straight elastic elements between two points.
 
-- `name::String`: Unique name of the segment.
+- `name::Symbol`: Unique name of the segment.
 - `points::NTuple{2, NameRef}`: The two points the segment joins.
 - `rest_length::Union{Nothing, Float64}` [m]: Optional. Unstretched length.
 - `diameter::Union{Nothing, Float64}` [m]: Optional. Diameter of the line, for its mass,
@@ -107,7 +107,7 @@ A row of the `segments` block. Straight elastic elements between two points.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct Segment{M <: AbstractModel} <: Component
-    name::String
+    name::Symbol
     points::NTuple{2, NameRef}
     rest_length::Union{Nothing, Float64}
     diameter::Union{Nothing, Float64}
@@ -125,13 +125,13 @@ chord has turned through about the wing's KA y axis from where the document plac
 positive pitching the leading edge up. A station is not tied to the aerodynamic mesh. A
 wing's stations run from +y to -y of its KA frame.
 
-- `name::String`: Unique name of the station.
+- `name::Symbol`: Unique name of the station.
 - `wing::NameRef`: The wing the station is a section of.
 - `points::Vector{NameRef}`: The points the section is made of.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct SpanwiseStation{M <: AbstractModel} <: Component
-    name::String
+    name::Symbol
     wing::NameRef
     points::Vector{NameRef}
     model::M
@@ -142,12 +142,12 @@ end
 
 A row of the `pulleys` block.
 
-- `name::String`: Unique name of the pulley.
+- `name::Symbol`: Unique name of the pulley.
 - `segments::NTuple{2, NameRef}`: The two segments the pulley trades length between.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct Pulley{M <: AbstractModel} <: Component
-    name::String
+    name::Symbol
     segments::NTuple{2, NameRef}
     model::M
 end
@@ -159,7 +159,7 @@ A row of the `tethers` block. Ordered runs of segments between two points. Mater
 the segments; a tether is the grouping a winch reels, and the length it is reeled from is
 its segments' `rest_length`.
 
-- `name::String`: Unique name of the tether.
+- `name::Symbol`: Unique name of the tether.
 - `start_point::NameRef`: The point the tether starts at.
 - `end_point::NameRef`: The point the tether ends at.
 - `segments::Vector{NameRef}`: The tether's segments, in order from `start_point` to
@@ -167,7 +167,7 @@ its segments' `rest_length`.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct Tether{M <: AbstractModel} <: Component
-    name::String
+    name::Symbol
     start_point::NameRef
     end_point::NameRef
     segments::Vector{NameRef}
@@ -179,7 +179,7 @@ end
 
 A row of the `winches` block.
 
-- `name::String`: Unique name of the winch.
+- `name::Symbol`: Unique name of the winch.
 - `tethers::Vector{NameRef}`: The tethers the winch reels together.
 - `winch_point::NameRef`: The point the drum sits at.
 - `gear_ratio::Union{Nothing, Float64}` [-]: Optional. Gear ratio of the drive to the drum.
@@ -187,7 +187,7 @@ A row of the `winches` block.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct Winch{M <: AbstractModel} <: Component
-    name::String
+    name::Symbol
     tethers::Vector{NameRef}
     winch_point::NameRef
     gear_ratio::Union{Nothing, Float64}
@@ -201,7 +201,7 @@ end
 A row of the `wings` block. Lifting surfaces, each with the stations that section it and at
 most one canopy, meshed by the `canopy_faces` that name the wing.
 
-- `name::String`: Unique name of the wing.
+- `name::Symbol`: Unique name of the wing.
 - `pos_ENU::MVector{3, Float64}` [m]: The origin of the wing's KA frame, the frame its
   aerodynamic mesh is drawn in, in the world. A position, not necessarily a point.
 - `Q_KA2ENU::MVector{4, Float64}` [-]: Rotation from the wing's KA frame into the world.
@@ -210,7 +210,7 @@ most one canopy, meshed by the `canopy_faces` that name the wing.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct Wing{M <: AbstractModel} <: Component
-    name::String
+    name::Symbol
     pos_ENU::MVector{3, Float64}
     Q_KA2ENU::MVector{4, Float64}
     canopy_material::Union{Nothing, NameRef}
@@ -224,13 +224,13 @@ A row of the `canopy_faces` block. Triangles and quadrilaterals of fabric spanne
 points, whose mass a reader shares among the corners. How the fabric carries load, as a
 membrane or as springs along its edges, is the reader's model.
 
-- `name::String`: Unique name of the face.
+- `name::Symbol`: Unique name of the face.
 - `wing::NameRef`: The wing whose canopy the face belongs to.
 - `points::Vector{NameRef}`: The face's three or four corners, in order around it.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct CanopyFace{M <: AbstractModel} <: Component
-    name::String
+    name::Symbol
     wing::NameRef
     points::Vector{NameRef}
     model::M
@@ -243,7 +243,7 @@ A row of the `bodies` block. Rigid bodies. A body's KA frame is oriented as
 docs/source/conventions.rst defines `_KA` where the body has wing geometry, and as its
 writer likes where it has no leading edge.
 
-- `name::String`: Unique name of the body.
+- `name::Symbol`: Unique name of the body.
 - `pos_ENU::MVector{3, Float64}` [m]: The body's origin, the centre of its own mass, in the
   world.
 - `Q_KA2ENU::MVector{4, Float64}` [-]: Rotation from the body's KA frame into the world.
@@ -255,7 +255,7 @@ writer likes where it has no leading edge.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct Body{M <: AbstractModel} <: Component
-    name::String
+    name::Symbol
     pos_ENU::MVector{3, Float64}
     Q_KA2ENU::MVector{4, Float64}
     extra_mass::Union{Nothing, Float64}
@@ -270,7 +270,7 @@ A row of the `tubes` block. Inflated beam elements between two bodies, whose pos
 the element's ends and so its rest length. How it curves between those ends belongs to the
 element: only a shape its material's law cannot hold, or a taper, is a chain of tubes.
 
-- `name::String`: Unique name of the tube.
+- `name::Symbol`: Unique name of the tube.
 - `bodies::NTuple{2, NameRef}`: The two bodies whose positions fix the tube's ends.
 - `diameter::Union{Nothing, Float64}` [m]: Optional. Diameter, one for the whole element.
 - `pressure::Union{Nothing, Float64}` [Pa]: Optional. Inflation pressure.
@@ -279,7 +279,7 @@ element: only a shape its material's law cannot hold, or a taper, is a chain of 
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct Tube{M <: AbstractModel} <: Component
-    name::String
+    name::Symbol
     bodies::NTuple{2, NameRef}
     diameter::Union{Nothing, Float64}
     pressure::Union{Nothing, Float64}

@@ -101,7 +101,7 @@ function columns(block, spec)
     fields = Tuple{String, String, String, String}[]
     for (header, unit, item) in zip(headers, units, items)
         name = header["const"]
-        type = name == "name" ? "String" : column_type(item)
+        type = name == "name" ? "Symbol" : column_type(item)
         push!(fields, (name, type, header["description"], unit["const"]))
     end
     return fields

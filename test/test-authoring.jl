@@ -197,7 +197,7 @@ end
 @testset "each segment's material gives the golden document's density and stiffness" begin
     golden = YAML.load_file(joinpath(@__DIR__, "data", "2plate_kite_structure.yml"))
     system = load_kite("rigid_structural_geometry.yaml")
-    @test [material.name for material in system.materials] == ["wing_element", "dyneema"]
+    @test [material.name for material in system.materials] == [:wing_element, :dyneema]
     @test all(material -> material.law == "linear", system.materials)
     for (segment, row) in zip(system.segments, golden["segments"]["data"])
         parameters = system.materials[segment.material].parameters
@@ -319,8 +319,8 @@ end
     materials = KiteGeometry.MaterialTable(Material[], Dict{String, Any}())
     names = [KiteGeometry.line_material!(materials, "line", density, "rope")
              for density in (970.0, 1100.0, 970.0)]
-    @test names == ["rope", "rope_2", "rope"]
-    @test KiteGeometry.line_material!(materials, "rope", 970.0, 1.0e9) == "rope_3"
+    @test names == [:rope, :rope_2, :rope]
+    @test KiteGeometry.line_material!(materials, "rope", 970.0, 1.0e9) == :rope_3
 end
 
 @testset "a breukels2011 tube's material is its own copy of SAM's constants" begin
@@ -453,18 +453,18 @@ end
     for (name, placed) in reference
         system, transforms = load_sam_placed(name)
         point_vel, body_vel, body_spin = transform_velocities(Pose(system), transforms)
-        @test sort([point.name for point in system.points]) ==
+        @test sort([String(point.name) for point in system.points]) ==
               sort(collect(keys(placed["points"])))
         for (point, vel) in zip(system.points, point_vel)
-            expected = placed["points"][point.name]
+            expected = placed["points"][String(point.name)]
             @test isapprox(point.pos_ENU, expected["pos"]; rtol=0, atol=1e-12)
             @test isapprox(vel, expected["vel"]; rtol=0, atol=1e-12)
         end
         for segment in system.segments
-            @test segment.rest_length ≈ placed["segments"][segment.name] atol=1e-12
+            @test segment.rest_length ≈ placed["segments"][String(segment.name)] atol=1e-12
         end
         for (index, body) in enumerate(system.bodies)
-            expected = placed["bodies"][body.name]
+            expected = placed["bodies"][String(body.name)]
             @test isapprox(quaternion_to_rotation_matrix(body.Q_KA2ENU),
                            quaternion_to_rotation_matrix(expected["Q"]); rtol=0, atol=1e-12)
             origin_vel = body_vel[index] +
@@ -491,7 +491,7 @@ end
 
 @testset "0 in a reference column names nothing" begin
     for file in ("tether_wing.yaml", "wing_freefall.yaml", "wing_hanging.yaml")
-        @test only(load_case(file).wings).name == "main_wing"
+        @test only(load_case(file).wings).name == :main_wing
     end
     @test structure_document(load_with_point_wing("kcu", 0)) ==
           structure_document(load_with_point_wing("kcu", nothing))

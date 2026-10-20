@@ -260,14 +260,14 @@ end
 
 """A reference cell as a `NameRef`, `nothing` where it is unset."""
 yaml_to_ref(value) = yaml_unset(value) ? nothing :
-                     value isa Integer ? Int(value) : String(value)
+                     value isa Integer ? Int(value) : Symbol(value)
 
 """Name of a row: its `name` field, else its one-based index `i`, which an `idx` field must
 repeat."""
 function yaml_row_name(row, i)
     idx = yaml_field(row, :idx)
     isnothing(idx) || idx == i || error("row $i is numbered `idx` $idx")
-    return string(something(yaml_field(row, :name), i))
+    return Symbol(something(yaml_field(row, :name), i))
 end
 
 """The dynamics types of SymbolicAWEModels."""
@@ -460,11 +460,11 @@ function material!(materials::MaterialTable, name, law, parameters)
         row.law == law && row.parameters == parameters && return row.name
     end
     taken = Set(row.name for row in materials.rows)
-    unique_name = name
+    unique_name = Symbol(name)
     n = 1
     while unique_name in taken
         n += 1
-        unique_name = "$(name)_$n"
+        unique_name = Symbol(name, "_", n)
     end
     push!(materials.rows, Material(; name=unique_name, law, parameters))
     return unique_name
