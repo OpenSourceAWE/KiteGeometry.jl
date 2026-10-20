@@ -49,7 +49,8 @@ to_field(::Type{Symbol}, name::AbstractString) = Symbol(name)
 to_field(::Type{NameRef}, name::AbstractString) = Symbol(name)
 to_field(T::Type{<:Tuple}, value::Union{Tuple, AbstractVector}) =
     T(to_field.(fieldtypes(T), Tuple(value)))
-to_field(::Type{Vector{T}}, value::AbstractVector) where {T} = T[to_field(T, x) for x in value]
+to_field(::Type{Vector{T}}, value::AbstractVector) where {T} =
+    T[to_field(T, x) for x in value]
 to_field(T::Type{<:StaticMatrix}, rows::AbstractVector) =
     T(permutedims(reduce(hcat, rows)))
 to_field(T::Type{<:OrderedDict}, value::AbstractDict) = T(value)

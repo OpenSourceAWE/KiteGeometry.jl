@@ -404,7 +404,9 @@ document_value(name::Symbol, ::Nothing, system) = String(name)
 function document_value(names::AbstractVector{NameRef}, ::Nothing, system)
     return document_value.(names, nothing, (system,))
 end
-document_value(index::Int, target::Symbol, system) = String(getfield(system, target)[index].name)
+function document_value(index::Int, target::Symbol, system)
+    return String(getfield(system, target)[index].name)
+end
 document_value(name::Symbol, target::Symbol, system) = String(name)
 function document_value(refs::Union{Tuple, Vector}, target::Symbol, system)
     return [document_value(ref, target, system) for ref in refs]

@@ -461,7 +461,8 @@ end
             @test isapprox(vel, expected["vel"]; rtol=0, atol=1e-12)
         end
         for segment in system.segments
-            @test segment.rest_length ≈ placed["segments"][String(segment.name)] atol=1e-12
+            expected = placed["segments"][String(segment.name)]
+            @test segment.rest_length ≈ expected atol=1e-12
         end
         for (index, body) in enumerate(system.bodies)
             expected = placed["bodies"][String(body.name)]
