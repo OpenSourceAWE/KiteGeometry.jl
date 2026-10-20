@@ -260,14 +260,14 @@ end
 
 """A reference cell as a `NameRef`, `nothing` where it is unset."""
 yaml_to_ref(value) = yaml_unset(value) ? nothing :
-                     value isa Integer ? Int(value) : String(value)
+                     value isa Integer ? Int(value) : Symbol(value)
 
 """Name of a row: its `name` field, else its one-based index `i`, which an `idx` field must
 repeat."""
 function yaml_row_name(row, i)
     idx = yaml_field(row, :idx)
     isnothing(idx) || idx == i || error("row $i is numbered `idx` $idx")
-    return string(something(yaml_field(row, :name), i))
+    return Symbol(something(yaml_field(row, :name), i))
 end
 
 """The dynamics types of SymbolicAWEModels."""
@@ -460,11 +460,11 @@ function material!(materials::MaterialTable, name, law, parameters)
         row.law == law && row.parameters == parameters && return row.name
     end
     taken = Set(row.name for row in materials.rows)
-    unique_name = name
+    unique_name = Symbol(name)
     n = 1
     while unique_name in taken
         n += 1
-        unique_name = "$(name)_$n"
+        unique_name = Symbol(name, "_", n)
     end
     push!(materials.rows, Material(; name=unique_name, law, parameters))
     return unique_name
@@ -851,23 +851,33 @@ function holds_rows(table)
 end
 
 """
-    load_authoring(path; set::Settings, name, ignore_l0=false) -> (system, transforms)
+    load_authoring(path; set::Settings, name, ignore_l0=false, place=true)
+        -> (system, transforms)
+    load_authoring(authored::AbstractDict; set::Settings, name, ignore_l0=false,
+                   place=true)
 
-The `SystemDefinition` SymbolicAWEModels' authoring YAML at `path` describes, and its
-`Transform`s. The definition is placed: design positions moved by its tethers' stretched
-lengths and then by the transforms, each wing's KA frame the authored frame moved with its
-body. Each transform holds the points and bodies it moves: those naming it, a tether's
-inner points that of its ends, and a wing's body its wing's, else the first transform.
+The `SystemDefinition` SymbolicAWEModels' authoring YAML at `path` describes, or the parsed
+authoring document `authored`, and its `Transform`s, as `Rows`. The definition is placed:
+design positions moved by its tethers' stretched lengths and then by the transforms, each
+wing's KA frame the authored frame moved with its body. Each transform holds the points and
+bodies it moves: those naming it, a tether's inner points that of its ends, and a wing's
+body its wing's, else the first transform.
 `set` gives what a row leaves out: segment material, and every winch's gear ratio and drum
 radius. Each distinct line material is named after the multi-variable giving it, else
 after its first segment.
-`name` is the metadata name, the file's by default; `ignore_l0` makes every rest length the
-placed length. Each non-empty block it does not read is kept as an extra block; one named
-after a block of the structure document, or holding a single value, is refused.
+`name` is the metadata name, the file's by default for a path; `ignore_l0` makes every rest
+length the placed length. With `place=false` the definition is left in its design pose,
+for a tool that places it itself. Each non-empty block it does not read is kept as an extra block;
+one named after a block of the structure document, or holding a single value, is refused.
 """
-function load_authoring(path; set::Settings, name=first(splitext(basename(path))),
-                        ignore_l0=false)
+function load_authoring(path::AbstractString; set::Settings,
+                        name=first(splitext(basename(path))), ignore_l0=false, place=true)
     authored = YAML.load_file(path; dicttype=OrderedDict{String, Any})
+    return load_authoring(authored; set, name, ignore_l0, place)
+end
+
+function load_authoring(authored::AbstractDict; set::Settings, name::AbstractString,
+                        ignore_l0=false, place=true)
     variables = yaml_variables(authored)
     data = resolve_yaml_variables(authored, variables)
     for key in ("materials", "elements", "segment_properties")
@@ -912,8 +922,8 @@ function load_authoring(path; set::Settings, name=first(splitext(basename(path))
                                     point_transforms, body_transforms)
     placement = design_pose(draft, set, point_wings, authored_wings, authored_bodies, inits)
     design = copy(Pose(placement))
-    place_authored!(placement, design, transforms; ignore_l0)
-    return placed_definition(placement, design), transforms
+    place && place_authored!(placement, design, transforms; ignore_l0)
+    return placed_definition(placement, design), Rows{Transform}(transforms)
 end
 
 """`ref` resolved into the indices `names`, `nothing` for `nothing`."""

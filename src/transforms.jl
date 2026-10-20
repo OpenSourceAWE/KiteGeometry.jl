@@ -13,7 +13,7 @@ into the system's blocks and into the transforms.
 """
 mutable struct Transform
     "unique name of the transform"
-    name::String
+    name::Symbol
     "elevation of the turned object above the base [rad]"
     elevation::Float64
     "azimuth of the turned object around the base, from east towards south [rad]"

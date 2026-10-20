@@ -5,6 +5,18 @@ SPDX-License-Identifier: MIT
 
 # Changelog
 
+## Unreleased
+
+### Added
+
+- A block's rows are `Rows`, found by their name as well as their position: `system.points[:kite]` and `system.points["kite"]`. `load_authoring` returns its transforms as `Rows` too.
+- `load_authoring(authored::AbstractDict; set, name)` loads a parsed authoring document, so a tool can build one in code rather than write a file.
+- `load_authoring(...; place=false)` leaves the definition in its design pose, for a tool that places it itself.
+
+### Changed
+
+- BREAKING: a row's `name`, a `Transform`'s `name` and a reference by name (`NameRef`) are `Symbol`s, not `String`s: `system.points[1].name == :kite`. Documents and keyword constructors still take names as strings, and writing a document writes them as strings.
+
 ## KiteGeometry v0.3.1 2026-10-19
 
 ### Added
