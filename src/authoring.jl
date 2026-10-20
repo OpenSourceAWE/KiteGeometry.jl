@@ -335,6 +335,7 @@ function read_rows(data, block, columns; modelled=true, key=String(block))
     table = get(data, key, nothing)
     rows = isnothing(table) || isnothing(get(table, "data", nothing)) ? NamedTuple[] :
            parse_table(table)
+    name_indices([(; name=yaml_row_name(row, i)) for (i, row) in enumerate(rows)], block)
     models = [modelled ? authoring_model(block, row) : NoModel() for row in rows]
     unread = OrderedSet{String}()
     read_columns = (:idx, columns...)

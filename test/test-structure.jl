@@ -355,6 +355,15 @@ end
     @test system.segments[:spare].points == (1, 2)
 end
 
+@testset "a name two rows share is refused on lookup and on writing" begin
+    system = small_system()
+    system.points[2].name = :anchor
+    @test_throws "two points are named anchor" system.points[:anchor]
+    @test_throws "two points are named anchor" structure_document(system)
+    push!(system.segments, Segment(; name="line", points=(1, 2)))
+    @test_throws "two segments are named line" system.segments[:line]
+end
+
 @testset "metadata by keyword defaults to this awesIO version and an empty checksum" begin
     @test Metadata(; name="small", n_points=2) ==
           Metadata("small", "", "", AWESIO_VERSION, "structure_schema.yml", 2, "")

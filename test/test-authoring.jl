@@ -523,6 +523,15 @@ end
         "kcu", 7)
 end
 
+@testset "a name two rows of an authored block share is refused, naming that block" begin
+    for (block, name) in (("tethers", "main_tether"), ("segments", "le_tube_left"))
+        @test_throws "two $block are named $name" load_edited() do data
+            rows = data[block]["data"]
+            push!(rows, copy(rows[findfirst(row -> row[1] == name, rows)]))
+        end
+    end
+end
+
 @testset "a wing keeps the columns that frame its body in its model" begin
     wing = only(load_kite("particle_structural_geometry.yaml").wings)
     @test wing.dynamics_type == "PARTICLE_DYNAMICS"
