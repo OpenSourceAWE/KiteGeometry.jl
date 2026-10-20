@@ -15,6 +15,11 @@ struct TestBeam <: AbstractModel
     EI::Float64
 end
 
+"""A tube model with a column of names."""
+struct NamedBeam <: AbstractModel
+    neighbours::Vector{NameRef}
+end
+
 struct StiffBeam <: AbstractModel
     EA::Float64
 end
@@ -183,6 +188,22 @@ end
     written = with_test_beam(() -> structure_document(system))
     @test written == document
     @test collect(keys(written)) == collect(keys(document))
+end
+
+@testset "a model column of names reads Symbols and writes strings" begin
+    document = fixture_document()
+    tubes = document["tubes"]
+    push!(tubes["headers"], "model", "neighbours")
+    push!(tubes["units"], "-", "-")
+    foreach(row -> push!(row, "named_beam", ["le", "te"]), tubes["data"])
+    register_model!(:tubes, "named_beam", NamedBeam, ("-",))
+    try
+        system = SystemDefinition(document)
+        @test system.tubes[1].neighbours == [:le, :te]
+        @test structure_document(system) == document
+    finally
+        unregister_model!(:tubes, "named_beam")
+    end
 end
 
 """The modelled fixture with a `colour` column no model names, and an unregistered model

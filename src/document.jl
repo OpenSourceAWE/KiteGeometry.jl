@@ -401,6 +401,9 @@ function document_value(value::StaticMatrix, ::Nothing, system)
 end
 document_value(::Nothing, target::Symbol, system) = nothing
 document_value(name::Symbol, ::Nothing, system) = String(name)
+function document_value(names::AbstractVector{NameRef}, ::Nothing, system)
+    return document_value.(names, nothing, (system,))
+end
 document_value(index::Int, target::Symbol, system) = String(getfield(system, target)[index].name)
 document_value(name::Symbol, target::Symbol, system) = String(name)
 function document_value(refs::Union{Tuple, Vector}, target::Symbol, system)
