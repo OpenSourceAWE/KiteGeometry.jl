@@ -15,7 +15,7 @@ SPDX-License-Identifier: MIT
 
 ### Changed
 
-- BREAKING: a row's `name`, a `Transform`'s `name` and a reference by name (`NameRef`) are `Symbol`s, not `String`s: `system.points[1].name == :kite`. Documents and keyword constructors still take names as strings, and writing a document writes them as strings.
+- A row's `name`, a `Transform`'s `name` and a reference by name (`NameRef`) are `Symbol`s, not `String`s: `system.points[1].name == :kite`. Documents and keyword constructors still take names as strings, and writing a document writes them as strings.
 
 ## KiteGeometry v0.3.1 2026-10-19
 
