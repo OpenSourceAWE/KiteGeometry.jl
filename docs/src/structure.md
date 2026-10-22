@@ -69,7 +69,6 @@ place!
 place_transforms!
 reposition!
 transform_velocities
-calc_heading(::Any, ::Any)
 ```
 
 ## Components
