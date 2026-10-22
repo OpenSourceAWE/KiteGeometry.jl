@@ -61,7 +61,7 @@ end
 
 """The index of each component of `rows` by its name, refusing a name used twice."""
 function name_indices(rows, block)
-    indices = Dict{String, Int}()
+    indices = Dict{Symbol, Int}()
     for (index, component) in enumerate(rows)
         haskey(indices, component.name) &&
             throw(ArgumentError("two $block are named $(component.name)"))
@@ -81,7 +81,7 @@ resolve(::Nothing, target::Symbol, indices) = nothing
 function resolve(refs::Union{Tuple, Vector}, target::Symbol, indices)
     return resolve.(refs, target, (indices,))
 end
-function resolve(name::String, target::Symbol, indices)
+function resolve(name::Symbol, target::Symbol, indices)
     haskey(indices[target], name) || throw(ArgumentError("no $target named $name"))
     return indices[target][name]
 end
@@ -173,7 +173,7 @@ function row_numbers(system, block, column)
             for component in getfield(system, block)]
 end
 row_number(index::Int, rows, target) = index
-function row_number(name::String, rows, target)
+function row_number(name::Symbol, rows, target)
     index = findfirst(row -> row.name == name, rows)
     isnothing(index) && throw(ArgumentError("no $target named $name"))
     return index
@@ -400,8 +400,14 @@ function document_value(value::StaticMatrix, ::Nothing, system)
     return [collect(row) for row in eachrow(value)]
 end
 document_value(::Nothing, target::Symbol, system) = nothing
-document_value(index::Int, target::Symbol, system) = getfield(system, target)[index].name
-document_value(name::String, target::Symbol, system) = name
+document_value(name::Symbol, ::Nothing, system) = String(name)
+function document_value(names::AbstractVector{NameRef}, ::Nothing, system)
+    return document_value.(names, nothing, (system,))
+end
+function document_value(index::Int, target::Symbol, system)
+    return String(getfield(system, target)[index].name)
+end
+document_value(name::Symbol, target::Symbol, system) = String(name)
 function document_value(refs::Union{Tuple, Vector}, target::Symbol, system)
     return [document_value(ref, target, system) for ref in refs]
 end

@@ -15,6 +15,11 @@ struct TestBeam <: AbstractModel
     EI::Float64
 end
 
+"""A tube model with a column of names."""
+struct NamedBeam <: AbstractModel
+    neighbours::Vector{NameRef}
+end
+
 struct StiffBeam <: AbstractModel
     EA::Float64
 end
@@ -81,13 +86,13 @@ end
     @test system.metadata.n_points == length(system.points)
     point = system.points[1]
     @test !point.fixed
-    @test system.bodies[point.body].name == document["points"]["data"][1][3]
+    @test system.bodies[point.body].name == Symbol(document["points"]["data"][1][3])
     @test system.materials[system.segments[1].material].law == "linear"
     @test system.materials[system.tubes[1].material].parameters["C19"] == 0.0918
     @test point.pos_ENU isa MVector{3, Float64}
     @test all(tube -> tube isa Tube{NoModel}, system.tubes)
     face = system.canopy_faces[1]
-    @test system.wings[face.wing].name == document["canopy_faces"]["data"][1][2]
+    @test system.wings[face.wing].name == Symbol(document["canopy_faces"]["data"][1][2])
     @test system.spanwise_stations[1].wing == face.wing
     @test system.wings[face.wing].Q_KA2ENU == [1, 0, 0, 0]
     @test isempty(system.extras)
@@ -183,6 +188,22 @@ end
     written = with_test_beam(() -> structure_document(system))
     @test written == document
     @test collect(keys(written)) == collect(keys(document))
+end
+
+@testset "a model column of names reads Symbols and writes strings" begin
+    document = fixture_document()
+    tubes = document["tubes"]
+    push!(tubes["headers"], "model", "neighbours")
+    push!(tubes["units"], "-", "-")
+    foreach(row -> push!(row, "named_beam", ["le", "te"]), tubes["data"])
+    register_model!(:tubes, "named_beam", NamedBeam, ("-",))
+    try
+        system = SystemDefinition(document)
+        @test system.tubes[1].neighbours == [:le, :te]
+        @test structure_document(system) == document
+    finally
+        unregister_model!(:tubes, "named_beam")
+    end
 end
 
 """The modelled fixture with a `colour` column no model names, and an unregistered model
@@ -323,6 +344,15 @@ end
     @test_throws ArgumentError small_system(;
         tethers=[Tether(; name="main", start_point=3, end_point=2, segments=[1])])
     @test_throws ArgumentError small_system(; rudders=[])
+end
+
+@testset "a block's rows are found by their name as well as their position" begin
+    system = small_system()
+    @test system.points[:kite] === system.points["kite"] === system.points[2]
+    @test haskey(system.points, :anchor) && !haskey(system.points, :ground)
+    @test_throws KeyError system.points[:ground]
+    push!(system.segments, Segment(; name="spare", points=(1, 2)))
+    @test system.segments[:spare].points == (1, 2)
 end
 
 @testset "metadata by keyword defaults to this awesIO version and an empty checksum" begin

@@ -101,7 +101,7 @@ function columns(block, spec)
     fields = Tuple{String, String, String, String}[]
     for (header, unit, item) in zip(headers, units, items)
         name = header["const"]
-        type = name == "name" ? "String" : column_type(item)
+        type = name == "name" ? "Symbol" : column_type(item)
         push!(fields, (name, type, header["description"], unit["const"]))
     end
     return fields
@@ -155,7 +155,7 @@ and `OPTIONAL_UNITS`."""
 function system_source(schema, blocks)
     fields = [("metadata", "Metadata", "the document's metadata", "-")]
     for (block, _) in blocks
-        push!(fields, (block, "Vector{$(type_name(block))}", "the rows of `$block`", "-"))
+        push!(fields, (block, "Rows{$(type_name(block))}", "the rows of `$block`", "-"))
     end
     push!(fields, ("extras", "OrderedDict{String, Any}",
            "blocks the schema does not name, in the order read", "-"))
@@ -166,7 +166,7 @@ function system_source(schema, blocks)
     optional_units = join(("    $block = $(optional_units_source(spec)),\n"
                            for (block, spec) in blocks))
     required = join((":$block" for block in schema["required"]), ", ")
-    description = "A structure document: its metadata, one vector per table block, and " *
+    description = "A structure document: its metadata, the rows of each table block, and " *
                   "the blocks the schema does not name."
     return docstring("SystemDefinition", description, fields) *
            "struct SystemDefinition\n$body\nend\n\n" *
