@@ -5,6 +5,12 @@ SPDX-License-Identifier: MIT
 
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Works with KiteUtils 0.14 as well as 0.13.
+
 ## KiteGeometry v0.3.2 2026-10-21
 
 ### Added
