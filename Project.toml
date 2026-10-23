@@ -1,7 +1,7 @@
 name = "KiteGeometry"
 uuid = "941ca69c-4b42-4a27-9601-abc4d37bf99e"
-authors = ["Bart van de Lint <bart@vandelint.net> and contributors"]
 version = "0.3.2"
+authors = ["Bart van de Lint <bart@vandelint.net> and contributors"]
 
 [workspace]
 projects = ["test", "docs"]
@@ -17,7 +17,7 @@ YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
 
 [compat]
 JSON = "1"
-KiteUtils = "0.13.1"
+KiteUtils = "0.13.1, 0.14"
 LinearAlgebra = "1"
 OrderedCollections = "1.6, 2"
 SHA = "0.7, 1"
