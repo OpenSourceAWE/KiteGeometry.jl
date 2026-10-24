@@ -13,6 +13,10 @@ SPDX-License-Identifier: MIT
 - `load_authoring(authored::AbstractDict; set, name)` loads a parsed authoring document, so a tool can build one in code rather than write a file.
 - `load_authoring(...; place=false)` leaves the definition in its design pose, for a tool that places it itself.
 
+### Fixed
+
+- Two rows of a block with one name are refused wherever a definition gets them, with `ArgumentError: two tethers are named main_tether`: two authored tethers no longer report the points generated from their name, and looking up or writing a definition whose rows were renamed or pushed into a clash refuses it rather than taking the first row or writing a document that cannot be read back.
+
 ### Changed
 
 - A row's `name`, a `Transform`'s `name` and a reference by name (`NameRef`) are `Symbol`s, not `String`s: `system.points[1].name == :kite`. Documents and keyword constructors still take names as strings, and writing a document writes them as strings.
