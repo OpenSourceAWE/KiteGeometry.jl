@@ -5,6 +5,12 @@ SPDX-License-Identifier: MIT
 
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- A row whose model is an instance of a registered parametric model type, such as `BodyModel{AeroVSM, RigidDynamics}` registered as `BodyModel`, is written under that model's name rather than refused as unregistered.
+
 ## KiteGeometry v0.3.2 2026-10-21
 
 ### Added
