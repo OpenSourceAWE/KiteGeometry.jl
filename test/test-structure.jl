@@ -20,6 +20,12 @@ struct NamedBeam <: AbstractModel
     neighbours::Vector{NameRef}
 end
 
+"""A tube model whose type parameter `A` none of its columns name."""
+struct TaggedBeam{A} <: AbstractModel
+    EA::Float64
+end
+TaggedBeam(EA) = TaggedBeam{:stiff}(EA)
+
 struct StiffBeam <: AbstractModel
     EA::Float64
 end
@@ -203,6 +209,22 @@ end
         @test structure_document(system) == document
     finally
         unregister_model!(:tubes, "named_beam")
+    end
+end
+
+@testset "a row whose model is an instance of a registered parametric model writes" begin
+    document = fixture_document()
+    tubes = document["tubes"]
+    push!(tubes["headers"], "model", "EA")
+    push!(tubes["units"], "-", "N")
+    foreach(row -> push!(row, "tagged_beam", 1.0e5), tubes["data"])
+    register_model!(:tubes, "tagged_beam", TaggedBeam, ("N",))
+    try
+        system = SystemDefinition(document)
+        @test system.tubes[1].model isa TaggedBeam{:stiff}
+        @test structure_document(system) == document
+    finally
+        unregister_model!(:tubes, "tagged_beam")
     end
 end
 
