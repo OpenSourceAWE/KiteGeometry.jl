@@ -42,6 +42,8 @@ mutable struct Transform
     bodies::Vector{Int}
 end
 
+block_name(::Type{Transform}) = :transforms
+
 """
     Transform(; name, elevation, azimuth, heading, base_pos=nothing, base_point=nothing,
               base_transform=nothing, rot_point=nothing, body=nothing, elevation_vel=0.0,

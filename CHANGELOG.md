@@ -7,6 +7,10 @@ SPDX-License-Identifier: MIT
 
 ## Unreleased
 
+### Fixed
+
+- A row whose model is an instance of a registered parametric model type, such as `BodyModel{AeroVSM, RigidDynamics}` registered as `BodyModel`, is written under that model's name rather than refused as unregistered.
+
 ### Changed
 
 - BREAKING: KiteGeometry no longer has a `calc_heading(R_b_to_w, pos)` of its own; use KiteUtils' `calc_heading(attitude, elevation, azimuth)`. `using KiteUtils, KiteGeometry` no longer leaves `calc_heading` ambiguous.
@@ -18,6 +22,10 @@ SPDX-License-Identifier: MIT
 - A block's rows are `Rows`, found by their name as well as their position: `system.points[:kite]` and `system.points["kite"]`. `load_authoring` returns its transforms as `Rows` too.
 - `load_authoring(authored::AbstractDict; set, name)` loads a parsed authoring document, so a tool can build one in code rather than write a file.
 - `load_authoring(...; place=false)` leaves the definition in its design pose, for a tool that places it itself.
+
+### Fixed
+
+- Two rows of a block with one name are refused wherever a definition gets them, with `ArgumentError: two tethers are named main_tether`: two authored tethers no longer report the points generated from their name, and looking up or writing a definition whose rows were renamed or pushed into a clash refuses it rather than taking the first row or writing a document that cannot be read back.
 
 ### Changed
 

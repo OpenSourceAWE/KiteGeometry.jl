@@ -96,13 +96,13 @@ end
 """
     model_registration(block, M)
 
-The name `M` is registered under for `block`, with `M` and its column units, or `nothing`
-for `NoModel`.
+The registration for `block` whose type `M` is a subtype of, such as a parametric model's
+`UnionAll`: its name, that type and its column units. `nothing` for `NoModel`.
 """
 function model_registration(block, M)
     M === NoModel && return nothing
     for ((registered_block, name), model) in MODELS
-        registered_block == block && model.type === M &&
+        registered_block == block && M <: model.type &&
             return (; name, model.type, model.units)
     end
     throw(ArgumentError("$M is no model registered for $block"))
