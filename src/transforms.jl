@@ -100,31 +100,6 @@ Pose(placement::Placement) = Pose(placement.pos, placement.body_pos, placement.b
 # ==================== TANGENTIAL FRAME ==================== #
 
 """
-    calc_R_t_to_w(pos)
-
-Rotation from the tangential frame at `pos` [m] into the world: z radial along `pos`, y
-azimuthal and level, x towards elevation, `y × z`.
-"""
-function calc_R_t_to_w(pos)
-    z = normalize(pos)
-    y = abs(pos[1]) < 1e-6 && abs(pos[2]) < 1e-6 ? Vec3(0, 1, 0) :
-        normalize(Vec3(-pos[2], pos[1], 0))
-    return hcat(cross(y, z), y, z)
-end
-
-"""
-    calc_heading(R_b_to_w, pos)
-
-Heading [rad] of the frame `R_b_to_w` at `pos` [m] from the base: the angle of its x axis
-in the tangential plane, from the elevation direction towards the azimuthal one; zero
-with the nose towards the base.
-"""
-function calc_heading(R_b_to_w, pos)
-    e_x_t = calc_R_t_to_w(pos)' * R_b_to_w[:, 1]
-    return atan(e_x_t[2], e_x_t[1])
-end
-
-"""
     radial_direction(transform)
 
 Unit vector in the world from a transform's base towards where its `elevation` and
@@ -205,7 +180,9 @@ function turn!(pose, transform, base_pos)
     radial = radial_direction(transform)
     rotate_members!(pose, transform, base_pos, min_rotation(normalize(rel_pos), radial)...)
     isnothing(transform.body) && return nothing
-    heading = calc_heading(pose.body_R[transform.body], radial)
+    # KiteUtils' heading turns the other way to a transform's
+    heading = -calc_heading(pose.body_R[transform.body], transform.elevation,
+                            -transform.azimuth)
     rotate_members!(pose, transform, base_pos, radial,
                     wrap2pi(transform.heading - heading))
     return nothing

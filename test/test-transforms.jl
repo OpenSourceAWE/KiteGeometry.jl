@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 using KiteGeometry: radial_direction
-using KiteUtils: Settings, set_data_path
+using KiteUtils: KiteUtils, Settings, calc_heading, set_data_path
 using LinearAlgebra: norm, normalize
 using YAML
 
@@ -33,6 +33,10 @@ function tilt_kite!(transforms)
     kite_tilt.elevation, kite_tilt.heading = deg2rad(48), deg2rad(-35)
     return transforms
 end
+
+"""Heading [rad] of the kite body of `pose`, in the sense of `transform`'s `heading`."""
+kite_heading(pose, transform) =
+    -calc_heading(pose.body_R[1], transform.elevation, -transform.azimuth; respos=false)
 
 """`data`, the chained system's YAML, with its kite tilted as [`tilt_kite!`](@ref)."""
 function tilt_kite_row!(data)
@@ -75,7 +79,7 @@ end
     ground, kcu, kite_origin = pose.pos[1], pose.pos[2], pose.pos[7]
     @test normalize(kcu - ground) ≈ radial_direction(main_tf)
     @test normalize(kite_origin - kcu) ≈ radial_direction(kite_tilt)
-    @test calc_heading(pose.body_R[1], kite_origin - kcu) ≈ kite_tilt.heading
+    @test kite_heading(pose, kite_tilt) ≈ kite_tilt.heading
     @test norm(pose.pos[4] - kite_origin) ≈ kite_rigid
 end
 
@@ -85,7 +89,7 @@ end
     kcu, kite_origin = pose.pos[2], pose.pos[7]
     @test pose.pos[2] == system.points[2].pos_ENU
     @test normalize(kite_origin - kcu) ≈ radial_direction(transforms[2])
-    @test calc_heading(pose.body_R[1], kite_origin - kcu) ≈ deg2rad(-35)
+    @test kite_heading(pose, transforms[2]) ≈ deg2rad(-35)
 end
 
 """`data`, the chained system's YAML, with its first transform turning no point."""
@@ -134,4 +138,10 @@ end
         @test iszero(point_vel[1])
         @test iszero(body_spin[1]) == (moving == 1)
     end
+end
+
+@testset "calc_heading is KiteUtils' alone" begin
+    probe = Module()
+    Core.eval(probe, :(using KiteUtils, KiteGeometry))
+    @test Core.eval(probe, :calc_heading) === KiteUtils.calc_heading
 end

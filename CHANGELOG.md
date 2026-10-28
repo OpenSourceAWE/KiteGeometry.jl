@@ -11,6 +11,10 @@ SPDX-License-Identifier: MIT
 
 - A row whose model is an instance of a registered parametric model type, such as `BodyModel{AeroVSM, RigidDynamics}` registered as `BodyModel`, is written under that model's name rather than refused as unregistered.
 
+### Changed
+
+- BREAKING: KiteGeometry no longer has a `calc_heading(R_b_to_w, pos)` of its own; use KiteUtils' `calc_heading(attitude, elevation, azimuth)`. `using KiteUtils, KiteGeometry` no longer leaves `calc_heading` ambiguous.
+
 ## KiteGeometry v0.3.2 2026-10-21
 
 ### Added

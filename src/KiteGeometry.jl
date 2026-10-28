@@ -15,7 +15,7 @@ for more information.
 module KiteGeometry
 
 using JSON: JSON
-using KiteUtils: KiteUtils, Logger, Settings, SysLog, save_log, wrap2pi
+using KiteUtils: KiteUtils, Logger, Settings, SysLog, calc_heading, save_log, wrap2pi
 using LinearAlgebra: Diagonal, I, cross, dot, norm, normalize
 using OrderedCollections: OrderedDict, OrderedSet
 using SHA: sha256
@@ -24,8 +24,7 @@ using YAML: YAML
 
 export SystemDefinition, Rows, Metadata, Material, Point, Segment, SpanwiseStation, Pulley,
        Tether, Winch, Wing, CanopyFace, Body, Tube, pos_KA
-export Transform, Pose, place!, place_transforms!, reposition!, transform_velocities,
-       calc_heading
+export Transform, Pose, place!, place_transforms!, reposition!, transform_velocities
 export NameRef, AbstractModel, NoModel, SegmentSpring, register_model!, model_type,
        model_columns
 export load_structure, load_authoring, structure_document, connectivity_sha
