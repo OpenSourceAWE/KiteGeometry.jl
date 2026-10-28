@@ -20,6 +20,12 @@ struct NamedBeam <: AbstractModel
     neighbours::Vector{NameRef}
 end
 
+"""A tube model whose type parameter `A` none of its columns name."""
+struct TaggedBeam{A} <: AbstractModel
+    EA::Float64
+end
+TaggedBeam(EA) = TaggedBeam{:stiff}(EA)
+
 struct StiffBeam <: AbstractModel
     EA::Float64
 end
@@ -206,6 +212,22 @@ end
     end
 end
 
+@testset "a row whose model is an instance of a registered parametric model writes" begin
+    document = fixture_document()
+    tubes = document["tubes"]
+    push!(tubes["headers"], "model", "EA")
+    push!(tubes["units"], "-", "N")
+    foreach(row -> push!(row, "tagged_beam", 1.0e5), tubes["data"])
+    register_model!(:tubes, "tagged_beam", TaggedBeam, ("N",))
+    try
+        system = SystemDefinition(document)
+        @test system.tubes[1].model isa TaggedBeam{:stiff}
+        @test structure_document(system) == document
+    finally
+        unregister_model!(:tubes, "tagged_beam")
+    end
+end
+
 """The modelled fixture with a `colour` column no model names, and an unregistered model
 named in the second tube."""
 function unread_document()
@@ -353,6 +375,15 @@ end
     @test_throws KeyError system.points[:ground]
     push!(system.segments, Segment(; name="spare", points=(1, 2)))
     @test system.segments[:spare].points == (1, 2)
+end
+
+@testset "a name two rows share is refused on lookup and on writing" begin
+    system = small_system()
+    system.points[2].name = :anchor
+    @test_throws "two points are named anchor" system.points[:anchor]
+    @test_throws "two points are named anchor" structure_document(system)
+    push!(system.segments, Segment(; name="line", points=(1, 2)))
+    @test_throws "two segments are named line" system.segments[:line]
 end
 
 @testset "metadata by keyword defaults to this awesIO version and an empty checksum" begin
