@@ -12,7 +12,7 @@ YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
 [compat]
 JSON = "1"
 JSONSchema = "1.5"
-KiteUtils = "0.13.1"
+KiteUtils = "0.13.1, 0.14"
 LinearAlgebra = "1"
 OrderedCollections = "1.6, 2"
 StaticArrays = "1.9"

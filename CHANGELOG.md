@@ -12,6 +12,10 @@ SPDX-License-Identifier: MIT
 - A row whose model is an instance of a registered parametric model type, such as `BodyModel{AeroVSM, RigidDynamics}` registered as `BodyModel`, is written under that model's name rather than refused as unregistered.
 - Two rows of a block with one name are refused wherever a definition gets them, with `ArgumentError: two tethers are named main_tether`: two authored tethers no longer report the points generated from their name, and looking up or writing a definition whose rows were renamed or pushed into a clash refuses it rather than taking the first row or writing a document that cannot be read back.
 
+### Changed
+
+- Works with KiteUtils 0.14 as well as 0.13.
+
 ## KiteGeometry v0.3.2 2026-10-21
 
 ### Added
