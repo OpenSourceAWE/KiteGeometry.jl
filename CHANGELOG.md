@@ -22,7 +22,6 @@ SPDX-License-Identifier: MIT
 
 - A block's rows are `Rows`, found by their name as well as their position: `system.points[:kite]` and `system.points["kite"]`. `load_authoring` returns its transforms as `Rows` too.
 - `load_authoring(authored::AbstractDict; set, name)` loads a parsed authoring document, so a tool can build one in code rather than write a file.
-- `load_authoring(...; place=false)` leaves the definition in its design pose, for a tool that places it itself.
 
 ### Changed
 
