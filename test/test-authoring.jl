@@ -213,6 +213,14 @@ end
     @test isnothing(KiteGeometry.unit_stiffness(segment, system.materials))
 end
 
+@testset "a material's unit_stiffness at a diameter allocates nothing" begin
+    material = Material(; name=:line, law="linear",
+                        parameters=OrderedDict{String, Any}("youngs_modulus" => 1e9))
+    KiteGeometry.unit_stiffness(material, 0.004)
+    @test KiteGeometry.unit_stiffness(material, 0.004) ≈ 1e9 * π * 0.002^2
+    @test (@allocated KiteGeometry.unit_stiffness(material, 0.004)) == 0
+end
+
 @testset "a tether of a material that is not linear has no init_tether_force" begin
     system = load_kite("particle_structural_geometry.yaml")
     (; segments, materials) = system

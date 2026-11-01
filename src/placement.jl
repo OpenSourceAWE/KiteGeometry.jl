@@ -503,16 +503,24 @@ function tether_unit_stiffness(tether, segments, materials)
 end
 
 """
+    unit_stiffness(material::Material, diameter)
     unit_stiffness(segment, materials)
 
-Axial stiffness times rest length [N] of `segment`, `youngs_modulus * π (diameter/2)^2`
-from its material among `materials`; `nothing` where that material's law is not `linear`.
+Axial stiffness times rest length [N] of a line of `material` and `diameter` [m],
+`youngs_modulus * π (diameter/2)^2`, or of `segment` of its material among `materials`;
+`nothing` where the material's law is not `linear`.
 """
-function unit_stiffness(segment::Segment, materials)
-    material = materials[segment.material]
+function unit_stiffness(material::Material, diameter)
     material.law == "linear" || return nothing
-    return material.parameters["youngs_modulus"] * π * (segment.diameter / 2)^2
+    area = π * (diameter / 2)^2
+    parameter = material.parameters["youngs_modulus"]
+    # the Float64 branch types the multiply, so the untyped parameter boxes no result
+    youngs_modulus = parameter isa Float64 ? parameter : Float64(parameter)::Float64
+    return youngs_modulus * area
 end
+
+unit_stiffness(segment::Segment, materials) =
+    unit_stiffness(materials[segment.material], segment.diameter)
 
 """Share each tether's rest length ([`init_unstretched_len`](@ref)) equally over its
 segments."""
