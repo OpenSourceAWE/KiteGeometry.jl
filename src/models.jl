@@ -26,11 +26,18 @@ const DEFAULT_MODELS = Dict{Symbol, String}()
 """
     model_columns(M)
 
-The fields of the model type `M` that are columns of a document, in order: all of them
-unless `M` adds a method naming fewer. An `M` with fields that are no column is built from
-its columns alone, `M(columns...)`.
+The columns of a document the model type `M` reads, in order: its fields unless `M` adds a
+method naming others. An `M` is built from its columns alone, `M(columns...)`, and a model's
+column is read with `getproperty`, so an `M` may keep its columns in a nested model.
 """
 model_columns(M::Type{<:AbstractModel}) = fieldnames(M)
+
+"""
+    column_type(M, column)
+
+The type of the `column` of model type `M`: its field's type unless `M` adds a method.
+"""
+column_type(M::Type{<:AbstractModel}, column::Symbol) = fieldtype(M, column)
 
 """
     register_model!(block, name, M, units; default=false)
@@ -38,12 +45,12 @@ model_columns(M::Type{<:AbstractModel}) = fieldnames(M)
 Make a row of `block` whose `model` column reads `name` carry an `M`, built from the columns
 named after the [`model_columns`](@ref) of `M`, whose `units` are given in that order. With
 `default`, the rows of a `block` table without a `model` column carry an `M` too. Refuses an
-`M` with a field the component already has, and a second default for `block`. A package
-registering its models calls this from its `__init__`.
+`M` with a field or column the component already has, and a second default for `block`. A
+package registering its models calls this from its `__init__`.
 """
 function register_model!(block::Symbol, name::AbstractString, M::Type{<:AbstractModel},
                          units; default=false)
-    clashes = intersect(fieldnames(M), fieldnames(BLOCKS[block]))
+    clashes = intersect(union(fieldnames(M), model_columns(M)), fieldnames(BLOCKS[block]))
     isempty(clashes) ||
         throw(ArgumentError("$M shadows the $block fields $(join(clashes, ", "))"))
     length(units) == length(model_columns(M)) ||
@@ -64,21 +71,21 @@ default_model(block) = get(DEFAULT_MODELS, block, nothing)
 
 The model of a row of `block`: the one registered under `name`, under the block's default
 where `name` is `missing` for a table without a `model` column, and `NoModel` where that
-names no registered model. Each field of its type `M` is `field_value(M, field, unit)`.
+names no registered model. Each column of its type `M` is `field_value(M, column, unit)`.
 """
 function row_model(field_value, block, name)
     model = get(MODELS, (block, coalesce(name, default_model(block))), nothing)
     isnothing(model) && return NoModel()
     M = model.type
-    return M((field_value(M, field, unit)
-              for (field, unit) in zip(model_columns(M), model.units))...)
+    return M((field_value(M, column, unit)
+              for (column, unit) in zip(model_columns(M), model.units))...)
 end
 
-"""`value` as `field` of model `M`, refusing `nothing` where the field cannot hold it."""
-function model_value(M, field, value)
-    T = fieldtype(M, field)
+"""`value` as the `column` of model `M`, refusing `nothing` where it cannot hold it."""
+function model_value(M, column, value)
+    T = column_type(M, column)
     isnothing(value) && !(Nothing <: T) &&
-        throw(ArgumentError("model $M needs its $field column filled"))
+        throw(ArgumentError("model $M needs its $column column filled"))
     return to_field(T, value)
 end
 

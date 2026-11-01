@@ -5,6 +5,13 @@ SPDX-License-Identifier: MIT
 
 # Changelog
 
+## Unreleased
+
+### Added
+
+- A registered model may keep its columns in a model it holds: its columns are read and written with `getproperty`, typed by `KiteGeometry.column_type(M, column)`, its field's type unless `M` adds a method. A model holding a `SegmentSpring` and forwarding `getproperty` to it reads and writes the spring's three columns.
+- `KiteGeometry.unit_stiffness(segment, materials)` gives a segment's axial stiffness times rest length [N] from its `linear` material, `nothing` for another law, and `KiteGeometry.resolve_material` is public.
+
 ## KiteGeometry v0.3.3 2026-10-28
 
 ### Fixed

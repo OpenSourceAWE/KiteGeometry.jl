@@ -200,11 +200,43 @@ end
     @test [material.name for material in system.materials] == [:wing_element, :dyneema]
     @test all(material -> material.law == "linear", system.materials)
     for (segment, row) in zip(system.segments, golden["segments"]["data"])
-        parameters = system.materials[segment.material].parameters
-        @test parameters["density"] == row[5]
-        @test isapprox(parameters["youngs_modulus"] * π * (segment.diameter / 2)^2, row[6];
+        @test system.materials[segment.material].parameters["density"] == row[5]
+        @test isapprox(KiteGeometry.unit_stiffness(segment, system.materials), row[6];
                        rtol=1e-12)
     end
+end
+
+@testset "a segment of a material that is not linear has no unit_stiffness" begin
+    system = load_kite("rigid_structural_geometry.yaml")
+    segment = system.segments[1]
+    system.materials[segment.material].law = "breukels2011"
+    @test isnothing(KiteGeometry.unit_stiffness(segment, system.materials))
+end
+
+@testset "a tether of a material that is not linear has no init_tether_force" begin
+    system = load_kite("particle_structural_geometry.yaml")
+    (; segments, materials) = system
+    tether = only(system.tethers)
+    segment = segments[first(tether.segments)]
+    @test KiteGeometry.tether_unit_stiffness(tether, segments, materials) ≈
+          KiteGeometry.unit_stiffness(segment, materials)
+    materials[segment.material].law = "breukels2011"
+    @test_throws "init_tether_force needs a linear material" (
+        KiteGeometry.tether_unit_stiffness(tether, segments, materials))
+end
+
+@testset "a segment's damping is rel_damping times its stiffness where it gives none" begin
+    set = kite_settings()
+    set.rel_damping = 0.5
+    diameter, youngs_modulus, unit_damping, _ =
+        KiteGeometry.resolve_material("segment", set; diameter=0.002, youngs_modulus=1e9)
+    @test diameter == 0.002 && youngs_modulus == 1e9
+    @test unit_damping ≈ 0.5 * 1e9 * π * 0.001^2
+end
+
+@testset "column_type, unit_stiffness and resolve_material are public" begin
+    @test all(name -> Base.ispublic(KiteGeometry, name),
+              (:column_type, :unit_stiffness, :resolve_material))
 end
 
 """Whether each point of `system` the authoring `points` table names is at its `pos_cad`
@@ -263,6 +295,38 @@ end
     @test segment isa Segment{SegmentSpring}
     @test segment.unit_damping ≈ 10.0
     @test model_type(:segments, "spring") === SegmentSpring
+end
+
+"""A segment model like SymbolicAWEModels': a `SegmentSpring` and an index of its own,
+the spring's fields its columns."""
+struct NestedSpring <: AbstractModel
+    spring::SegmentSpring
+    idx::Int
+end
+NestedSpring(columns...) = NestedSpring(SegmentSpring(columns...), 0)
+KiteGeometry.model_columns(::Type{NestedSpring}) = fieldnames(SegmentSpring)
+KiteGeometry.column_type(::Type{NestedSpring}, column::Symbol) =
+    fieldtype(SegmentSpring, column)
+function Base.getproperty(model::NestedSpring, name::Symbol)
+    hasfield(NestedSpring, name) && return getfield(model, name)
+    return getproperty(getfield(model, :spring), name)
+end
+
+@testset "a model keeping its columns in a nested SegmentSpring reads and writes them" begin
+    document = structure_document(load_kite("rigid_structural_geometry.yaml"))
+    segments = document["segments"]
+    model = findfirst(==("model"), segments["headers"])
+    foreach(row -> row[model] = "nested", segments["data"])
+    register_model!(:segments, "nested", NestedSpring, ("N*s", "-", "-"))
+    try
+        system = SystemDefinition(document)
+        segment = system.segments[1]
+        @test segment isa Segment{NestedSpring}
+        @test segment.unit_damping ≈ 10.0
+        @test structure_document(system) == document
+    finally
+        unregister_model!(:segments, "nested")
+    end
 end
 
 @testset "place=false leaves every authored point where its YAML puts it" begin

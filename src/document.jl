@@ -361,8 +361,8 @@ function write_table(system, block, rows)
         !all(reads_default.(registrations, block)) && (model_units["model"] = "-")
     for model in unique(filter(!isnothing, registrations))
         for (field, unit) in zip(model_columns(model.type), model.units)
-            any(row -> row.model isa model.type && !isnothing(getfield(row.model, field)),
-                rows) || continue
+            any(row -> row.model isa model.type &&
+                           !isnothing(getproperty(row.model, field)), rows) || continue
             get!(model_units, String(field), unit) == unit || throw(ArgumentError(
                 "two $block models give the column $field different units"))
         end
@@ -386,11 +386,11 @@ function reads_default(registration, block)
 end
 
 """The cell of `model`, registered as `registration`, in the model column `header`: the
-registered name for `model`, else the field of that name, `nothing` where it has none."""
+registered name for `model`, else its column of that name, `nothing` where it has none."""
 function model_cell(model, registration, header)
     header == "model" && return isnothing(registration) ? nothing : registration.name
     Symbol(header) in model_columns(typeof(model)) || return nothing
-    return document_value(getfield(model, Symbol(header)), nothing, nothing)
+    return document_value(getproperty(model, Symbol(header)), nothing, nothing)
 end
 
 """`value` as a structure document writes it, a reference into `target` by name."""

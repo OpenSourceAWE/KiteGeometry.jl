@@ -493,20 +493,24 @@ end
 """The axial stiffness times rest length [N] all segments of `tether` share, from their
 `linear` `materials` and diameters, refusing another law or segments that differ."""
 function tether_unit_stiffness(tether, segments, materials)
-    stiffnesses = [unit_stiffness(segments[index], materials, tether)
-                   for index in tether.segments]
+    stiffnesses = [unit_stiffness(segments[index], materials) for index in tether.segments]
+    any(isnothing, stiffnesses) && error(
+        "tether $(tether.name): init_tether_force needs a linear material; use " *
+        "init_stretch_frac")
     all(≈(first(stiffnesses)), stiffnesses) || error(
         "tether $(tether.name): its segments differ in unit_stiffness ($stiffnesses)")
     return first(stiffnesses)
 end
 
-"""Axial stiffness times rest length [N] of `segment` of `tether`, from its `linear`
-material among `materials` and its diameter."""
-function unit_stiffness(segment, materials, tether)
+"""
+    unit_stiffness(segment, materials)
+
+Axial stiffness times rest length [N] of `segment`, `youngs_modulus * π (diameter/2)^2`
+from its material among `materials`; `nothing` where that material's law is not `linear`.
+"""
+function unit_stiffness(segment::Segment, materials)
     material = materials[segment.material]
-    material.law == "linear" || error(
-        "tether $(tether.name): init_tether_force needs a linear material; use " *
-        "init_stretch_frac")
+    material.law == "linear" || return nothing
     return material.parameters["youngs_modulus"] * π * (segment.diameter / 2)^2
 end
 
