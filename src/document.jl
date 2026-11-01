@@ -362,7 +362,7 @@ function write_table(system, block, rows)
     for model in unique(filter(!isnothing, registrations))
         for (field, unit) in zip(model_columns(model.type), model.units)
             any(row -> row.model isa model.type &&
-                           !isnothing(getproperty(row.model, field)), rows) || continue
+                           !isnothing(column_value(row.model, field)), rows) || continue
             get!(model_units, String(field), unit) == unit || throw(ArgumentError(
                 "two $block models give the column $field different units"))
         end
@@ -390,7 +390,7 @@ registered name for `model`, else its column of that name, `nothing` where it ha
 function model_cell(model, registration, header)
     header == "model" && return isnothing(registration) ? nothing : registration.name
     Symbol(header) in model_columns(typeof(model)) || return nothing
-    return document_value(getproperty(model, Symbol(header)), nothing, nothing)
+    return document_value(column_value(model, Symbol(header)), nothing, nothing)
 end
 
 """`value` as a structure document writes it, a reference into `target` by name."""

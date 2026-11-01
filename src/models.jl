@@ -28,10 +28,16 @@ const DEFAULT_MODELS = Dict{Symbol, String}()
 
 The columns of a document the model type `M` reads, in order: its fields unless `M` adds a
 method naming others, with a [`column_type`](@ref) method for those. An `M` is built from its
-columns alone, `M(columns...)`, and a model's column is read with `getproperty`, so an `M`
-may keep its columns in a nested model.
+columns alone, `M(columns...)`, and a column that is not a field of `M` is read with
+`getproperty`, so an `M` may keep its columns in a nested model.
 """
 model_columns(M::Type{<:AbstractModel}) = fieldnames(M)
+
+"""The `column` of `model`: its field of that name, else its property."""
+function column_value(model::AbstractModel, column::Symbol)
+    hasfield(typeof(model), column) && return getfield(model, column)
+    return getproperty(model, column)
+end
 
 """
     column_type(M, column)

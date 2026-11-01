@@ -332,6 +332,36 @@ Base.propertynames(model::NestedSpring) = (fieldnames(NestedSpring)...,
     end
 end
 
+"""A segment model whose `unit_damping` property falls back to a default where its own
+field is unset, as SymbolicAWEModels' winch model forwards `friction_epsilon`."""
+struct DefaultedDamping <: AbstractModel
+    unit_damping::Union{Nothing, Float64}
+end
+function Base.getproperty(model::DefaultedDamping, name::Symbol)
+    name === :unit_damping && return something(getfield(model, name), 6.0)
+    return getfield(model, name)
+end
+
+@testset "a model's unset field writes no column, whatever its getproperty gives" begin
+    document = structure_document(load_kite("rigid_structural_geometry.yaml"))
+    segments = document["segments"]
+    keep = findall(header -> !(Symbol(header) in fieldnames(SegmentSpring)),
+                   segments["headers"])
+    segments["headers"] = segments["headers"][keep]
+    segments["units"] = segments["units"][keep]
+    segments["data"] = [row[keep] for row in segments["data"]]
+    model = findfirst(==("model"), segments["headers"])
+    foreach(row -> row[model] = "defaulted", segments["data"])
+    register_model!(:segments, "defaulted", DefaultedDamping, ("N*s",))
+    try
+        system = SystemDefinition(document)
+        @test system.segments[1].unit_damping == 6.0
+        @test structure_document(system) == document
+    finally
+        unregister_model!(:segments, "defaulted")
+    end
+end
+
 @testset "place=false leaves every authored point where its YAML puts it" begin
     for file in AUTHORING_SYSTEMS
         authored = YAML.load_file(joinpath(KITE, file))["points"]
