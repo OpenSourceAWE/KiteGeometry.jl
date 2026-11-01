@@ -311,6 +311,8 @@ function Base.getproperty(model::NestedSpring, name::Symbol)
     hasfield(NestedSpring, name) && return getfield(model, name)
     return getproperty(getfield(model, :spring), name)
 end
+Base.propertynames(model::NestedSpring) = (fieldnames(NestedSpring)...,
+                                           fieldnames(SegmentSpring)...)
 
 @testset "a model keeping its columns in a nested SegmentSpring reads and writes them" begin
     document = structure_document(load_kite("rigid_structural_geometry.yaml"))
@@ -323,6 +325,7 @@ end
         segment = system.segments[1]
         @test segment isa Segment{NestedSpring}
         @test segment.unit_damping ≈ 10.0
+        @test :compression_frac in propertynames(segment)
         @test structure_document(system) == document
     finally
         unregister_model!(:segments, "nested")
