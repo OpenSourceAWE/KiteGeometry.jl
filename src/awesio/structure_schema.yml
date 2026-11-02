@@ -286,8 +286,8 @@ properties:
     description: >
       Ordered runs of segments between two points, each discretising the tether
       of the system it shares a name with. A tether's segments repeat its
-      diameter and their `rest_length`s add up to its length, so a tether can be
-      drawn and reeled from this file alone.
+      diameter and the `rest_length` of each adds up to its length, so a tether
+      can be drawn and reeled from this file alone.
     allOf:
       - $ref: "#/definitions/table"
       - properties:
