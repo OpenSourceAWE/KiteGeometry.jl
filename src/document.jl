@@ -1,8 +1,9 @@
 # SPDX-FileCopyrightText: 2026 Bart van de Lint
 # SPDX-License-Identifier: MIT
 
-"""The block each reference column of a table block refers into."""
+"""The block each reference column of a block refers into."""
 const REFERENCES = Dict(
+    (:system_tethers, :material) => :materials,
     (:points, :body) => :bodies,
     (:segments, :points) => :points,
     (:segments, :material) => :materials,
@@ -23,40 +24,56 @@ const REFERENCES = Dict(
 
 """
     Metadata(; name, n_points, description="", note="", awesIO_version=AWESIO_VERSION,
-             schema="structure_schema.yml", connectivity_sha="")
+             schema="structure_schema.yml", connectivity_sha="", system="", system_sha="")
 
-Metadata from one keyword argument per field. An empty `connectivity_sha` stands for one not
-yet computed.
+Metadata from one keyword argument per field. An empty `connectivity_sha`, `system` or
+`system_sha` stands for one not yet computed or written.
 """
 function Metadata(; name, n_points, description="", note="", awesIO_version=AWESIO_VERSION,
-                  schema="structure_schema.yml", connectivity_sha="")
+                  schema="structure_schema.yml", connectivity_sha="", system="",
+                  system_sha="")
     return Metadata(name, description, note, awesIO_version, schema, n_points,
-                    connectivity_sha)
+                    connectivity_sha, system, system_sha)
 end
 
 """
-    SystemDefinition(; metadata, materials, points, segments, spanwise_stations, pulleys,
-                     tethers, winches, wings, canopy_faces, bodies, tubes, extras)
+    SystemMetadata(; name, description="", note="", awesIO_version=AWESIO_VERSION,
+                   schema="system_schema.yml")
+
+The metadata of a system document from one keyword argument per field.
+"""
+function SystemMetadata(; name, description="", note="", awesIO_version=AWESIO_VERSION,
+                        schema="system_schema.yml")
+    return SystemMetadata(name, description, note, awesIO_version, schema)
+end
+
+"""
+    SystemDefinition(; metadata, system_metadata, materials, system_tethers, points,
+                     segments, spanwise_stations, pulleys, tethers, winches, wings,
+                     canopy_faces, bodies, tubes, extras, system_extras)
 
 A system definition from its components, every reference resolved to the index of the
-component it names. Absent blocks are empty; `extras` holds the blocks the schema does not
-name. Refuses a `metadata.n_points` that is not the number of points.
+component it names. Absent blocks are empty; `system_metadata` defaults to the name of
+`metadata`; `extras` and `system_extras` hold what the schemas do not name. Refuses a
+`metadata.n_points` that is not the number of points.
 """
-function SystemDefinition(; metadata::Metadata, extras=OrderedDict{String, Any}(),
-                          components...)
-    unknown = setdiff(keys(components), keys(BLOCKS))
+function SystemDefinition(; metadata::Metadata,
+                          system_metadata=SystemMetadata(; name=metadata.name),
+                          extras=OrderedDict{String, Any}(),
+                          system_extras=OrderedDict{String, Any}(), components...)
+    unknown = setdiff(keys(components), keys(ALL_BLOCKS))
     isempty(unknown) || throw(ArgumentError("no block named $(join(unknown, ", "))"))
     n_points = length(get(components, :points, ()))
     metadata.n_points == n_points ||
         throw(ArgumentError("metadata.n_points is $(metadata.n_points), not $n_points"))
-    blocks = NamedTuple{keys(BLOCKS)}(
-        convert(Vector{BLOCKS[block]}, get(components, block, BLOCKS[block][]))
-        for block in keys(BLOCKS))
-    indices = NamedTuple{keys(BLOCKS)}(name_indices(blocks[block], block)
-                                       for block in keys(BLOCKS))
+    blocks = NamedTuple{keys(ALL_BLOCKS)}(
+        convert(Vector{ALL_BLOCKS[block]}, get(components, block, ALL_BLOCKS[block][]))
+        for block in keys(ALL_BLOCKS))
+    indices = NamedTuple{keys(ALL_BLOCKS)}(name_indices(blocks[block], block)
+                                           for block in keys(ALL_BLOCKS))
     resolved = ([resolve(component, block, indices) for component in blocks[block]]
-                for block in keys(BLOCKS))
-    return SystemDefinition(metadata, resolved..., extras)
+                for block in keys(ALL_BLOCKS))
+    return SystemDefinition(metadata, system_metadata, resolved..., extras, system_extras)
 end
 
 """The index of each component of `rows` by its name, refusing a name used twice."""
@@ -91,16 +108,18 @@ function resolve(index::Int, target::Symbol, indices)
 end
 
 """
-    SystemDefinition(document::AbstractDict; strict=true)
+    SystemDefinition(document::AbstractDict, system_document::AbstractDict; strict=true)
 
-The system definition a parsed awesIO structure document describes. A row reads the columns
-of the model its `model` column registers; a filled cell in any other column the schema does
-not name is refused, or with `strict=false` dropped with a warning. The blocks the schema
-does not name are kept as `extras`, in the order read. Refuses another major
-`awesIO_version` than `AWESIO_VERSION`, warning on another minor one, and a
-`connectivity_sha` that does not describe the document's own tables.
+The system definition a parsed awesIO structure document and the parsed system document it
+names describe; their `system_sha` is checked only by [`load_structure`](@ref), which has the
+file's bytes. A row reads the columns of the model its `model` column registers; a filled
+cell in any other column the schema does not name is refused, or with `strict=false` dropped
+with a warning. What the schemas do not name is kept as `extras` and `system_extras`, in the
+order read. Refuses another major `awesIO_version` than `AWESIO_VERSION`, warning on another
+minor one, and a `connectivity_sha` that does not describe the document's own tables.
 """
-function SystemDefinition(document::AbstractDict; strict=true)
+function SystemDefinition(document::AbstractDict, system_document::AbstractDict;
+                          strict=true)
     for block in REQUIRED_BLOCKS
         haskey(document, String(block)) || throw(ArgumentError("no $block block"))
     end
@@ -113,12 +132,53 @@ function SystemDefinition(document::AbstractDict; strict=true)
     extras = OrderedDict{String, Any}(
         name => block for (name, block) in document
         if name != "metadata" && !haskey(BLOCKS, Symbol(name)))
-    system = SystemDefinition(; metadata, extras, tables...)
+    system = SystemDefinition(; metadata, extras, read_system(system_document)...,
+                              tables...)
     sha = connectivity_sha(system)
     metadata.connectivity_sha == sha || throw(ArgumentError(
         "connectivity_sha $(metadata.connectivity_sha) does not describe the document's " *
         "points, segments, bodies, tubes and canopy faces, whose is $sha"))
     return system
+end
+
+"""The keyword arguments of `SystemDefinition` the parsed system `document` gives."""
+function read_system(document)
+    for block in ("metadata", "materials", "components")
+        haskey(document, block) || throw(ArgumentError("no $block block in the system"))
+    end
+    components = document["components"]
+    haskey(components, "tethers") ||
+        throw(ArgumentError("no components.tethers in the system"))
+    fields = document["metadata"]
+    check_version(get(fields, "awesIO_version", nothing))
+    system_metadata = SystemMetadata((to_field(fieldtype(SystemMetadata, field),
+                                               fields[String(field)])
+                                      for field in fieldnames(SystemMetadata))...)
+    materials = [Material(; name=row["name"], law=row["law"], parameters=row["parameters"])
+                 for row in document["materials"]]
+    system_extras = OrderedDict{String, Any}(
+        name => block for (name, block) in document
+        if !(name in ("metadata", "materials", "components")))
+    others = filter(component -> first(component) != "tethers", components)
+    isempty(others) || (system_extras["components"] = others)
+    system_tethers = read_system_tether.(components["tethers"])
+    return (; system_metadata, materials, system_tethers, system_extras)
+end
+
+"""The fields of a `SystemTether` a document nests under its `structure`."""
+const TETHER_STRUCTURE = Tuple(setdiff(fieldnames(SystemTether),
+                                       (:name, :type, :version, :joints, :model)))
+
+"""The `SystemTether` of the parsed `row` of a system document, refusing a `structure` field
+the schema does not name."""
+function read_system_tether(row)
+    structure = (Symbol(field) => value for (field, value) in row["structure"])
+    unknown = setdiff(first.(structure), TETHER_STRUCTURE)
+    isempty(unknown) || throw(ArgumentError(
+        "tether $(row["name"]) of the system holds $(join(unknown, ", ")), which is no " *
+        "field of a system tether"))
+    return SystemTether(; name=row["name"], type=row["type"], version=row["version"],
+                        joints=row["joints"], structure...)
 end
 
 """Applies the `awesIO_version` rule of `SystemDefinition(document)` to `version`."""
@@ -179,59 +239,90 @@ function row_number(name::Symbol, rows, target)
 end
 
 """
+    system_sha(path)
+
+Lowercase hex SHA-256 of the bytes of the file at `path`, which a structure naming that file
+as its system holds as `system_sha`.
+"""
+system_sha(path) = bytes2hex(open(sha256, path))
+
+"""`text` parsed as YAML, its mappings keeping their order."""
+parse_yaml(text) = YAML.load(text; dicttype=OrderedDict{String, Any})
+
+"""
     load_structure(path; strict=true)
 
-The `SystemDefinition` in the YAML structure document at `path`, read as `from_yaml` reads
-it.
+The `SystemDefinition` in the YAML structure document at `path` and the system file its
+`metadata.system` names relative to it, read as `from_yaml` reads them. Refuses a
+`metadata.system_sha` that is not the hash of that file.
 """
-load_structure(path; strict=true) = from_yaml(read(path, String); strict)
-
-"""
-    from_yaml(text; strict=true)
-
-The `SystemDefinition` in the YAML structure document `text`, read as
-`SystemDefinition(document; strict)` reads it.
-"""
-function from_yaml(text::AbstractString; strict=true)
-    return SystemDefinition(YAML.load(text; dicttype=OrderedDict{String, Any}); strict)
+function load_structure(path; strict=true)
+    document = parse_yaml(read(path, String))
+    metadata = get(document, "metadata", Dict{String, Any}())
+    named = get(metadata, "system", "")
+    isempty(named) && throw(ArgumentError("structure $path names no system file"))
+    system_path = joinpath(dirname(path), named)
+    sha = system_sha(system_path)
+    get(metadata, "system_sha", "") == sha || throw(ArgumentError(
+        "structure $path holds system_sha $(get(metadata, "system_sha", "")), but the " *
+        "hash of $system_path is $sha"))
+    return SystemDefinition(document, parse_yaml(read(system_path, String)); strict)
 end
 
 """
-    from_json(text; strict=true)
+    from_yaml(text, system_text; strict=true)
 
-The `SystemDefinition` in the JSON structure document `text`, read as
-`SystemDefinition(document; strict)` reads it.
+The `SystemDefinition` in the YAML structure document `text` and system document
+`system_text`, read as `SystemDefinition(document, system_document; strict)` reads them.
 """
-function from_json(text::AbstractString; strict=true)
-    return SystemDefinition(JSON.parse(text; dicttype=OrderedDict{String, Any}); strict)
+function from_yaml(text::AbstractString, system_text::AbstractString; strict=true)
+    return SystemDefinition(parse_yaml(text), parse_yaml(system_text); strict)
 end
 
 """
-    definition(topology::AbstractString; strict=true)
+    from_json(text, system_text; strict=true)
 
-The `SystemDefinition` in the JSON structure document a log carries under the key
-`topology`, read as `from_json` reads it.
+The `SystemDefinition` in the JSON structure document `text` and system document
+`system_text`, read as `SystemDefinition(document, system_document; strict)` reads them.
 """
-definition(topology::AbstractString; strict=true) = from_json(topology; strict)
+function from_json(text::AbstractString, system_text::AbstractString; strict=true)
+    return SystemDefinition(JSON.parse(text; dicttype=OrderedDict{String, Any}),
+                            JSON.parse(system_text; dicttype=OrderedDict{String, Any});
+                            strict)
+end
+
+"""
+    definition(topology::AbstractString, system::AbstractString; strict=true)
+
+The `SystemDefinition` in the JSON structure and system documents a log carries under the
+keys `topology` and `system`, read as `from_json` reads them.
+"""
+function definition(topology::AbstractString, system::AbstractString; strict=true)
+    return from_json(topology, system; strict)
+end
 
 """
     definition(log::SysLog; strict=true)
 
-The `SystemDefinition` a log loaded by `load_log` carries under its metadata key
-`topology`.
+The `SystemDefinition` a log loaded by `load_log` carries under its metadata keys `topology`
+and `system`.
 """
-definition(log::SysLog; strict=true) = definition(log.metadata["topology"]; strict)
+function definition(log::SysLog; strict=true)
+    return definition(log.metadata["topology"], log.metadata["system"]; strict)
+end
 
 """
     save_log(logger::Logger, system::SystemDefinition, name="sim_log", compress=true;
              metadata=Dict{String, String}(), kwargs...)
 
-`save_log(logger, name, compress; metadata, kwargs...)` with `system` added to
-`metadata` as JSON under the key `topology`, which `KiteGeometry.definition` reads back.
+`save_log(logger, name, compress; metadata, kwargs...)` with `system` added to `metadata` as
+JSON, its structure under the key `topology` and its system under the key `system`, which
+`KiteGeometry.definition` reads back.
 """
 function KiteUtils.save_log(logger::Logger, system::SystemDefinition, name="sim_log",
                             compress=true; metadata=Dict{String, String}(), kwargs...)
-    metadata = merge(metadata, Dict("topology" => to_json(system)))
+    metadata = merge(metadata, Dict("topology" => to_json(system),
+                                    "system" => to_json(system_document(system))))
     return save_log(logger, name, compress; metadata, kwargs...)
 end
 
@@ -240,14 +331,21 @@ end
 
 `structure_document(system)` as YAML text.
 """
-to_yaml(system::SystemDefinition) = YAML.write(structure_document(system))
+to_yaml(system::SystemDefinition) = to_yaml(structure_document(system))
 
 """
     to_json(system::SystemDefinition)
 
 `structure_document(system)` as JSON text.
 """
-to_json(system::SystemDefinition) = JSON.json(structure_document(system); pretty=true)
+to_json(system::SystemDefinition) = to_json(structure_document(system))
+
+"""
+    to_json(document::AbstractDict)
+
+`document` as JSON text.
+"""
+to_json(document::AbstractDict) = JSON.json(document; pretty=true)
 
 """The names of the columns of `block` that the schema requires, in order."""
 required_columns(block) = fieldnames(BLOCKS[block])[eachindex(UNITS[block])]
@@ -326,26 +424,102 @@ function model_field(M, field, unit, headers, units, row)
 end
 
 """
-    structure_document(system::SystemDefinition)
+    structure_document(structure::SystemDefinition; description, note, system, system_sha)
 
-The awesIO structure document of `system`, as `SystemDefinition` reads it: references by
+The awesIO structure document of `structure`, as `SystemDefinition` reads it: references by
 name, model columns after the schema's, extra blocks after the schema's, empty optional
 blocks and unset optional columns left out. Its `awesIO_version` is `AWESIO_VERSION` and its
-`connectivity_sha` that of `system`'s own tables, whatever `system.metadata` holds.
+`connectivity_sha` that of `structure`'s own tables, whatever `structure.metadata` holds.
+`description`, `note`, `system`, the path of the system file relative to this one, and
+`system_sha`, that file's [`system_sha`](@ref), default to those of `structure.metadata`.
 """
-function structure_document(system::SystemDefinition)
-    metadata = OrderedDict{String, Any}(String(field) => getfield(system.metadata, field)
+function structure_document(structure::SystemDefinition;
+                            description=structure.metadata.description,
+                            note=structure.metadata.note,
+                            system=structure.metadata.system,
+                            system_sha=structure.metadata.system_sha)
+    metadata = OrderedDict{String, Any}(String(field) => getfield(structure.metadata, field)
                                         for field in fieldnames(Metadata))
-    metadata["awesIO_version"] = AWESIO_VERSION
-    metadata["connectivity_sha"] = connectivity_sha(system)
+    merge!(metadata, Dict("awesIO_version" => AWESIO_VERSION,
+                          "connectivity_sha" => connectivity_sha(structure),
+                          "description" => description, "note" => note,
+                          "system" => system, "system_sha" => system_sha))
     document = OrderedDict{String, Any}("metadata" => metadata)
     for block in keys(BLOCKS)
-        rows = getfield(system, block)
+        rows = getfield(structure, block)
         block in REQUIRED_BLOCKS || !isempty(rows) || continue
         name_indices(rows, block)
-        document[String(block)] = write_table(system, block, rows)
+        document[String(block)] = write_table(structure, block, rows)
     end
-    return merge!(document, system.extras)
+    return merge!(document, structure.extras)
+end
+
+"""
+    system_document(definitions::AbstractVector; name, description="", note="")
+    system_document(definition::SystemDefinition; name, description, note)
+
+The awesIO system document that several structures can name: the union by name of the
+materials and of the tethers of `definitions`, and of what else their systems hold, refusing
+one name with two different values. For one `definition`, `name`, `description` and `note`
+default to those of its `system_metadata`.
+"""
+function system_document(definitions::AbstractVector{<:SystemDefinition}; name,
+                         description="", note="")
+    document = OrderedDict{String, Any}(
+        "metadata" => OrderedDict{String, Any}(
+            "name" => name, "description" => description, "note" => note,
+            "awesIO_version" => AWESIO_VERSION, "schema" => "system_schema.yml"),
+        "materials" => union_by_name(
+            "materials", material_row(material) for definition in definitions
+                         for material in definition.materials))
+    extras = OrderedDict{String, Any}()
+    for definition in definitions, (block, value) in definition.system_extras
+        get!(extras, block, value) == value ||
+            throw(ArgumentError("the systems hold two different $block blocks"))
+    end
+    tethers = union_by_name("tethers", system_tether_row(definition, tether)
+                                       for definition in definitions
+                                       for tether in definition.system_tethers)
+    document["components"] = merge(get(extras, "components", OrderedDict{String, Any}()),
+                                   OrderedDict{String, Any}("tethers" => tethers))
+    delete!(extras, "components")
+    return merge!(document, extras)
+end
+function system_document(definition::SystemDefinition;
+                         name=definition.system_metadata.name,
+                         description=definition.system_metadata.description,
+                         note=definition.system_metadata.note)
+    return system_document([definition]; name, description, note)
+end
+
+"""Each of the document `rows` once, refusing one name with two different values."""
+function union_by_name(block, rows)
+    union = OrderedDict{String, Any}()
+    for row in rows
+        get!(union, row["name"], row) == row || throw(ArgumentError(
+            "two definitions give the $block row $(row["name"]) different values: " *
+            "$(union[row["name"]]) and $row"))
+    end
+    return collect(values(union))
+end
+
+"""The row of `material` in a system document."""
+function material_row(material)
+    return OrderedDict{String, Any}("name" => String(material.name), "law" => material.law,
+                                    "parameters" => material.parameters)
+end
+
+"""The row of `tether` of `definition` in a system document."""
+function system_tether_row(definition, tether)
+    structure = OrderedDict{String, Any}()
+    for field in TETHER_STRUCTURE
+        target = get(REFERENCES, (:system_tethers, field), nothing)
+        value = document_value(getfield(tether, field), target, definition)
+        isnothing(value) || (structure[String(field)] = value)
+    end
+    return OrderedDict{String, Any}("name" => String(tether.name), "type" => tether.type,
+                                    "version" => tether.version, "joints" => tether.joints,
+                                    "structure" => structure)
 end
 
 """The `headers`/`units`/`data` table of the components `rows` of `block`: the required

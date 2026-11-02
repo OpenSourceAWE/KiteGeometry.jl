@@ -6,18 +6,12 @@ metadata:
   schema: "structure_schema.yml"
   n_points: 44
   connectivity_sha: 4733b55552f94a6cc4084ae7a8e95589a47429d393a37c5daf3e5c5deefe53eb
-
-materials:
-  headers: [name, law, parameters]
-  units: [-, -, -]
-  data:
-    - [v3_psm_line, linear, {density: 724.0, youngs_modulus: 5.5e+10}]
-    - [wing_tube, linear, {density: 724.0, youngs_modulus: 1.2732395447351628e+12}]
-    - [v3_canopy, membrane, {areal_density: 0.0, membrane_stiffness: 1000.0}]
+  system: ../system_config/v3_system.yml
+  system_sha: fb65dae4951da5e1b19741d9d6cc1747d4cf8364732d66764b94442edb29bce7
 
 points:
   headers: [name, fixed, body, pos_ENU, extra_mass]
-  units: [-, -, -, m, kg]
+  units: ["-", "-", "-", m, kg]
   data:
     - ["1", false, null, [0.0, 0.0, 100.0], 23.25]
     - ["2", false, null, [-0.16686417, 4.07190711, 108.25938552], 0.55]
@@ -66,7 +60,7 @@ points:
 
 segments:
   headers: [name, points, rest_length, diameter, material]
-  units: [-, -, m, m, -]
+  units: ["-", "-", m, m, "-"]
   data:
     - ["1", ["2", "4"], 0.984642, 0.001, wing_tube]
     - ["2", ["4", "6"], 1.327663, 0.001, wing_tube]
@@ -139,7 +133,7 @@ segments:
 
 spanwise_stations:
   headers: [name, wing, points]
-  units: [-, -, -]
+  units: ["-", "-", "-"]
   data:
     - ["1", wing, ["2", "3"]]
     - ["2", wing, ["4", "5"]]
@@ -154,7 +148,7 @@ spanwise_stations:
 
 pulleys:
   headers: [name, segments, efficiency]
-  units: [-, -, -]
+  units: ["-", "-", "-"]
   data:
     - ["1", ["48", "47"], 0.95]
     - ["2", ["57", "58"], 0.95]
@@ -165,25 +159,25 @@ pulleys:
 
 tethers:
   headers: [name, start_point, end_point, segments]
-  units: [-, -, -, -]
+  units: ["-", "-", "-", "-"]
   data:
     - ["1", "1", "39", ["1_seg_1", "1_seg_2", "1_seg_3", "1_seg_4", "1_seg_5", "1_seg_6"]]
 
 winches:
   headers: [name, tethers, winch_point, gear_ratio, drum_radius]
-  units: [-, -, -, -, m]
+  units: ["-", "-", "-", "-", m]
   data:
     - ["1", ["1"], "39", 1.0, 0.11]
 
 wings:
   headers: [name, pos_ENU, Q_KA2ENU, canopy_material]
-  units: [-, m, -, -]
+  units: ["-", m, "-", "-"]
   data:
     - [wing, [0.0, 0.0, 100.0], [1.0, 0.0, 0.0, 0.0], v3_canopy]
 
 canopy_faces:
   headers: [name, wing, points]
-  units: [-, -, -]
+  units: ["-", "-", "-"]
   data:
     - [canopy_1, wing, ["2", "3", "5", "4"]]
     - [canopy_2, wing, ["4", "5", "7", "6"]]

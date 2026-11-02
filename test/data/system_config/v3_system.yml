@@ -1,0 +1,31 @@
+metadata:
+  name: v3_kite
+  description: "The materials and the tethers of the TU Delft V3 kite as V3Kite.jl's Timoshenko-beam and particle-lattice projects build it. The two projects carry a different tether, so the file lists both, each named as its structure names it."
+  note: "Converted by script from the two V3 structure documents' materials tables and tethers."
+  awesIO_version: 0.1.0
+  schema: system_schema.yml
+materials:
+  - {name: v3_beam_line, law: linear, parameters: {density: 970.0, youngs_modulus: 5.5e+10}}
+  - {name: control_line, law: linear, parameters: {density: 724.0, youngs_modulus: 5.5e+10}}
+  - {name: v3_psm_line, law: linear, parameters: {density: 724.0, youngs_modulus: 5.5e+10}}
+  - {name: wing_tube, law: linear, parameters: {density: 724.0, youngs_modulus: 1.2732395447351628e+12}}
+  - {name: v3_canopy, law: membrane, parameters: {areal_density: 0.0, membrane_stiffness: 1000.0}}
+  - name: v3_tube
+    law: breukels2011
+    parameters: {C1: 6582.82, C2: -272.43, C3: 40852.38, C4: 14.31, C5: 271865251.42, C6: 215.93, C7: 14021.79, C8: -589.05, C9: 322.55, C10: 0.0239, C11: 5.3833, C12: 0.0461, C13: 1467.0, C14: 40.908, C15: -191.8, C16: 47.406, C17: -17703.0, C18: 358.05, C19: 0.0918}
+components:
+  tethers:
+    - name: tether
+      type: non_conductive_tether
+      version: 1.0
+      joints:
+        upper_tether_joint: {id: kcu}
+        lower_tether_joint: {id: ground_anchor}
+      structure: {length: 250.0, diameter: 0.004, material: v3_beam_line}
+    - name: "1"
+      type: non_conductive_tether
+      version: 1.0
+      joints:
+        upper_tether_joint: {id: "1"}
+        lower_tether_joint: {id: "39"}
+      structure: {length: 100.0, diameter: 0.0135, material: v3_psm_line}

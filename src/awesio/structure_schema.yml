@@ -25,8 +25,9 @@ description: >
   is one when it means the same, in the same unit, to any model that reads it,
   and more than one tool writes it or would.
 
-  Materials say what the elements are made of, shared by the tools that build
-  them, the law fixing each material's parameters.
+  The system file this structure discretises owns the design: what the elements
+  are made of, and what is one value for a whole component, such as a tether's
+  length and diameter. A material column here names a material of that file.
 
   A tool column is any other column, appended with the unit its tool states.
   How a solver treats the kite — whether it steps a point dynamically or not at
@@ -60,6 +61,8 @@ properties:
       - schema
       - n_points
       - connectivity_sha
+      - system
+      - system_sha
     properties:
       name:
         type: string
@@ -98,66 +101,20 @@ properties:
           implementations in zero-based languages agree with each other; a
           reader that gets this wrong sees every file as a mismatch.
         pattern: '^[0-9a-f]{64}$'
+      system:
+        type: string
+        minLength: 1
+        description: >
+          Path of the system file this structure discretises, relative to this
+          file. Several structures may name one system.
+      system_sha:
+        type: string
+        description: >
+          Lowercase hex SHA-256 of the system file's bytes as they stand on disk,
+          so a structure is never read with a system other than the one it
+          discretises.
+        pattern: '^[0-9a-f]{64}$'
     additionalProperties: false
-
-  # --------------------------------------------------------------------------
-  # MATERIALS
-  # --------------------------------------------------------------------------
-  materials:
-    description: >
-      What the elements are made of, which a solver needs to build them and a
-      viewer does not. A material is a stiffness `law` and that law's
-      `parameters`, which fix how it deforms and what it weighs. The laws tools
-      share are defined below as `<law>_parameters`, which fix their parameters'
-      names and units and the curve they describe. Any other law is free: it
-      names a model its readers implement, and that model fixes its parameters.
-      A reader that does not implement a material's law cannot build the
-      elements naming it.
-    allOf:
-      - $ref: "#/definitions/table"
-      - properties:
-          headers:
-            items:
-              - const: name
-                description: >
-                  Unique name of the material.
-              - const: law
-                description: >
-                  Name of the stiffness law: `linear`, `membrane` or
-                  `breukels2011` as defined below, or any law its readers
-                  implement.
-              - const: parameters
-                description: >
-                  The law's parameters, by name, in the units the law gives them.
-            minItems: 3
-          units:
-            items:
-              - const: "-"
-              - const: "-"
-              - const: "-"
-            minItems: 3
-          data:
-            items:
-              type: array
-              items:
-                - $ref: "#/definitions/component_name"
-                - type: string
-                  minLength: 1
-                - type: object
-              minItems: 3
-              allOf:
-                - if:
-                    items: [true, const: linear]
-                  then:
-                    items: [true, true, $ref: "#/definitions/linear_parameters"]
-                - if:
-                    items: [true, const: membrane]
-                  then:
-                    items: [true, true, $ref: "#/definitions/membrane_parameters"]
-                - if:
-                    items: [true, const: breukels2011]
-                  then:
-                    items: [true, true, $ref: "#/definitions/breukels2011_parameters"]
 
   # --------------------------------------------------------------------------
   # POINTS AND THE ELEMENTS BUILT ON THEM
@@ -255,7 +212,7 @@ properties:
           $ref: "#/definitions/length"
       material:
         description: >
-          The material the line is made of.
+          The material of the system the line is made of.
         unit: "-"
         value:
           $ref: "#/definitions/component_name"
@@ -327,9 +284,10 @@ properties:
 
   tethers:
     description: >
-      Ordered runs of segments between two points. Material lives on the
-      segments; a tether is the grouping a winch reels, and the length it is
-      reeled from is its segments' `rest_length`.
+      Ordered runs of segments between two points, each discretising the tether
+      of the system it shares a name with. A tether's segments repeat its
+      diameter and their `rest_length`s add up to its length, so a tether can be
+      drawn and reeled from this file alone.
     allOf:
       - $ref: "#/definitions/table"
       - properties:
@@ -337,7 +295,7 @@ properties:
             items:
               - const: name
                 description: >
-                  Unique name of the tether.
+                  Unique name of the tether, the name of a tether of the system.
               - const: start_point
                 description: >
                   The point the tether starts at.
@@ -448,8 +406,8 @@ properties:
     optionalColumns:
       canopy_material:
         description: >
-          The material every face of the wing's canopy is made of, or null where
-          the wing has no canopy.
+          The material of the system every face of the wing's canopy is made of,
+          or null where the wing has no canopy.
         unit: "-"
         value:
           $ref: "#/definitions/optional_name"
@@ -587,8 +545,8 @@ properties:
           $ref: "#/definitions/non_negative"
       material:
         description: >
-          The material the element's rigidities are derived from, at its
-          diameter and pressure.
+          The material of the system the element's rigidities are derived from,
+          at its diameter and pressure.
         unit: "-"
         value:
           $ref: "#/definitions/component_name"
@@ -713,64 +671,3 @@ definitions:
   non_negative:
     type: number
     minimum: 0
-
-  # ============================================================================
-  # STIFFNESS LAWS
-  # ============================================================================
-  linear_parameters:
-    description: >
-      `linear`: a line of cross-section A = π·diameter²/4 carries the axial force
-      youngs_modulus·A·ε at strain ε = (length − rest_length)/rest_length.
-    type: object
-    required:
-      - density
-      - youngs_modulus
-    properties:
-      density:
-        description: Mass per volume of the line [kg/m^3].
-        type: number
-        minimum: 0
-      youngs_modulus:
-        description: Young's modulus of the line [Pa].
-        type: number
-        minimum: 0
-    additionalProperties: false
-
-  membrane_parameters:
-    description: >
-      `membrane`: a fabric carries, per unit width, the in-plane force
-      membrane_stiffness·ε at strain ε.
-    type: object
-    required:
-      - areal_density
-      - membrane_stiffness
-    properties:
-      areal_density:
-        description: Mass per area of the fabric [kg/m^2].
-        type: number
-        minimum: 0
-      membrane_stiffness:
-        description: Young's modulus times thickness, E·t [N/m].
-        type: number
-        minimum: 0
-    additionalProperties: false
-
-  breukels2011_parameters:
-    description: >
-      `breukels2011`: the correlations Breukels (2011, TU Delft PhD thesis) fitted
-      for an inflated tube as a 1 m cantilever. C1…C19 are fitted for the radius
-      r = diameter/2 in m and the pressure p in bar, so a reader divides the
-      tube's pressure [Pa] by 1e5. Loaded at its tip, it deflects δ [m] under the
-      force F·(1 − exp(−(S/F)·δ)) [N], with F = (C1·r + C2)·p² + C3·r³ + C4 and
-      S = (C5·r⁵ + C6)·p + C7·r + C8, until it collapses at
-      δ = (C9·r⁴ + C10)·p + C11·r² + C12. Twisted at rate κ [1/m], it carries
-      the moment c1·atan(c2·κ) [N·m], with c1 = (C13·r + C14)·p + C15·r + C16 and
-      c2 = C17·r⁴·ln(p) + C18·r³ + C19. How a reader derives its element's
-      rigidities from these curves is its own model.
-    type: object
-    required: [C1, C2, C3, C4, C5, C6, C7, C8, C9, C10, C11, C12, C13, C14, C15,
-               C16, C17, C18, C19]
-    additionalProperties:
-      type: number
-    propertyNames:
-      pattern: '^C([1-9]|1[0-9])$'

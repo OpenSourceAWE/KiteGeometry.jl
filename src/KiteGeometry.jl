@@ -7,7 +7,8 @@
 One system definition for airborne wind energy systems: the topology, the geometry and the
 material of a kite, a tether and a winch, in one type, `SystemDefinition`.
 
-Its component types are generated from the awesIO structure schema by `src/build.jl`.
+Its component types are generated from the awesIO structure and system schemas by
+`src/build.jl`.
 
 See the [documentation](https://OpenSourceAWE.github.io/KiteGeometry.jl/stable/)
 for more information.
@@ -22,13 +23,14 @@ using SHA: sha256
 using StaticArrays: MMatrix, MVector, SMatrix, StaticMatrix, StaticVector, SVector
 using YAML: YAML
 
-export SystemDefinition, Rows, Metadata, Material, Point, Segment, SpanwiseStation, Pulley,
-       Tether, Winch, Wing, CanopyFace, Body, Tube, pos_KA
+export SystemDefinition, Rows, Metadata, SystemMetadata, Material, SystemTether, Point,
+       Segment, SpanwiseStation, Pulley, Tether, Winch, Wing, CanopyFace, Body, Tube, pos_KA
 export Transform, Pose, place!, place_transforms!, reposition!, transform_velocities,
        calc_heading
 export NameRef, AbstractModel, NoModel, SegmentSpring, register_model!, model_type,
        model_columns
-export load_structure, load_authoring, structure_document, connectivity_sha
+export load_structure, load_authoring, structure_document, system_document,
+       connectivity_sha, system_sha
 export from_yaml, to_yaml, from_json, to_json
 public definition, column_type, unit_stiffness, resolve_material, expand_tether!,
        MaterialTable
@@ -53,6 +55,7 @@ include("models.jl")
 include("_structure.jl")
 include("components.jl")
 include("document.jl")
+include("yaml_writer.jl")
 include("placement.jl")
 include("transforms.jl")
 include("authoring.jl")

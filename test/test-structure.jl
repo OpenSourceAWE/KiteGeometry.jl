@@ -43,10 +43,19 @@ end
 LinkedBeam(EA, EI) = LinkedBeam(EA, EI, Float64[])
 KiteGeometry.model_columns(::Type{LinkedBeam}) = (:EA, :EI)
 
-const FIXTURE = joinpath(@__DIR__, "data", "v3_beam_structure.yml")
-const FIXTURES = (FIXTURE, joinpath(@__DIR__, "data", "v3_psm_structure.yml"))
+const FIXTURE = joinpath(@__DIR__, "data", "structure", "v3_beam_structure.yml")
+const FIXTURES = (FIXTURE, joinpath(@__DIR__, "data", "structure", "v3_psm_structure.yml"))
+const SYSTEM_FIXTURE = joinpath(@__DIR__, "data", "system_config", "v3_system.yml")
 
-fixture_document() = YAML.load_file(FIXTURE; dicttype=OrderedDict{String, Any})
+load_document(path) = YAML.load_file(path; dicttype=OrderedDict{String, Any})
+fixture_document() = load_document(FIXTURE)
+system_fixture() = load_document(SYSTEM_FIXTURE)
+
+"""The `SystemDefinition` of the structure `document` and the V3 system."""
+with_system(document; kwargs...) = SystemDefinition(document, system_fixture(); kwargs...)
+
+"""The system text a definition's `system`'s rows write."""
+system_text(system) = to_yaml(system_document(system))
 
 """`f()` with `TestBeam` registered as the tube model `test_beam`."""
 function with_test_beam(f)
@@ -106,12 +115,17 @@ end
 
 @testset "both awesIO V3 documents write back equal, through YAML and JSON as well" begin
     for path in FIXTURES
-        document = YAML.load_file(path; dicttype=OrderedDict{String, Any})
+        document = load_document(path)
         system = load_structure(path)
         @test structure_document(system) == document
-        @test structure_document(from_yaml(to_yaml(system))) == document
-        @test structure_document(from_json(to_json(system))) == document
-        @test structure_document(KiteGeometry.definition(to_json(system))) == document
+        @test system_document(system) == system_fixture()
+        for reloaded in (from_yaml(to_yaml(system), system_text(system)),
+                         from_json(to_json(system), to_json(system_document(system))),
+                         KiteGeometry.definition(to_json(system),
+                                                 to_json(system_document(system))))
+            @test structure_document(reloaded) == document
+            @test system_document(reloaded) == system_fixture()
+        end
     end
 end
 
@@ -121,7 +135,7 @@ end
     pop!(points["headers"])
     pop!(points["units"])
     foreach(pop!, points["data"])
-    system = SystemDefinition(document)
+    system = with_system(document)
     @test all(point -> isnothing(point.extra_mass), system.points)
     @test structure_document(system) == document
 end
@@ -144,16 +158,16 @@ end
     document = structure_document(small_system())
     @test document["metadata"]["connectivity_sha"] ==
           "d515a8af37debb0d04e7718442eac3160b21b2aac4546bba68e5aefcab5c68da"
-    @test structure_document(SystemDefinition(document)) == document
+    @test structure_document(with_system(document)) == document
 end
 
 @testset "a connectivity_sha that does not describe the document is refused" begin
     document = fixture_document()
     document["metadata"]["connectivity_sha"] = "0"^64
-    @test_throws "connectivity_sha" SystemDefinition(document)
+    @test_throws "connectivity_sha" with_system(document)
     document = fixture_document()
     reverse!(document["points"]["data"])
-    @test_throws "connectivity_sha" SystemDefinition(document)
+    @test_throws "connectivity_sha" with_system(document)
 end
 
 """The fixture as written against awesIO `version`."""
@@ -164,15 +178,16 @@ function versioned_document(version)
 end
 
 @testset "another major awesIO version is refused, another minor warns" begin
-    @test_throws "1.0.0" SystemDefinition(versioned_document("1.0.0"))
-    @test_throws "2.0.0" KiteGeometry.definition(JSON.json(versioned_document("2.0.0")))
-    system = @test_logs (:warn, r"0.2.0") SystemDefinition(versioned_document("0.2.0"))
+    @test_throws "1.0.0" with_system(versioned_document("1.0.0"))
+    @test_throws "2.0.0" KiteGeometry.definition(JSON.json(versioned_document("2.0.0")),
+                                                      JSON.json(system_fixture()))
+    system = @test_logs (:warn, r"0.2.0") with_system(versioned_document("0.2.0"))
     @test system.metadata.awesIO_version == "0.2.0"
-    @test_logs SystemDefinition(versioned_document("0.1.3"))
-    @test_throws ArgumentError SystemDefinition(versioned_document(1.0))
+    @test_logs with_system(versioned_document("0.1.3"))
+    @test_throws ArgumentError with_system(versioned_document(1.0))
     document = fixture_document()
     delete!(document["metadata"], "awesIO_version")
-    @test_throws ArgumentError SystemDefinition(document)
+    @test_throws ArgumentError with_system(document)
 end
 
 @testset "every reference column names the block it refers into" begin
@@ -187,7 +202,7 @@ end
 @testset "model columns and extra blocks come back as they were written" begin
     document = modelled_document()
     document["aero_mesh"] = OrderedDict{String, Any}("panels" => 40)
-    system = with_test_beam(() -> SystemDefinition(document))
+    system = with_test_beam(() -> with_system(document))
     @test system.tubes[1] isa Tube{TestBeam}
     @test system.tubes[2] isa Tube{NoModel}
     @test collect(keys(system.extras)) == ["aero_mesh"]
@@ -204,7 +219,7 @@ end
     foreach(row -> push!(row, "named_beam", ["le", "te"]), tubes["data"])
     register_model!(:tubes, "named_beam", NamedBeam, ("-",))
     try
-        system = SystemDefinition(document)
+        system = with_system(document)
         @test system.tubes[1].neighbours == [:le, :te]
         @test structure_document(system) == document
     finally
@@ -220,7 +235,7 @@ end
     foreach(row -> push!(row, "tagged_beam", 1.0e5), tubes["data"])
     register_model!(:tubes, "tagged_beam", TaggedBeam, ("N",))
     try
-        system = SystemDefinition(document)
+        system = with_system(document)
         @test system.tubes[1].model isa TaggedBeam{:stiff}
         @test structure_document(system) == document
     finally
@@ -241,15 +256,15 @@ function unread_document()
 end
 
 @testset "a filled column no schema field or registered model names is refused" begin
-    @test_throws "colour, model" with_test_beam(() -> SystemDefinition(unread_document()))
+    @test_throws "colour, model" with_test_beam(() -> with_system(unread_document()))
     document = unread_document()
     foreach(row -> row[end] = nothing, document["tubes"]["data"])
-    @test_throws "tubes columns model" with_test_beam(() -> SystemDefinition(document))
+    @test_throws "tubes columns model" with_test_beam(() -> with_system(document))
 end
 
 @testset "strict=false drops those columns with a warning, and the model is no model" begin
     system = @test_logs (:warn, r"colour, model") with_test_beam(
-        () -> SystemDefinition(unread_document(); strict=false))
+        () -> with_system(unread_document(); strict=false))
     @test system.tubes[1] isa Tube{TestBeam}
     @test system.tubes[2] isa Tube{NoModel}
     @test with_test_beam(() -> structure_document(system)) == modelled_document()
@@ -258,16 +273,16 @@ end
 @testset "a model column absent or in another unit is refused" begin
     document = modelled_document()
     document["tubes"]["units"][end - 1] = "kN"
-    @test_throws ArgumentError with_test_beam(() -> SystemDefinition(document))
+    @test_throws ArgumentError with_test_beam(() -> with_system(document))
     document = modelled_document()
     pop!(document["tubes"]["headers"])
     pop!(document["tubes"]["units"])
     foreach(pop!, document["tubes"]["data"])
-    @test_throws ArgumentError with_test_beam(() -> SystemDefinition(document))
+    @test_throws ArgumentError with_test_beam(() -> with_system(document))
 end
 
 @testset "a model's columns are its fields, reached through the component" begin
-    system = with_test_beam(() -> SystemDefinition(modelled_document()))
+    system = with_test_beam(() -> with_system(modelled_document()))
     tube = system.tubes[1]
     @test tube.model == TestBeam(2e5, 40.0)
     @test tube.EA == 2e5
@@ -290,7 +305,7 @@ end
 
 @testset "a model's fields beyond its columns are neither read nor written" begin
     document = modelled_document()
-    system = with_linked_beam(() -> SystemDefinition(document))
+    system = with_linked_beam(() -> with_system(document))
     tube = system.tubes[1]
     @test tube.model isa LinkedBeam
     @test isempty(tube.scratch)
@@ -299,7 +314,7 @@ end
 end
 
 @testset "a row's fields and its model's are set in place" begin
-    system = with_linked_beam(() -> SystemDefinition(modelled_document()))
+    system = with_linked_beam(() -> with_system(modelled_document()))
     point = system.points[1]
     point.extra_mass = 2.5
     point.pos_ENU .= [1, 2, 3]
@@ -330,7 +345,7 @@ end
     foreach(row -> push!(row, 2e5, 40.0), tubes["data"])
     register_model!(:tubes, "test_beam", TestBeam, ("N", "N*m^2"); default=true)
     try
-        system = SystemDefinition(document)
+        system = with_system(document)
         @test all(tube -> tube.model == TestBeam(2e5, 40.0), system.tubes)
         @test structure_document(system) == document
     finally
@@ -388,7 +403,7 @@ end
 
 @testset "metadata by keyword defaults to this awesIO version and an empty checksum" begin
     @test Metadata(; name="small", n_points=2) ==
-          Metadata("small", "", "", AWESIO_VERSION, "structure_schema.yml", 2, "")
+          Metadata("small", "", "", AWESIO_VERSION, "structure_schema.yml", 2, "", "", "")
 end
 
 @testset "a point count the points disagree with is refused" begin
@@ -399,11 +414,12 @@ end
 
 @testset "a system holding names still writes them" begin
     system = small_system()
-    held_names = SystemDefinition(system.metadata, system.materials, system.points,
-                                  [line_segment()], system.spanwise_stations,
-                                  system.pulleys, system.tethers, system.winches,
-                                  system.wings, system.canopy_faces, system.bodies,
-                                  system.tubes, system.extras)
+    held_names = SystemDefinition(system.metadata, system.system_metadata, system.materials,
+                                  system.system_tethers, system.points, [line_segment()],
+                                  system.spanwise_stations, system.pulleys, system.tethers,
+                                  system.winches, system.wings, system.canopy_faces,
+                                  system.bodies, system.tubes, system.extras,
+                                  system.system_extras)
     @test structure_document(held_names) == structure_document(system)
     held_names.segments[1] = line_segment("nowhere")
     @test_throws "no points named nowhere" structure_document(held_names)
@@ -439,15 +455,187 @@ end
     document = fixture_document()
     headers = document["points"]["headers"]
     headers[2], headers[3] = headers[3], headers[2]
-    @test_throws ArgumentError SystemDefinition(document)
+    @test_throws ArgumentError with_system(document)
 end
 
 @testset "a table whose units are not the schema's is refused" begin
     document = fixture_document()
     document["segments"]["units"][3] = "mm"
-    @test_throws ArgumentError SystemDefinition(document)
+    @test_throws ArgumentError with_system(document)
     delete!(document["segments"], "units")
-    @test_throws ArgumentError SystemDefinition(document)
+    @test_throws ArgumentError with_system(document)
+end
+
+
+"""The V3 pair copied to a directory laid out as awesIO's examples, given to `f`, its system
+file's bytes first changed by `change`."""
+function with_v3_copy(f; change=identity)
+    mktempdir() do directory
+        structure = joinpath(directory, "structure", "v3_beam_structure.yml")
+        system = joinpath(directory, "system_config", "v3_system.yml")
+        mkpath.(dirname.((structure, system)))
+        cp(FIXTURE, structure)
+        write(system, change(read(SYSTEM_FIXTURE, String)))
+        return f(structure, system)
+    end
+end
+
+@testset "a structure is read with the system it names, whose hash it holds" begin
+    system = load_structure(FIXTURE)
+    @test system.metadata.system_sha == system_sha(SYSTEM_FIXTURE)
+    @test [tether.name for tether in system.system_tethers] == [:tether, Symbol("1")]
+    tether = system.system_tethers[:tether]
+    @test (tether.length, tether.diameter) == (250.0, 0.004)
+    @test system.materials[tether.material].name == :v3_beam_line
+    @test tether.joints["upper_tether_joint"]["id"] == "kcu"
+    @test isempty(system.system_extras)
+    @test system.system_metadata.name == "v3_kite"
+end
+
+@testset "a structure whose system_sha is not its system file's hash is refused" begin
+    with_v3_copy(; change=text -> text * "\n") do structure, system
+        @test_throws "system_sha" load_structure(structure)
+    end
+    with_v3_copy() do structure, system
+        @test load_structure(structure).metadata.system_sha == system_sha(system)
+        document = load_document(structure)
+        document["metadata"]["system"] = ""
+        write(structure, to_yaml(document))
+        @test_throws "names no system file" load_structure(structure)
+    end
+end
+
+@testset "a structure naming a material its system lacks is refused" begin
+    system = system_fixture()
+    filter!(material -> material["name"] != "v3_beam_line", system["materials"])
+    system["components"]["tethers"] = []
+    @test_throws "no materials named v3_beam_line" SystemDefinition(fixture_document(), system)
+end
+
+@testset "a system without its required blocks or with a tether's density is refused" begin
+    for block in ("materials", "components")
+        system = system_fixture()
+        delete!(system, block)
+        @test_throws "no $block block" SystemDefinition(fixture_document(), system)
+    end
+    system = system_fixture()
+    delete!(system["components"], "tethers")
+    @test_throws "components.tethers" SystemDefinition(fixture_document(), system)
+    system = system_fixture()
+    system["components"]["tethers"][1]["structure"]["density"] = 970.0
+    @test_throws "density" SystemDefinition(fixture_document(), system)
+end
+
+@testset "what a system holds beside materials and tethers is written back" begin
+    system = system_fixture()
+    assembly = OrderedDict{String, Any}("connectivity_matrix" => [["kite", "tether"]])
+    system["assembly"] = assembly
+    system["components"]["ground_station"] = OrderedDict{String, Any}("name" => "winch")
+    definition = SystemDefinition(fixture_document(), system)
+    written = system_document(definition)
+    @test written["assembly"] == assembly
+    @test written["components"]["ground_station"]["name"] == "winch"
+    @test length(written["components"]["tethers"]) == 2
+end
+
+"""The definition of the V3 beam structure holding only `materials` and the tether `name` of
+the system, renamed `tether_name`."""
+function narrowed_system(tether_name, length)
+    system = system_fixture()
+    tether = first(system["components"]["tethers"])
+    tether["name"], tether["structure"]["length"] = tether_name, length
+    system["components"]["tethers"] = [tether]
+    return SystemDefinition(fixture_document(), system)
+end
+
+@testset "a system written from several definitions is the union of their rows by name" begin
+    one, other = narrowed_system("one", 100.0), narrowed_system("other", 200.0)
+    document = system_document([one, other]; name="pair", description="both", note="noted")
+    @test document["metadata"]["name"] == "pair"
+    @test document["metadata"]["description"] == "both"
+    @test document["metadata"]["note"] == "noted"
+    @test document["metadata"]["schema"] == "system_schema.yml"
+    @test [tether["name"] for tether in document["components"]["tethers"]] == ["one", "other"]
+    @test document["materials"] == system_fixture()["materials"]
+    @test system_document([one, one]; name="same")["components"]["tethers"] ==
+          system_document(one)["components"]["tethers"]
+end
+
+@testset "one name with two values is refused when writing a system" begin
+    one, other = narrowed_system("one", 100.0), narrowed_system("one", 200.0)
+    @test_throws "tethers row one" system_document([one, other]; name="pair")
+    changed = load_structure(FIXTURE)
+    changed.materials[:v3_beam_line].parameters = OrderedDict{String, Any}("density" => 1.0)
+    @test_throws "materials row v3_beam_line" (
+        system_document([load_structure(FIXTURE), changed]; name="pair"))
+end
+
+@testset "a structure is written with the system's path and hash and a note" begin
+    document = structure_document(load_structure(FIXTURE); system="../system.yml",
+                                  system_sha="a"^64, note="written", description="described")
+    @test document["metadata"]["system"] == "../system.yml"
+    @test document["metadata"]["system_sha"] == "a"^64
+    @test document["metadata"]["note"] == "written"
+    @test document["metadata"]["description"] == "described"
+end
+
+@testset "a pair written to disk loads back through its hash" begin
+    mktempdir() do directory
+        loaded = load_structure(FIXTURE)
+        system_path, structure_path = joinpath.(directory, ("system.yml", "structure.yml"))
+        write(system_path, system_text(loaded))
+        write(structure_path, to_yaml(structure_document(
+            loaded; system="system.yml", system_sha=system_sha(system_path))))
+        reloaded = load_structure(structure_path)
+        @test system_document(reloaded) == system_fixture()
+        @test reloaded.metadata.system_sha == system_sha(system_path)
+    end
+end
+
+@testset "the writer's YAML reads the same everywhere" begin
+    text = to_yaml(OrderedDict{String, Any}(
+        "units" => ["-", "-", "m", "N*s", "N"],
+        "names" => ["1", "true", "null", "no", "a b", "1e3", "~", "plain_name.yml"],
+        "numbers" => [1e-12, 5.5e10, 1.0, -2.5e-7, 1.5e300], "count" => 3,
+        "empty" => OrderedDict{String, Any}(), "none" => [], "unset" => nothing,
+        "rows" => [["a", [1.0, 2.0], nothing, true], ["b", [3.0, 4.0], false, false]],
+        "list" => [OrderedDict{String, Any}(
+            "name" => "x", "nested" => OrderedDict{String, Any}("depth" => 1.0))],
+        "note" => "says \"quoted\": things\nand a second line 0.5°"))
+    @test occursin("""units: ["-", "-", m, "N*s", "N"]\n""", text)
+    @test occursin("numbers: [1.0e-12, 5.5e+10, 1.0, -2.5e-7, 1.5e+300]\n", text)
+    @test occursin("""names: ["1", "true", "null", "no", "a b", "1e3", "~", plain_name.yml]""",
+                   text)
+    @test occursin("  - [a, [1.0, 2.0], null, true]\n", text)
+    @test occursin("  - name: x\n    nested:\n      depth: 1.0\n", text)
+    parsed = YAML.load(text; dicttype=OrderedDict{String, Any})
+    @test parsed["units"] == ["-", "-", "m", "N*s", "N"]
+    @test parsed["names"] == ["1", "true", "null", "no", "a b", "1e3", "~", "plain_name.yml"]
+    @test parsed["numbers"] == [1e-12, 5.5e10, 1.0, -2.5e-7, 1.5e300]
+    @test parsed["count"] === 3
+    @test parsed["empty"] == Dict() && parsed["none"] == [] && isnothing(parsed["unset"])
+    @test parsed["rows"][2] == ["b", [3.0, 4.0], false, false]
+    @test parsed["list"][1]["nested"]["depth"] == 1.0
+    @test parsed["note"] == "says \"quoted\": things\nand a second line 0.5°"
+end
+
+"""Every float among the values of a parsed document."""
+floats(value::AbstractFloat) = [value]
+floats(value::AbstractDict) = reduce(vcat, floats.(values(value)); init=Float64[])
+floats(value::AbstractVector) = reduce(vcat, floats.(value); init=Float64[])
+floats(value) = Float64[]
+
+@testset "every float the writer gives both V3 files matches YAML 1.1's float pattern" begin
+    pyyaml_float = r"^[-+]?[0-9]+\.[0-9]*([eE][-+][0-9]+)?$"
+    for path in FIXTURES
+        loaded = load_structure(path)
+        for document in (structure_document(loaded), system_document(loaded))
+            values = floats(document)
+            @test !isempty(values)
+            @test all(occursin.(pyyaml_float, KiteGeometry.yaml_flow.(values)))
+            @test YAML.load(to_yaml(document); dicttype=OrderedDict{String, Any}) == document
+        end
+    end
 end
 
 unregister_model!(:pulleys, "sam_pulley")

@@ -41,7 +41,7 @@ function row_index(rows::Rows{T}, name) where {T}
 end
 
 """The block a row of type `T` belongs to."""
-block_name(::Type{T}) where {T} = findfirst(==(T), BLOCKS)
+block_name(::Type{T}) where {T} = findfirst(==(T), ALL_BLOCKS)
 
 """The error for two rows of `block` named `name`."""
 duplicate_name(block, name) = ArgumentError("two $block are named $name")

@@ -1,27 +1,17 @@
 metadata:
   name: v3_kite_beam
   description: "Resolved structure of the TU Delft V3 kite as V3Kite.jl's Timoshenko-beam project builds it: the same bridle and tether on a leading-edge tube and struts of rigid bodies joined by tubes, with the canopy spread over them."
-  note: "The V3 kite of OpenSourceAWE/V3Kite.jl@973a818a `data/system_beam.yaml`, placed straight above its ground anchor at 0° heading. V3Kite's massless frame, which carries the wing_ctrl points and the bridle's 40 attachment points, is SymbolicAWEModels' own model and is not written: each attachment point rides on a body of the nearest tube, and each wing_ctrl point at a tube on that tube's body. `v3_canopy` stands in for V3Kite's canopy springs: its membrane_stiffness is their 1000 N/m rate k/l0, a value chosen in their place rather than an equivalent, as a spring rate and E·t only share a unit; its areal_density is zero because the wing's extra_mass already holds the 170 g/m^2 fabric of awegroup/TUDELFT_V3_KITE@6d620ba, as V3Kite carries it. `v3_tube` holds the Breukels constants of OpenSourceAWE/SymbolicAWEModels.jl `tube_laws.jl`."
+  note: "The V3 kite of OpenSourceAWE/V3Kite.jl@973a818a `data/system_beam.yaml`, placed straight above its ground anchor at 0° heading. V3Kite's massless frame, which carries the wing_ctrl points and the bridle's 40 attachment points, is SymbolicAWEModels' own model and is not written: each attachment point rides on a body of the nearest tube, and each wing_ctrl point at a tube on that tube's body. The system's `v3_canopy` stands in for V3Kite's canopy springs: its membrane_stiffness is their 1000 N/m rate k/l0, a value chosen in their place rather than an equivalent, as a spring rate and E·t only share a unit; its areal_density is zero because the wing's extra_mass already holds the 170 g/m^2 fabric of awegroup/TUDELFT_V3_KITE@6d620ba, as V3Kite carries it. The system's `v3_tube` holds the Breukels constants of OpenSourceAWE/SymbolicAWEModels.jl `tube_laws.jl`."
   awesIO_version: 0.1.0
   schema: "structure_schema.yml"
   n_points: 220
   connectivity_sha: eab01e825d4761b6214a723abf6650ee39fe4359288ba3473e76ac31e3ec263a
-
-materials:
-  headers: [name, law, parameters]
-  units: [-, -, -]
-  data:
-    - [v3_beam_line, linear, {density: 970.0, youngs_modulus: 5.5e+10}]
-    - [control_line, linear, {density: 724.0, youngs_modulus: 5.5e+10}]
-    - [v3_canopy, membrane, {areal_density: 0.0, membrane_stiffness: 1000.0}]
-    - [v3_tube, breukels2011, {C1: 6582.82, C2: -272.43, C3: 40852.38, C4: 14.31, C5: 271865251.42, C6: 215.93,
-        C7: 14021.79, C8: -589.05, C9: 322.55, C10: 0.0239, C11: 5.3833, C12: 0.0461,
-        C13: 1467.0, C14: 40.908, C15: -191.8, C16: 47.406, C17: -17703.0, C18: 358.05,
-        C19: 0.0918}]
+  system: ../system_config/v3_system.yml
+  system_sha: fb65dae4951da5e1b19741d9d6cc1747d4cf8364732d66764b94442edb29bce7
 
 points:
   headers: [name, fixed, body, pos_ENU, extra_mass]
-  units: [-, -, -, m, kg]
+  units: ["-", "-", "-", m, kg]
   data:
     - [wing_le_10, false, wing_le_body_10, [0.1205, -4.1055, 258.2249], 0.0]
     - [wing_te_10, false, wing_te_body_10, [0.7318, -4.1419, 258.2432], 0.0]
@@ -242,11 +232,11 @@ points:
     - [tether_point_2, false, null, [0.0, 0.0, 166.66666], 0.0]
     - [tether_point_3, false, null, [0.0, 0.0, 124.999995], 0.0]
     - [tether_point_4, false, null, [0.0, 0.0, 83.33333], 0.0]
-    - [tether_point_5, false, null, [1e-12, 0.0, 41.666665], 0.0]
+    - [tether_point_5, false, null, [1.0e-12, 0.0, 41.666665], 0.0]
 
 segments:
   headers: [name, points, rest_length, diameter, material]
-  units: [-, -, m, m, -]
+  units: ["-", "-", m, m, "-"]
   data:
     - [steering_right, [bridle_126, kcu], 1.6, 0.005, control_line]
     - [power_tape, [bridle_125, kcu], 2.2, 0.005, control_line]
@@ -346,7 +336,7 @@ segments:
 
 spanwise_stations:
   headers: [name, wing, points]
-  units: [-, -, -]
+  units: ["-", "-", "-"]
   data:
     - [flap_1, wing, [wing_le_1, wing_te_1, wing_ctrl_1_1, wing_ctrl_1_2, wing_ctrl_1_3, wing_ctrl_1_4, wing_ctrl_1_5, wing_ctrl_1_6, wing_ctrl_1_7, wing_ctrl_1_8, wing_ctrl_1_9, wing_ctrl_1_10, wing_ctrl_1_11]]
     - [flap_2, wing, [wing_le_2, wing_te_2, wing_ctrl_2_1, wing_ctrl_2_2, wing_ctrl_2_3, wing_ctrl_2_4, wing_ctrl_2_5, wing_ctrl_2_6, wing_ctrl_2_7, wing_ctrl_2_8, wing_ctrl_2_9, wing_ctrl_2_10, wing_ctrl_2_11]]
@@ -361,7 +351,7 @@ spanwise_stations:
 
 pulleys:
   headers: [name, segments, efficiency]
-  units: [-, -, -]
+  units: ["-", "-", "-"]
   data:
     - [ab1, [ab1_a_seg_1, ab1_b_seg_1], 0.95]
     - [ab1_2, [ab1_2_a_seg_1, ab1_2_b_seg_1], 0.95]
@@ -386,25 +376,25 @@ pulleys:
 
 tethers:
   headers: [name, start_point, end_point, segments]
-  units: [-, -, -, -]
+  units: ["-", "-", "-", "-"]
   data:
     - [tether, kcu, ground_anchor, [tether_seg_1, tether_seg_2, tether_seg_3, tether_seg_4, tether_seg_5, tether_seg_6]]
 
 winches:
   headers: [name, tethers, winch_point, gear_ratio, drum_radius]
-  units: [-, -, -, -, m]
+  units: ["-", "-", "-", "-", m]
   data:
     - [winch, [tether], ground_anchor, 1.0, 0.11]
 
 wings:
   headers: [name, pos_ENU, Q_KA2ENU, canopy_material]
-  units: [-, m, -, -]
+  units: ["-", m, "-", "-"]
   data:
     - [wing, [0.0, 0.0, 250.0], [1.0, 0.0, 0.0, 0.0], v3_canopy]
 
 canopy_faces:
   headers: [name, wing, points]
-  units: [-, -, -]
+  units: ["-", "-", "-"]
   data:
     - [canopy_1_1, wing, [wing_le_1, wing_ctrl_1_2, wing_ctrl_2_2, wing_le_2]]
     - [canopy_1_2, wing, [wing_ctrl_1_2, wing_ctrl_1_3, wing_ctrl_2_3, wing_ctrl_2_2]]
@@ -499,7 +489,7 @@ canopy_faces:
 
 bodies:
   headers: [name, pos_ENU, Q_KA2ENU, extra_mass, extra_inertia_KA]
-  units: [-, m, -, kg, kg*m^2]
+  units: ["-", m, "-", kg, kg*m^2]
   data:
     - [wing_le_body_1, [0.1205, 4.1055, 258.2249], [-0.739614161898, 0.672212871319, 0.030950592632, -0.011950228819], 0.1777, [[0.005581, 0.0, 0.0], [0.0, 0.005581, 0.0], [0.0, 0.0, 0.005581]]]
     - [wing_te_body_1, [0.7318, 4.1419, 258.2432], [-0.739614161898, 0.672212871319, 0.030950592632, -0.011950228819], 0.1822, [[0.001842, 0.0, 0.0], [0.0, 0.001842, 0.0], [0.0, 0.0, 0.001842]]]
@@ -526,7 +516,7 @@ bodies:
 
 tubes:
   headers: [name, bodies, diameter, pressure, material]
-  units: [-, -, m, Pa, -]
+  units: ["-", "-", m, Pa, "-"]
   data:
     - [le_beam_1_1, [wing_le_body_1, wing_le_sub_body_1_1], 0.1138, 30000.0, v3_tube]
     - [le_beam_1_2, [wing_le_sub_body_1_1, wing_le_body_2], 0.12758, 30000.0, v3_tube]
