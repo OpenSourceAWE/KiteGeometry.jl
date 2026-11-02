@@ -12,7 +12,6 @@ SystemDefinition
 Rows
 Metadata
 SystemMetadata
-Material
 SystemTether
 load_structure
 structure_document
