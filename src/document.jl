@@ -111,7 +111,7 @@ end
     SystemDefinition(document::AbstractDict, system_document::AbstractDict; strict=true)
 
 The system definition a parsed awesIO structure document and the parsed system document it
-names describe; their `system_sha` is checked only by [`load_structure`](@ref), which has the
+names describe; `system_sha` is checked only by [`load_structure`](@ref), which has the
 file's bytes. A row reads the columns of the model its `model` column registers; a filled
 cell in any other column the schema does not name is refused, or with `strict=false` dropped
 with a warning. What the schemas do not name is kept as `extras` and `system_extras`, in the

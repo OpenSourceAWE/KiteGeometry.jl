@@ -54,7 +54,7 @@ system_fixture() = load_document(SYSTEM_FIXTURE)
 """The `SystemDefinition` of the structure `document` and the V3 system."""
 with_system(document; kwargs...) = SystemDefinition(document, system_fixture(); kwargs...)
 
-"""The system text a definition's `system`'s rows write."""
+"""The system document of `system` as YAML text."""
 system_text(system) = to_yaml(system_document(system))
 
 """`f()` with `TestBeam` registered as the tube model `test_beam`."""
@@ -509,7 +509,8 @@ end
     system = system_fixture()
     filter!(material -> material["name"] != "v3_beam_line", system["materials"])
     system["components"]["tethers"] = []
-    @test_throws "no materials named v3_beam_line" SystemDefinition(fixture_document(), system)
+    @test_throws "no materials named v3_beam_line" (
+        SystemDefinition(fixture_document(), system))
 end
 
 @testset "a system without its required blocks or with a tether's density is refused" begin
@@ -538,8 +539,7 @@ end
     @test length(written["components"]["tethers"]) == 2
 end
 
-"""The definition of the V3 beam structure holding only `materials` and the tether `name` of
-the system, renamed `tether_name`."""
+"""The V3 beam structure with a system of one tether, `tether_name`, of `length`."""
 function narrowed_system(tether_name, length)
     system = system_fixture()
     tether = first(system["components"]["tethers"])
@@ -548,14 +548,15 @@ function narrowed_system(tether_name, length)
     return SystemDefinition(fixture_document(), system)
 end
 
-@testset "a system written from several definitions is the union of their rows by name" begin
+@testset "a system written from several definitions is the union of their rows" begin
     one, other = narrowed_system("one", 100.0), narrowed_system("other", 200.0)
     document = system_document([one, other]; name="pair", description="both", note="noted")
     @test document["metadata"]["name"] == "pair"
     @test document["metadata"]["description"] == "both"
     @test document["metadata"]["note"] == "noted"
     @test document["metadata"]["schema"] == "system_schema.yml"
-    @test [tether["name"] for tether in document["components"]["tethers"]] == ["one", "other"]
+    @test [tether["name"] for tether in document["components"]["tethers"]] ==
+          ["one", "other"]
     @test document["materials"] == system_fixture()["materials"]
     @test system_document([one, one]; name="same")["components"]["tethers"] ==
           system_document(one)["components"]["tethers"]
@@ -572,7 +573,8 @@ end
 
 @testset "a structure is written with the system's path and hash and a note" begin
     document = structure_document(load_structure(FIXTURE); system="../system.yml",
-                                  system_sha="a"^64, note="written", description="described")
+                                  system_sha="a"^64, note="written",
+                                  description="described")
     @test document["metadata"]["system"] == "../system.yml"
     @test document["metadata"]["system_sha"] == "a"^64
     @test document["metadata"]["note"] == "written"
@@ -604,13 +606,14 @@ end
         "note" => "says \"quoted\": things\nand a second line 0.5°"))
     @test occursin("""units: ["-", "-", m, "N*s", "N"]\n""", text)
     @test occursin("numbers: [1.0e-12, 5.5e+10, 1.0, -2.5e-7, 1.5e+300]\n", text)
-    @test occursin("""names: ["1", "true", "null", "no", "a b", "1e3", "~", plain_name.yml]""",
-                   text)
+    @test occursin(
+        """names: ["1", "true", "null", "no", "a b", "1e3", "~", plain_name.yml]""", text)
     @test occursin("  - [a, [1.0, 2.0], null, true]\n", text)
     @test occursin("  - name: x\n    nested:\n      depth: 1.0\n", text)
     parsed = YAML.load(text; dicttype=OrderedDict{String, Any})
     @test parsed["units"] == ["-", "-", "m", "N*s", "N"]
-    @test parsed["names"] == ["1", "true", "null", "no", "a b", "1e3", "~", "plain_name.yml"]
+    @test parsed["names"] ==
+          ["1", "true", "null", "no", "a b", "1e3", "~", "plain_name.yml"]
     @test parsed["numbers"] == [1e-12, 5.5e10, 1.0, -2.5e-7, 1.5e300]
     @test parsed["count"] === 3
     @test parsed["empty"] == Dict() && parsed["none"] == [] && isnothing(parsed["unset"])
@@ -633,7 +636,8 @@ floats(value) = Float64[]
             values = floats(document)
             @test !isempty(values)
             @test all(occursin.(pyyaml_float, KiteGeometry.yaml_flow.(values)))
-            @test YAML.load(to_yaml(document); dicttype=OrderedDict{String, Any}) == document
+            @test YAML.load(to_yaml(document);
+                            dicttype=OrderedDict{String, Any}) == document
         end
     end
 end

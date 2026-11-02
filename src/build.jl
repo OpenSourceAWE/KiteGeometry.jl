@@ -239,7 +239,8 @@ function system_source(schema, blocks, definitions)
            "\"\"\"The unit of each optional column of each block, by name.\"\"\"\n" *
            "const OPTIONAL_UNITS = (\n    materials = (;),\n" *
            "    system_tethers = (\n" *
-           "        $(join(tether_optional, ",\n        ")),\n    ),\n$optional_units)\n\n" *
+           "        $(join(tether_optional, ",\n        ")),\n    ),\n" *
+           "$optional_units)\n\n" *
            "\"\"\"The blocks a structure document must carry.\"\"\"\n" *
            "const REQUIRED_BLOCKS = ($required)\n"
 end
