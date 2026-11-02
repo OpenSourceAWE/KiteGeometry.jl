@@ -58,7 +58,7 @@ KiteGeometry.unit_stiffness
 
 ## Transforms
 
-A transform turns some of a system's points and bodies, its members, about a base: what it turns goes to an elevation and azimuth seen from that base, and the body it heads to a heading about the radial. Its base is a point moved to a base position, or what another transform turns, so one transform can be chained on another. The transforms are kept beside the definition rather than in it: `place!` applies changed ones to a definition before a run, and `reposition!` and `transform_velocities` act on a `Pose`, the positions and body frames a run holds.
+A transform turns some of a system's points and bodies, its members, about a base: what it turns goes to an elevation and azimuth seen from that base, the azimuth running anti-clockwise from east towards north as `atan(y, x)` does, and the body it heads to a heading about the radial. Its base is a point moved to a base position, or what another transform turns, so one transform can be chained on another. The transforms are kept beside the definition rather than in it: `place!` applies changed ones to a definition before a run, and `reposition!` and `transform_velocities` act on a `Pose`, the positions and body frames a run holds.
 
 ```julia
 system, transforms = load_authoring("kite.yaml"; set)
