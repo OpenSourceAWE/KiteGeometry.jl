@@ -242,9 +242,10 @@ end
     @test unit_damping ≈ 0.5 * 1e9 * π * 0.001^2
 end
 
-@testset "column_type, unit_stiffness and resolve_material are public" begin
+@testset "what a tool builds a definition with is public" begin
     @test all(name -> Base.ispublic(KiteGeometry, name),
-              (:column_type, :unit_stiffness, :resolve_material))
+              (:column_type, :unit_stiffness, :resolve_material, :expand_tether!,
+               :MaterialTable))
 end
 
 """Whether each point of `system` the authoring `points` table names is at its `pos_cad`
@@ -426,6 +427,33 @@ end
              for density in (970.0, 1100.0, 970.0)]
     @test names == [:rope, :rope_2, :rope]
     @test KiteGeometry.line_material!(materials, "rope", 970.0, 1.0e9) == :rope_3
+end
+
+@testset "a tether of a callable stiffness expands to segments reading that force law" begin
+    set_data_path(joinpath(@__DIR__, "data", "2plate_kite"))
+    force_law(strain) = 1.0e5 * strain
+    tether_end(name, pos) = Point(; name, extra_mass=0.0, pos_ENU=pos,
+                                  model=KiteGeometry.added_row_model(:points))
+    points = [tether_end(:ground, [0.0, 0.0, 0.0]), tether_end(:kite, [0.0, 0.0, 30.0])]
+    segments = Segment[]
+    point_transforms = Union{Nothing, NameRef}[nothing, nothing]
+    materials = KiteGeometry.MaterialTable(Material[], Dict{String, Any}())
+    tether = KiteGeometry.expand_tether!(points, segments, point_transforms, :main, :ground,
+                                         :kite, 3, (; stretched_length=33.0),
+                                         Settings("system.yaml"), materials;
+                                         model=KiteGeometry.added_row_model(:tethers),
+                                         unit_stiffness=force_law, unit_damping=5.0)
+    @test tether.segments == [:main_seg_1, :main_seg_2, :main_seg_3]
+    @test length(segments) == 3
+    material = only(materials.rows)
+    @test material.law == "unit_stiffness"
+    @test material.parameters["unit_stiffness"] === force_law
+    @test all(segment -> segment.material == material.name, segments)
+    @test all(segment -> segment.rest_length ≈ 11.0, segments)
+    @test isnothing(KiteGeometry.unit_stiffness(material, 0.004))
+    @test length(points) == length(point_transforms) == 4
+    @test all(isnothing, point_transforms)
+    @test points[3].pos_ENU ≈ [0.0, 0.0, 10.0]
 end
 
 @testset "a breukels2011 tube's material is its own copy of SAM's constants" begin
