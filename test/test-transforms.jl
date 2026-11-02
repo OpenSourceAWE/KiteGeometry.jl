@@ -34,9 +34,12 @@ function tilt_kite!(transforms)
     return transforms
 end
 
-"""Heading [rad] of the kite body of `pose`, in the sense of `transform`'s `heading`."""
-kite_heading(pose, transform) =
-    -calc_heading(pose.body_R[1], transform.elevation, -transform.azimuth; respos=false)
+"""Heading [rad] of the kite body of `pose`, in the sense of a transform's `heading`, in
+the tangential frame of where its origin stands from the KCU."""
+function kite_heading(pose)
+    x, y, z = pose.pos[7] - pose.pos[2]
+    return -calc_heading(pose.body_R[1], atan(z, hypot(x, y)), atan(y, x); respos=false)
+end
 
 """`data`, the chained system's YAML, with its kite tilted as [`tilt_kite!`](@ref)."""
 function tilt_kite_row!(data)
@@ -79,7 +82,7 @@ end
     ground, kcu, kite_origin = pose.pos[1], pose.pos[2], pose.pos[7]
     @test normalize(kcu - ground) ≈ radial_direction(main_tf)
     @test normalize(kite_origin - kcu) ≈ radial_direction(kite_tilt)
-    @test kite_heading(pose, kite_tilt) ≈ kite_tilt.heading
+    @test kite_heading(pose) ≈ kite_tilt.heading
     @test norm(pose.pos[4] - kite_origin) ≈ kite_rigid
 end
 
@@ -89,7 +92,16 @@ end
     kcu, kite_origin = pose.pos[2], pose.pos[7]
     @test pose.pos[2] == system.points[2].pos_ENU
     @test normalize(kite_origin - kcu) ≈ radial_direction(transforms[2])
-    @test kite_heading(pose, transforms[2]) ≈ deg2rad(-35)
+    @test kite_heading(pose) ≈ deg2rad(-35)
+end
+
+@testset "a heading body turns smoothly through the zenith" begin
+    kite_frame_at(elevation) = begin
+        system, transforms = load_chained()
+        transforms[2].elevation = deg2rad(elevation)
+        return Pose(place!(system, transforms)).body_R[1]
+    end
+    @test norm(kite_frame_at(90.1) - kite_frame_at(89.9)) < 0.01
 end
 
 """`data`, the chained system's YAML, with its first transform turning no point."""
