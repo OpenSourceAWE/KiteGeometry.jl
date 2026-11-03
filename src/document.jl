@@ -470,8 +470,9 @@ end
 
 The awesIO structure document of `structure`, as `SystemDefinition` reads it: references by
 name, model columns after the schema's, extra blocks after the schema's, empty optional
-blocks and unset optional columns left out, and of the tethers those its system lists. Its `awesIO_version` is `AWESIO_VERSION` and its
-`connectivity_sha` that of `structure`'s own tables, whatever `structure.metadata` holds.
+blocks and unset optional columns left out, and of the tethers those its system lists. Its
+`awesIO_version` is `AWESIO_VERSION` and its `connectivity_sha` that of `structure`'s own
+tables, whatever `structure.metadata` holds.
 `description`, `note`, `system`, the path of the system file relative to this one, and
 `system_sha`, that file's [`system_sha`](@ref), default to those of `structure.metadata`.
 """
@@ -498,7 +499,8 @@ end
 
 """The tethers of `structure` its system lists."""
 function listed_tethers(structure)
-    return filter(tether -> haskey(structure.system_tethers, tether.name), structure.tethers)
+    listed = structure.system_tethers
+    return filter(tether -> haskey(listed, tether.name), structure.tethers)
 end
 
 """

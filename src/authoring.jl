@@ -1230,7 +1230,8 @@ function design_tether(system, tether, segments)
     joints = OrderedDict{String, Any}(
         "upper_tether_joint" => tether_joint(tether.start_point, system),
         "lower_tether_joint" => tether_joint(tether.end_point, system))
-    return SystemTether(; name=tether.name, type="non_conductive_tether", version=1.0, joints,
+    return SystemTether(; name=tether.name, type="non_conductive_tether", version=1.0,
+                        joints,
                         length=sum(row -> row.rest_length, rows; init=0.0),
                         diameter=shared_value(row -> row.diameter, rows),
                         material=shared_value(row -> row.material, rows))

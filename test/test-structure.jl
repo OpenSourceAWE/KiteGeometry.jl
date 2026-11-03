@@ -542,8 +542,8 @@ end
 """The V3 beam structure with a system of one tether, `tether_name`, of `length`."""
 function narrowed_system(tether_name, length)
     system = load_structure(FIXTURE)
-    tether = KiteGeometry.with_fields(first(system.system_tethers); name=Symbol(tether_name),
-                                      length)
+    tether = KiteGeometry.with_fields(first(system.system_tethers);
+                                      name=Symbol(tether_name), length)
     empty!(system.system_tethers)
     push!(system.system_tethers, tether)
     return system
@@ -570,8 +570,8 @@ end
 end
 
 @testset "a value no document can hold is refused by name when writing" begin
-    force_law(strain) = strain
-    @test_throws "cannot hold force_law" to_yaml(OrderedDict{String, Any}("law" => force_law))
+    document = OrderedDict{String, Any}("law" => sin)
+    @test_throws "cannot hold sin" to_yaml(document)
 end
 
 @testset "a definition naming no system file does not write as a structure file" begin

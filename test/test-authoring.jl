@@ -618,7 +618,8 @@ end
     authored = YAML.load_file(joinpath(KITE, "rigid_structural_geometry.yaml");
                               dicttype=OrderedDict{String, Any})
     main_row = only(authored["tethers"]["data"])
-    bridle_row = Any["bridle_line", "kcu", main_row[3], 2, main_row[5:end]...]
+    bridle_row = Any["bridle_line", "kcu", "steering_left", 2, main_row[5:(end - 1)]...,
+                     nothing]
     push!(authored["tethers"]["data"], bridle_row)
     system, _ = load_authoring(authored; set=kite_settings(), name="bridled")
     @test haskey(system.tethers, :bridle_line)
@@ -640,11 +641,10 @@ end
     @test [tether["name"] for tether in document["components"]["tethers"]] ==
           String.(vcat([tether.name for tether in psm.system_tethers],
                        [tether.name for tether in kite.system_tethers]))
+    names(rows) = [row["name"] for row in rows]
     for definition in (psm, kite)
         @test !isempty(definition.system_tethers)
-        @test issubset(material_row["name"] for material_row in
-                                                system_document(definition)["materials"],
-                       material["name"] for material in document["materials"])
+        @test names(system_document(definition)["materials"]) ⊆ names(document["materials"])
     end
 end
 
