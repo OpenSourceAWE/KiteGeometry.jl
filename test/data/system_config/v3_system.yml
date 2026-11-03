@@ -1,31 +1,780 @@
 metadata:
   name: v3_kite
-  description: "The materials and the tethers of the TU Delft V3 kite as V3Kite.jl's Timoshenko-beam and particle-lattice projects build it. The two projects carry a different tether, so the file lists both, each named as its structure names it."
-  note: "Converted by script from the two V3 structure documents' materials tables and tethers."
-  awesIO_version: 0.1.0
+  description: "The materials and the tethers of the TU Delft V3 kite as V3Kite.jl's Timoshenko-beam and particle-lattice projects build it. The two projects carry a different main tether, so the file lists both, each named as its structure names it."
+  note: "Written by OpenSourceAWE/KiteGeometry.jl@f9a13c9 reading and writing, under OpenSourceAWE/SymbolicAWEModels.jl@78601c5, the files of OpenSourceAWE/V3Kite.jl@fd73944: `data/struc_geometry_beam.yaml` under `data/system_beam.yaml` and `data/struc_geometry.yaml` under `data/system_psm.yaml`."
+  awesIO_version: "0.1.0"
   schema: system_schema.yml
 materials:
-  - {name: v3_beam_line, law: linear, parameters: {density: 970.0, youngs_modulus: 5.5e+10}}
-  - {name: control_line, law: linear, parameters: {density: 724.0, youngs_modulus: 5.5e+10}}
-  - {name: v3_psm_line, law: linear, parameters: {density: 724.0, youngs_modulus: 5.5e+10}}
-  - {name: wing_tube, law: linear, parameters: {density: 724.0, youngs_modulus: 1.2732395447351628e+12}}
-  - {name: v3_canopy, law: membrane, parameters: {areal_density: 0.0, membrane_stiffness: 1000.0}}
-  - name: v3_tube
+  - name: te_1
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.070534970903055e+9
+  - name: te_2
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6920155431118717e+9
+  - name: te_3
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6727533386593459e+9
+  - name: te_4
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6695771152910495e+9
+  - name: te_5
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.682512210473923e+9
+  - name: spanwise_1_2
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.5239079434851255e+9
+  - name: spanwise_1_3
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.4253467249750857e+9
+  - name: spanwise_1_4
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.3345141978255424e+9
+  - name: spanwise_1_5
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.2530921841511369e+9
+  - name: spanwise_1_6
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.1830251753845887e+9
+  - name: spanwise_1_7
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.1264341339595172e+9
+  - name: spanwise_1_8
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.0854291997734125e+9
+  - name: spanwise_1_9
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.0618172270642077e+9
+  - name: spanwise_1_10
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.056764885226744e+9
+  - name: spanwise_2_2
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6749906751873546e+9
+  - name: spanwise_2_3
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6664230462908316e+9
+  - name: spanwise_2_4
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6604478604313438e+9
+  - name: spanwise_2_5
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.657093128878876e+9
+  - name: spanwise_2_6
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6563748944516907e+9
+  - name: spanwise_2_7
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6582963402486506e+9
+  - name: spanwise_2_8
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.662848553592942e+9
+  - name: spanwise_2_9
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6700098894123049e+9
+  - name: spanwise_2_10
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6797471161546216e+9
+  - name: spanwise_3_2
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6862839279772918e+9
+  - name: spanwise_3_3
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6822980515824986e+9
+  - name: spanwise_3_4
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6789266405919943e+9
+  - name: spanwise_3_5
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.67617313275255e+9
+  - name: spanwise_3_6
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6740407111630278e+9
+  - name: spanwise_3_7
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6725316676546075e+9
+  - name: spanwise_3_8
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.671647912086607e+9
+  - name: spanwise_3_9
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6713900810787978e+9
+  - name: spanwise_3_10
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6717586839269989e+9
+  - name: spanwise_4_2
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6827702961296408e+9
+  - name: spanwise_4_3
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6807365506048353e+9
+  - name: spanwise_4_4
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.678843752697632e+9
+  - name: spanwise_4_5
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.677092411703849e+9
+  - name: spanwise_4_6
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.675482909595349e+9
+  - name: spanwise_4_7
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6740157556679509e+9
+  - name: spanwise_4_8
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6726913318935173e+9
+  - name: spanwise_4_9
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.671509765596003e+9
+  - name: spanwise_4_10
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6704716933951805e+9
+  - name: spanwise_5_2
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.690604666372351e+9
+  - name: spanwise_5_3
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6897055046058588e+9
+  - name: spanwise_5_4
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6888063428393667e+9
+  - name: spanwise_5_5
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.687907181072875e+9
+  - name: spanwise_5_6
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.687008019306383e+9
+  - name: spanwise_5_7
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.686108857539891e+9
+  - name: spanwise_5_8
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6852096957733989e+9
+  - name: spanwise_5_9
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.684310534006907e+9
+  - name: spanwise_5_10
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.683411372240415e+9
+  - name: cross_1_1a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.46898179008875e+9
+  - name: cross_1_1b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6886303811342845e+9
+  - name: cross_1_2a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.3744689640351498e+9
+  - name: cross_1_2b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.580776423806995e+9
+  - name: cross_1_3a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.2885726592765906e+9
+  - name: cross_1_3b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.478591183580775e+9
+  - name: cross_1_4a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.2131244308981733e+9
+  - name: cross_1_4b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.383331857182097e+9
+  - name: cross_1_5a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.1501823433000085e+9
+  - name: cross_1_5b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.2965256954448698e+9
+  - name: cross_1_6a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.1018914231431112e+9
+  - name: cross_1_6b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.2199786613393462e+9
+  - name: cross_1_7a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.0702367782016779e+9
+  - name: cross_1_7b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.155730739264101e+9
+  - name: cross_1_8a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.056714592264727e+9
+  - name: cross_1_8b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.1059278471478307e+9
+  - name: cross_1_9a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.0620177622925035e+9
+  - name: cross_1_9b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.0725837406544883e+9
+  - name: cross_1_10a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.0858705045996175e+9
+  - name: cross_1_10b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.0572569923107842e+9
+  - name: cross_2_1a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6619030459070218e+9
+  - name: cross_2_1b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7354140403181243e+9
+  - name: cross_2_2a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.662006560282009e+9
+  - name: cross_2_2b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.716191306291485e+9
+  - name: cross_2_3a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6647399509366462e+9
+  - name: cross_2_3b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6993271211975136e+9
+  - name: cross_2_4a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6700903581515322e+9
+  - name: cross_2_4b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6848922771548965e+9
+  - name: cross_2_5a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6780326991076357e+9
+  - name: cross_2_5b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.672949672197144e+9
+  - name: cross_2_6a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6885303045060682e+9
+  - name: cross_2_6b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.663553037033044e+9
+  - name: cross_2_7a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7015360644836745e+9
+  - name: cross_2_7b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.656745534483163e+9
+  - name: cross_2_8a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7169929379088507e+9
+  - name: cross_2_8b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6525593775079827e+9
+  - name: cross_2_9a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7348354802689965e+9
+  - name: cross_2_9b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6510143013204467e+9
+  - name: cross_2_10a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7549906076142454e+9
+  - name: cross_2_10b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6521178180338688e+9
+  - name: cross_3_1a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6851047808349128e+9
+  - name: cross_3_1b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.744770186464702e+9
+  - name: cross_3_2a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.686589887439892e+9
+  - name: cross_3_2b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7350125878896694e+9
+  - name: cross_3_3a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6886937884636123e+9
+  - name: cross_3_3b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7258065566854162e+9
+  - name: cross_3_4a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6914143193988478e+9
+  - name: cross_3_4b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7171611328527098e+9
+  - name: cross_3_5a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6947484244706914e+9
+  - name: cross_3_5b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7090845924485912e+9
+  - name: cross_3_6a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.698692411284463e+9
+  - name: cross_3_6b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.701585338854056e+9
+  - name: cross_3_7a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.703242078149665e+9
+  - name: cross_3_7b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6946707568584623e+9
+  - name: cross_3_8a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7083927140799823e+9
+  - name: cross_3_8b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6883481039272165e+9
+  - name: cross_3_9a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7141388441453722e+9
+  - name: cross_3_9b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6826240009059508e+9
+  - name: cross_3_10a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7204744841199741e+9
+  - name: cross_3_10b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6775048139923885e+9
+  - name: cross_4_1a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6987852304472742e+9
+  - name: cross_4_1b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7310093954370675e+9
+  - name: cross_4_2a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.699658545451008e+9
+  - name: cross_4_2b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7260539471289582e+9
+  - name: cross_4_3a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7006731900442076e+9
+  - name: cross_4_3b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7212241675639143e+9
+  - name: cross_4_4a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7018286549310546e+9
+  - name: cross_4_4b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7165210753335714e+9
+  - name: cross_4_5a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7031246854636407e+9
+  - name: cross_4_5b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7119458163535202e+9
+  - name: cross_4_6a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7045610269940562e+9
+  - name: cross_4_6b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7074992818914418e+9
+  - name: cross_4_7a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.706137424874393e+9
+  - name: cross_4_7b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7031824905389717e+9
+  - name: cross_4_8a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.707853242484878e+9
+  - name: cross_4_8b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6989964608877456e+9
+  - name: cross_4_9a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7097082251776028e+9
+  - name: cross_4_9b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6949422115294e+9
+  - name: cross_4_10a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.711701863656749e+9
+  - name: cross_4_10b
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.6910206337316155e+9
+  - name: cross_5_1a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7235326781824737e+9
+  - name: cross_5_2a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7226504505019267e+9
+  - name: cross_5_3a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7217682228213797e+9
+  - name: cross_5_4a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7208859951408327e+9
+  - name: cross_5_5a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.72000389478424e+9
+  - name: cross_5_6a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7191217944276476e+9
+  - name: cross_5_7a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7182396940710552e+9
+  - name: cross_5_8a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7173575937144628e+9
+  - name: cross_5_9a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.71647549335787e+9
+  - name: cross_5_10a
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.7155933930012774e+9
+  - name: steering_right
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 5.500000000145193e+10
+  - name: bridle_line
+    law: linear
+    parameters:
+      density: 970.0
+      youngs_modulus: 5.5e+10
+  - name: breukels2011
     law: breukels2011
-    parameters: {C1: 6582.82, C2: -272.43, C3: 40852.38, C4: 14.31, C5: 271865251.42, C6: 215.93, C7: 14021.79, C8: -589.05, C9: 322.55, C10: 0.0239, C11: 5.3833, C12: 0.0461, C13: 1467.0, C14: 40.908, C15: -191.8, C16: 47.406, C17: -17703.0, C18: 358.05, C19: 0.0918}
+    parameters:
+      C1: 6582.82
+      C2: -272.43
+      C3: 40852.38
+      C4: 14.31
+      C5: 2.7186525142e+8
+      C6: 215.93
+      C7: 14021.79
+      C8: -589.05
+      C9: 322.55
+      C10: 0.0239
+      C11: 5.3833
+      C12: 0.0461
+      C13: 1467.0
+      C14: 40.908
+      C15: -191.8
+      C16: 47.406
+      C17: -17703.0
+      C18: 358.05
+      C19: 0.0918
+  - name: wing_tube
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 1.2732395447351628e+12
+  - name: wing_wire
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 6.366197723675814e+11
+  - name: dyneema
+    law: linear
+    parameters:
+      density: 724.0
+      youngs_modulus: 5.5e+10
 components:
   tethers:
     - name: tether
       type: non_conductive_tether
       version: 1.0
       joints:
-        upper_tether_joint: {id: kcu}
-        lower_tether_joint: {id: ground_anchor}
-      structure: {length: 250.0, diameter: 0.004, material: v3_beam_line}
+        upper_tether_joint:
+          id: kcu
+        lower_tether_joint:
+          id: ground_anchor
+      structure:
+        length: 250.00000000000006
+        diameter: 0.004
+        material: bridle_line
     - name: "1"
       type: non_conductive_tether
       version: 1.0
       joints:
-        upper_tether_joint: {id: "1"}
-        lower_tether_joint: {id: "39"}
-      structure: {length: 100.0, diameter: 0.0135, material: v3_psm_line}
+        upper_tether_joint:
+          id: "1"
+        lower_tether_joint:
+          id: "39"
+      structure:
+        length: 100.00000000000001
+        diameter: 0.0135
+        material: dyneema

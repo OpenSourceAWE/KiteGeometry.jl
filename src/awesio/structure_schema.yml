@@ -407,7 +407,8 @@ properties:
       canopy_material:
         description: >
           The material of the system every face of the wing's canopy is made of,
-          or null where the wing has no canopy.
+          or null where the wing has no canopy. Left out where segments carry the
+          canopy's stiffness and its faces only mesh the wing.
         unit: "-"
         value:
           $ref: "#/definitions/optional_name"

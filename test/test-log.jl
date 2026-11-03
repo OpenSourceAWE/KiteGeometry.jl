@@ -6,7 +6,7 @@ using KiteUtils: Logger, SysState, load_log, log!, save_log
 include("models.jl")
 
 @testset "a log saved with a system definition reads it back" begin
-    with_sam_pulley() do
+    with_v3_columns() do
         system = load_structure(joinpath(@__DIR__, "data", "structure",
                                          "v3_beam_structure.yml"))
         logger = Logger(3, 2)
