@@ -1205,13 +1205,21 @@ function placed_definition(placement::Placement, design::Pose)
         mass_centre = placement.body_pos[index] + R * placement.com_offset[index]
         with_fields(body; pos_ENU=mass_centre, Q_KA2ENU=rotation_matrix_to_quaternion(R))
     end
-    system_tethers = [design_tether(system, tether, segments) for tether in system.tethers]
+    system_tethers = [design_tether(system, tether, segments)
+                      for tether in winch_tethers(system)]
     placed = SystemDefinition(metadata, system.system_metadata, system.materials,
                               system_tethers, points, segments, system.spanwise_stations,
                               system.pulleys, system.tethers, system.winches, system.wings,
                               system.canopy_faces, bodies, system.tubes, system.extras,
                               system.system_extras)
     return carry_wings!(placed, design, Pose(placement))
+end
+
+"""The tethers of `system` a winch holds, the rest being lines of the bridle."""
+function winch_tethers(system)
+    held = Set(row_number(tether, system.tethers, :tethers)
+               for winch in system.winches for tether in winch.tethers)
+    return [tether for (index, tether) in enumerate(system.tethers) if index in held]
 end
 
 """The system's tether of `tether` of `system` made of `segments`: its ends as its joints,

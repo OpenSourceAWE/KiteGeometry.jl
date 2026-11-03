@@ -111,12 +111,13 @@ end
     SystemDefinition(document::AbstractDict, system_document::AbstractDict; strict=true)
 
 The system definition a parsed awesIO structure document and the parsed system document it
-names describe; `system_sha` is checked only by [`load_structure`](@ref), which has the
-file's bytes. A row reads the columns of the model its `model` column registers; a filled
-cell in any other column the schema does not name is refused, or with `strict=false` dropped
-with a warning. What the schemas do not name is kept as `extras` and `system_extras`, in the
-order read. Refuses another major `awesIO_version` than `AWESIO_VERSION`, warning on another
-minor one, and a `connectivity_sha` that does not describe the document's own tables.
+names describe; only [`load_structure`](@ref) checks `system_sha`. A row reads the columns
+of the model its `model` column registers; a filled cell in any other column the schema does
+not name is refused, or with `strict=false` dropped with a warning. What the schemas do not
+name is kept as `extras` and `system_extras`, in the order read. Refuses another major
+`awesIO_version` than `AWESIO_VERSION`, warning on another minor one, a `connectivity_sha`
+that does not describe the document's own tables, and a tether the system does not list or
+whose segments disagree with it.
 """
 function SystemDefinition(document::AbstractDict, system_document::AbstractDict;
                           strict=true)
@@ -138,7 +139,36 @@ function SystemDefinition(document::AbstractDict, system_document::AbstractDict;
     metadata.connectivity_sha == sha || throw(ArgumentError(
         "connectivity_sha $(metadata.connectivity_sha) does not describe the document's " *
         "points, segments, bodies, tubes and canopy faces, whose is $sha"))
+    foreach(tether -> check_tether(tether, system), system.tethers)
     return system
+end
+
+"""The relative difference allowed between floats a writer summed or printed."""
+const TETHER_TOLERANCE = 1e-9
+
+"""Refuses `tether` of `system` where the system does not list it, or where its segments
+disagree with the material, diameter and length the system gives it. A field left out states
+nothing."""
+function check_tether(tether, system)
+    name = tether.name
+    haskey(system.system_tethers, name) ||
+        throw(ArgumentError("tether $name is not in the system"))
+    design = system.system_tethers[name]
+    segments = [system.segments[segment] for segment in tether.segments]
+    for segment in segments
+        isnothing(design.material) || isnothing(segment.material) ||
+            design.material == segment.material || throw(ArgumentError(
+            "tether $name segment $(segment.name) is not of the system's material"))
+        isnothing(design.diameter) || isnothing(segment.diameter) ||
+            isapprox(segment.diameter, design.diameter; rtol=TETHER_TOLERANCE) ||
+            throw(ArgumentError("tether $name segment $(segment.name) has diameter " *
+                                "$(segment.diameter), the system says $(design.diameter)"))
+    end
+    any(segment -> isnothing(segment.rest_length), segments) && return nothing
+    total = sum(segment -> segment.rest_length, segments; init=0.0)
+    isapprox(total, design.length; rtol=TETHER_TOLERANCE) || throw(ArgumentError(
+        "tether $name segments add up to $total m, the system says $(design.length) m"))
+    return nothing
 end
 
 """The keyword arguments of `SystemDefinition` the parsed system `document` gives."""
@@ -305,9 +335,14 @@ end
     definition(log::SysLog; strict=true)
 
 The `SystemDefinition` a log loaded by `load_log` carries under its metadata keys `topology`
-and `system`.
+and `system`, refusing a log without them.
 """
 function definition(log::SysLog; strict=true)
+    for key in ("topology", "system")
+        haskey(log.metadata, key) || throw(ArgumentError(
+            "the log carries no $key: it was saved without a definition, or before a log " *
+            "carried its system"))
+    end
     return definition(log.metadata["topology"], log.metadata["system"]; strict)
 end
 
@@ -329,9 +364,16 @@ end
 """
     to_yaml(system::SystemDefinition)
 
-`structure_document(system)` as YAML text.
+`structure_document(system)` as YAML text, refusing a `system` whose metadata names no
+system file: give `structure_document` the file's path and hash.
 """
-to_yaml(system::SystemDefinition) = to_yaml(structure_document(system))
+function to_yaml(system::SystemDefinition)
+    (isempty(system.metadata.system) || isempty(system.metadata.system_sha)) &&
+        throw(ArgumentError("structure $(system.metadata.name) names no system file and " *
+                            "hash: write it with structure_document(system; system, " *
+                            "system_sha)"))
+    return to_yaml(structure_document(system))
+end
 
 """
     to_json(system::SystemDefinition)
@@ -428,7 +470,7 @@ end
 
 The awesIO structure document of `structure`, as `SystemDefinition` reads it: references by
 name, model columns after the schema's, extra blocks after the schema's, empty optional
-blocks and unset optional columns left out. Its `awesIO_version` is `AWESIO_VERSION` and its
+blocks and unset optional columns left out, and of the tethers those its system lists. Its `awesIO_version` is `AWESIO_VERSION` and its
 `connectivity_sha` that of `structure`'s own tables, whatever `structure.metadata` holds.
 `description`, `note`, `system`, the path of the system file relative to this one, and
 `system_sha`, that file's [`system_sha`](@ref), default to those of `structure.metadata`.
@@ -446,12 +488,17 @@ function structure_document(structure::SystemDefinition;
                           "system" => system, "system_sha" => system_sha))
     document = OrderedDict{String, Any}("metadata" => metadata)
     for block in keys(BLOCKS)
-        rows = getfield(structure, block)
+        rows = block == :tethers ? listed_tethers(structure) : getfield(structure, block)
         block in REQUIRED_BLOCKS || !isempty(rows) || continue
         name_indices(rows, block)
         document[String(block)] = write_table(structure, block, rows)
     end
     return merge!(document, structure.extras)
+end
+
+"""The tethers of `structure` its system lists."""
+function listed_tethers(structure)
+    return filter(tether -> haskey(structure.system_tethers, tether.name), structure.tethers)
 end
 
 """

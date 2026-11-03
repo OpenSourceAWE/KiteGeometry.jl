@@ -9,15 +9,16 @@ SPDX-License-Identifier: MIT
 
 ### Changed
 
-- BREAKING: follows the awesIO schema in which the system file owns the design. A structure document has no `materials` block and its `metadata` requires `system` and `system_sha`. `load_structure` reads a structure with the system file it names and refuses a `system_sha` that is not that file's hash.
-- BREAKING: `SystemDefinition(document, system_document)`, `from_yaml(text, system_text)`, `from_json(text, system_text)` and `KiteGeometry.definition(topology, system)` take the system beside the structure. A log saved with a definition also carries its system under the key `system`, and a log without one no longer loads.
+- BREAKING: follows the awesIO schema in which the system file owns the design. A structure document has no `materials` block and its `metadata` requires `system` and `system_sha`. `load_structure` reads a structure with the system file it names and refuses a `system_sha` that is not that file's hash. `SystemDefinition(document, system_document)` refuses a tether the system does not list or whose segments disagree with its material, diameter or length.
+- BREAKING: `SystemDefinition(document, system_document)`, `from_yaml(text, system_text)`, `from_json(text, system_text)` and `KiteGeometry.definition(topology, system)` take the system beside the structure. A log saved with a definition also carries its system under the key `system`, and `KiteGeometry.definition` refuses a log without one.
 - BREAKING: `SystemDefinition` has the fields `system_metadata`, `system_tethers` and `system_extras`, and its materials are the system's. `Metadata` has the fields `system` and `system_sha`.
-- `to_yaml` writes YAML 1.2 that 1.1 readers read the same: a unit of `-` is quoted, and every float has its point and its exponent's sign.
+- `to_yaml` writes YAML 1.2 that 1.1 readers read the same: a unit of `-` is quoted, and every float has its point and its exponent's sign. `to_yaml(definition)` refuses a definition whose metadata names no system file.
+- BREAKING: a structure document lists only the tethers its system lists. `load_authoring` makes a system tether of each tether a winch holds, so another row of its `tethers` block is a bridle line: its segments are written and it stays in the definition's `tethers`, but it is not read back as a tether.
 
 ### Added
 
 - `system_document` writes a system document from one definition or the union by name of several, refusing one name with two different values; `system_sha` gives a file's hash; `structure_document` takes `description`, `note`, `system` and `system_sha`; `to_yaml` and `to_json` take a document.
-- `SystemMetadata` and `SystemTether`, generated from the system schema. `load_authoring` gives each tether a `SystemTether`: its ends, its length and the diameter and material its segments share.
+- `SystemMetadata` and `SystemTether`, generated from the system schema. `load_authoring` gives each tether a winch holds a `SystemTether`: its ends, its length and the diameter and material its segments share.
 - A registered model may keep its columns in a model it holds: a column that is not one of its fields is read and written with `getproperty`, and every column is typed by `KiteGeometry.column_type(M, column)`, its field's type unless `M` adds a method. A model holding a `SegmentSpring` and forwarding `getproperty` to it reads and writes the spring's three columns.
 - `KiteGeometry.unit_stiffness(material, diameter)` and `KiteGeometry.unit_stiffness(segment, materials)` give the axial stiffness times rest length [N] of a `linear` material at a diameter, or of a segment from its material, `nothing` for another law, without allocating for a `Float64` modulus; and `KiteGeometry.resolve_material` is public.
 - `KiteGeometry.expand_tether!` and `KiteGeometry.MaterialTable` are public, and a tether's stiffness may be a callable force law, which becomes a material of law `unit_stiffness` holding it.

@@ -541,11 +541,43 @@ end
 
 """The V3 beam structure with a system of one tether, `tether_name`, of `length`."""
 function narrowed_system(tether_name, length)
-    system = system_fixture()
-    tether = first(system["components"]["tethers"])
-    tether["name"], tether["structure"]["length"] = tether_name, length
-    system["components"]["tethers"] = [tether]
-    return SystemDefinition(fixture_document(), system)
+    system = load_structure(FIXTURE)
+    tether = KiteGeometry.with_fields(first(system.system_tethers); name=Symbol(tether_name),
+                                      length)
+    empty!(system.system_tethers)
+    push!(system.system_tethers, tether)
+    return system
+end
+
+@testset "a structure disagreeing with its system's tether is refused" begin
+    refused(change!) = SystemDefinition(fixture_document(),
+                                        change!(system_fixture()))
+    function tether_field!(system, field, value)
+        first(system["components"]["tethers"])["structure"][field] = value
+        return system
+    end
+    @test_throws "tether tether is not in the system" refused() do system
+        system["components"]["tethers"] = system["components"]["tethers"][2:end]
+        return system
+    end
+    @test_throws "add up to" refused(system -> tether_field!(system, "length", 251.0))
+    @test_throws "has diameter" refused(system -> tether_field!(system, "diameter", 0.005))
+    @test_throws "not of the system's material" refused(
+        system -> tether_field!(system, "material", "control_line"))
+    @test SystemDefinition(fixture_document(),
+                           tether_field!(system_fixture(), "diameter", 0.004)) isa
+          SystemDefinition
+end
+
+@testset "a value no document can hold is refused by name when writing" begin
+    force_law(strain) = strain
+    @test_throws "cannot hold force_law" to_yaml(OrderedDict{String, Any}("law" => force_law))
+end
+
+@testset "a definition naming no system file does not write as a structure file" begin
+    system = small_system()
+    @test_throws "names no system file" to_yaml(system)
+    @test structure_document(system)["metadata"]["system"] == ""
 end
 
 @testset "a system written from several definitions is the union of their rows" begin

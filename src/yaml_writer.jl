@@ -69,6 +69,10 @@ function yaml_flow(text::AbstractString)
     return is_plain_scalar(text) ? String(text) : JSON.json(String(text))
 end
 
+function yaml_flow(value)
+    throw(ArgumentError("a document cannot hold $(repr(value)), a $(typeof(value))"))
+end
+
 """The words a YAML 1.1 reader takes for a boolean or null."""
 const RESERVED_WORDS = ("null", "true", "false", "yes", "no", "on", "off", "y", "n")
 

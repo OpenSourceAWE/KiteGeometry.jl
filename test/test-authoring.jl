@@ -26,7 +26,9 @@ function schema_document(system)
 end
 
 """`system` written to YAML and read back."""
-written_again(system) = from_yaml(to_yaml(system), to_yaml(system_document(system)))
+function written_again(system)
+    return from_yaml(to_yaml(structure_document(system)), to_yaml(system_document(system)))
+end
 
 """SAM's point columns, each optional, as a stand-in for the default point model SAM
 registers."""
@@ -335,7 +337,7 @@ end
     system, transforms = load_authoring(authored; set=kite_settings(),
                                         name="rigid_structural_geometry")
     from_file, file_transforms = load_kite_transforms("rigid_structural_geometry.yaml")
-    @test to_yaml(system) == to_yaml(from_file)
+    @test structure_document(system) == structure_document(from_file)
     members(transform) = (transform.name, transform.points, transform.bodies)
     @test members.(transforms) == members.(file_transforms)
     @test transforms isa Rows{Transform}
@@ -610,6 +612,40 @@ end
     @test unique(column(expected, "wing")) == column(golden["wings"], "name")
     @test isnothing(only(system.wings).canopy_material)
     @test isnothing(validate(SCHEMA, schema_document(system)))
+end
+
+@testset "a tether no winch holds is a bridle line, in neither file as a tether" begin
+    authored = YAML.load_file(joinpath(KITE, "rigid_structural_geometry.yaml");
+                              dicttype=OrderedDict{String, Any})
+    main_row = only(authored["tethers"]["data"])
+    bridle_row = Any["bridle_line", "kcu", main_row[3], 2, main_row[5:end]...]
+    push!(authored["tethers"]["data"], bridle_row)
+    system, _ = load_authoring(authored; set=kite_settings(), name="bridled")
+    @test haskey(system.tethers, :bridle_line)
+    @test [tether.name for tether in system.system_tethers] == [:main_tether]
+    document = structure_document(system)
+    @test [row[1] for row in document["tethers"]["data"]] == ["main_tether"]
+    @test "bridle_line_seg_1" in [row[1] for row in document["segments"]["data"]]
+    again = written_again(system)
+    @test structure_document(again) == document
+    @test system_document(again) == system_document(system)
+end
+
+@testset "a system from two authored definitions lists both winches' tethers" begin
+    v3_psm = joinpath(@__DIR__, "data", "v3_psm")
+    psm, _ = load_authoring(joinpath(v3_psm, "struc_geometry.yaml");
+                            set=kite_settings(v3_psm))
+    kite, _ = load_kite_transforms("rigid_structural_geometry.yaml")
+    document = system_document([psm, kite]; name="pair")
+    @test [tether["name"] for tether in document["components"]["tethers"]] ==
+          String.(vcat([tether.name for tether in psm.system_tethers],
+                       [tether.name for tether in kite.system_tethers]))
+    for definition in (psm, kite)
+        @test !isempty(definition.system_tethers)
+        @test issubset(material_row["name"] for material_row in
+                                                system_document(definition)["materials"],
+                       material["name"] for material in document["materials"])
+    end
 end
 
 """The authoring YAML of each system SymbolicAWEModels' placed pose is recorded for."""
