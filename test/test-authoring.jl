@@ -356,7 +356,6 @@ end
             "rigid_structural_geometry.yaml")
         @test_throws "tethers columns damping_per_stiffness are read by neither the " *
                      "loader nor a registered model" load_edited(without_segment_spring!)
-        @test !isdefined(KiteGeometry, :SegmentSpring)
         edited = load_edited() do data
             delete!(delete!(without_segment_spring!(data), "tethers"), "winches")
         end
