@@ -354,9 +354,9 @@ end
     authoring_model(block, row)
 
 The model of `row` of `block`: the one its `model` cell names, else, where the row has no
-`model` column, the block's default, built from its columns; `NoModel` where that names no
-registered model. An absent column is an unset cell, refused for a column that cannot hold
-`nothing`.
+`model` column, the block's default, built from the columns named after its fields;
+`NoModel` where that names no registered model. An absent column is an unset cell, refused
+for a field that cannot hold `nothing`.
 """
 function authoring_model(block, row)
     name = hasfield(typeof(row), :model) ? yaml_field(row, :model) : missing
@@ -369,7 +369,7 @@ end
 unset, `NoModel` where that default needs a column filled."""
 function added_row_model(block)
     M = model_type(block, default_model(block))
-    all(field -> Nothing <: column_type(M, field), model_columns(M)) || return NoModel()
+    all(field -> Nothing <: fieldtype(M, field), model_columns(M)) || return NoModel()
     return authoring_model(block, (;))
 end
 

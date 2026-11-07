@@ -29,23 +29,24 @@ const V3_COLUMNS = (
     tubes=(shear_coeff="-", damping="s"),
 )
 
-"""A stand-in for SAM's default model of `block`: its V3 columns as they were read."""
-struct V3Columns{block} <: AbstractModel
-    cells::NamedTuple
-    function V3Columns{block}(cells...) where {block}
-        return new{block}(NamedTuple{keys(V3_COLUMNS[block])}(cells))
-    end
-end
-KiteGeometry.model_columns(::Type{V3Columns{block}}) where {block} = keys(V3_COLUMNS[block])
-KiteGeometry.column_type(::Type{<:V3Columns}, ::Symbol) = Any
-function Base.getproperty(model::V3Columns, column::Symbol)
-    return column === :cells ? getfield(model, :cells) : getfield(model, :cells)[column]
+"""A struct standing in for SAM's default model of `block`, one field per column, each
+holding its cell as it was read."""
+function v3_model(block, columns)
+    name = Symbol(:V3, join(uppercasefirst.(split(String(block), '_'))))
+    fields = (:($column::Any) for column in columns)
+    return Core.eval(@__MODULE__, :(struct $name <: AbstractModel
+                                        $(fields...)
+                                    end; $name))
 end
 
-"""`f()` with `V3Columns` registered as the default model of each block of `V3_COLUMNS`."""
+"""The stand-ins for SAM's default models, block by block."""
+const V3_MODELS = NamedTuple{keys(V3_COLUMNS)}(Tuple(
+    v3_model(block, keys(units)) for (block, units) in pairs(V3_COLUMNS)))
+
+"""`f()` with `V3_MODELS` registered as the default models of their blocks."""
 function with_v3_columns(f)
     for (block, units) in pairs(V3_COLUMNS)
-        register_model!(block, "v3_columns", V3Columns{block}, values(units); default=true)
+        register_model!(block, "v3_columns", V3_MODELS[block], values(units); default=true)
     end
     try
         return f()

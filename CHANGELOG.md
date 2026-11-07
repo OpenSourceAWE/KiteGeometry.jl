@@ -19,7 +19,6 @@ SPDX-License-Identifier: MIT
 
 - `system_document` writes a system document from one definition or the union by name of several, refusing one name with two different values; `system_sha` gives a file's hash; `structure_document` takes `description`, `note`, `system` and `system_sha`; `to_yaml` and `to_json` take a document.
 - `SystemMetadata` and `SystemTether`, generated from the system schema. `load_authoring` gives each tether a winch holds a `SystemTether`: its ends, its length and the diameter and material its segments share.
-- A registered model may keep its columns in a model it holds: a column that is not one of its fields is read and written with `getproperty`, and every column is typed by `KiteGeometry.column_type(M, column)`, its field's type unless `M` adds a method. A model holding a `SegmentSpring` and forwarding `getproperty` to it reads and writes the spring's three columns.
 - `KiteGeometry.unit_stiffness(material, diameter)` and `KiteGeometry.unit_stiffness(segment, materials)` give the axial stiffness times rest length [N] of a `linear` material at a diameter, or of a segment from its material, `nothing` for another law, without allocating for a `Float64` modulus; and `KiteGeometry.resolve_material` is public.
 - `KiteGeometry.expand_tether!` and `KiteGeometry.MaterialTable` are public, and a tether's stiffness may be a callable force law, which becomes a material of law `unit_stiffness` holding it.
 
