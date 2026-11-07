@@ -73,6 +73,7 @@ POINT_UNITS = ("-", "N*s/m", "N*s/m", "m^2", "-")
 SAM_MODELS = [(:points, "sam_point", SamPoint, POINT_UNITS, true),
               (:spanwise_stations, "sam_station", SamStation, ("-", "-", "N*m*s"), true),
               (:pulleys, "sam_pulley", SamPulley, ("-", "-"), true),
+              (:segments, "spring", SamSpring, SPRING_UNITS, true),
               (:wings, "sam_wing", SamWing, ("-", "1/s", "-", "m", "-", "-", "-", "-", "-"),
                true),
               (:bodies, "sam_body", SamBody, ("-",), true),
@@ -233,13 +234,12 @@ end
         KiteGeometry.tether_unit_stiffness(tether, segments, materials))
 end
 
-@testset "a segment's damping is rel_damping times its stiffness where it gives none" begin
+@testset "a segment's material is what its row gives, else the settings' tether" begin
     set = kite_settings()
-    set.rel_damping = 0.5
-    diameter, youngs_modulus, unit_damping, _ =
-        KiteGeometry.resolve_material("segment", set; diameter=0.002, youngs_modulus=1e9)
-    @test diameter == 0.002 && youngs_modulus == 1e9
-    @test unit_damping ≈ 0.5 * 1e9 * π * 0.001^2
+    @test KiteGeometry.resolve_material("segment", set; diameter=0.002,
+                                        youngs_modulus=1e9) == (0.002, 1e9, set.rho_tether)
+    @test KiteGeometry.resolve_material("segment", set) ==
+          (0.001 * set.d_tether, set.e_tether, set.rho_tether)
 end
 
 @testset "what a tool builds a definition with is public" begin
@@ -297,12 +297,13 @@ end
     @test transforms[:main_transform] === transforms[1]
 end
 
-@testset "a segment carries its spring as the segment model spring" begin
+@testset "a segment carries the spring columns its row authors in the tool's model" begin
     system = load_kite("rigid_structural_geometry.yaml")
     segment = system.segments[1]
-    @test segment isa Segment{SegmentSpring}
-    @test segment.unit_damping ≈ 10.0
-    @test model_type(:segments, "spring") === SegmentSpring
+    @test segment.model == SamSpring(nothing, 0.002, 1.0, nothing)
+    tether_spring = SamSpring(nothing, 0.00077, nothing, nothing)
+    @test all(name -> system.segments[name].model == tether_spring,
+              only(system.tethers).segments)
 end
 
 @testset "place=false leaves every authored point where its YAML puts it" begin
@@ -334,6 +335,33 @@ function load_edited(edit, file="rigid_structural_geometry.yaml")
     path = joinpath(mktempdir(), "edited.yaml")
     YAML.write_file(path, data)
     return first(load_authoring(path; set=kite_settings()))
+end
+
+"""`data` with its segments giving only a line's stiffness and density."""
+function without_segment_spring!(data)
+    data["variables"]["bare_line"] = Dict("youngs_modulus" => 1.0e9, "density" => 724.0)
+    segments = data["segments"]
+    filter!(!in(("damping_per_stiffness", "compression_frac")), segments["headers"])
+    for row in segments["data"]
+        row[6] = "bare_line"
+        pop!(row)
+    end
+    return data
+end
+
+@testset "with no segment model registered, a segment carries none" begin
+    without_sam_models(:segments) do
+        @test_throws "segments columns damping_per_stiffness, compression_frac are read " *
+                     "by neither the loader nor a registered model" load_kite(
+            "rigid_structural_geometry.yaml")
+        @test_throws "tethers columns damping_per_stiffness are read by neither the " *
+                     "loader nor a registered model" load_edited(without_segment_spring!)
+        @test !isdefined(KiteGeometry, :SegmentSpring)
+        edited = load_edited() do data
+            delete!(delete!(without_segment_spring!(data), "tethers"), "winches")
+        end
+        @test all(segment -> segment.model isa NoModel, edited.segments)
+    end
 end
 
 """`data` with two bodies and the `timoshenko` tube `strut` between them."""
@@ -376,13 +404,16 @@ end
                                          :kite, 3, (; stretched_length=33.0),
                                          Settings("system.yaml"), materials;
                                          model=KiteGeometry.added_row_model(:tethers),
-                                         unit_stiffness=force_law, unit_damping=5.0)
+                                         segment_model=SamSpring(5.0, nothing, nothing,
+                                                                 nothing),
+                                         unit_stiffness=force_law)
     @test tether.segments == [:main_seg_1, :main_seg_2, :main_seg_3]
     @test length(segments) == 3
     material = only(materials.rows)
     @test material.law == "unit_stiffness"
     @test material.parameters["unit_stiffness"] === force_law
     @test all(segment -> segment.material == material.name, segments)
+    @test all(segment -> segment.model.unit_damping == 5.0, segments)
     @test all(segment -> segment.rest_length ≈ 11.0, segments)
     @test isnothing(KiteGeometry.unit_stiffness(material, 0.004))
     @test length(points) == length(point_transforms) == 4
