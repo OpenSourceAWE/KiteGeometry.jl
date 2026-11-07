@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright (c) 2026 Bart van de Lint
+# Copyright (c) 2026 the Agents contributors
 # SPDX-License-Identifier: MIT
 
 set -euo pipefail
