@@ -381,10 +381,10 @@ end
 
 `(diameter, stiffness, unit_damping, density)` of a segment from what its row gives, `NaN`
 for what it leaves out: `stiffness` is its Young's modulus [Pa], from `youngs_modulus` or
-from `unit_stiffness` [N] over its cross-section, or the name of the nonlinear law
-`unit_stiffness` names. `damping_per_stiffness` [s] stands in for `unit_damping` [N*s], and
-`set`'s `d_tether` [mm], `rho_tether`, `e_tether` and `rel_damping` for the rest. A
-nonlinear law needs `unit_damping` given.
+from `unit_stiffness` [N] over its cross-section, or the nonlinear law `unit_stiffness`
+gives, the name of one or a callable force law. `damping_per_stiffness` [s] stands in for
+`unit_damping` [N*s], and `set`'s `d_tether` [mm], `rho_tether`, `e_tether` and
+`rel_damping` for the rest. A nonlinear law needs `unit_damping` given.
 """
 function resolve_material(label, set::Settings; diameter=NaN, unit_stiffness=NaN,
                           unit_damping=NaN, density=NaN, youngs_modulus=NaN,
@@ -440,7 +440,7 @@ const BREUKELS2011 = OrderedDict{String, Any}(
     "C18" => 358.05, "C19" => 0.0918)
 
 """
-    MaterialTable
+    MaterialTable(rows::Vector{Material}, variables::Dict{String, Any})
 
 The materials a load has named so far, and the variables of its YAML they may be named
 after.
@@ -485,7 +485,8 @@ end
 
 """The name among `materials` ([`material!`](@ref)) of a line of `density` [kg/m^3] and
 `stiffness`: a `linear` material of that Young's modulus [Pa], named after the
-multi-variable giving both else `label`, or the nonlinear law of that name."""
+multi-variable giving both else `label`; the nonlinear law of that name; or the law
+`unit_stiffness` holding that callable force law, named `label`."""
 function line_material!(materials, label, density, stiffness::Real)
     parameters = OrderedDict{String, Any}("density" => density,
                                           "youngs_modulus" => stiffness)
@@ -494,6 +495,11 @@ function line_material!(materials, label, density, stiffness::Real)
 end
 function line_material!(materials, label, density, law::String)
     return material!(materials, law, law, OrderedDict{String, Any}("density" => density))
+end
+function line_material!(materials, label, density, force_law)
+    parameters = OrderedDict{String, Any}("density" => density,
+                                          "unit_stiffness" => force_law)
+    return material!(materials, label, "unit_stiffness", parameters)
 end
 
 """A segment with its spring resolved from `spring` ([`resolve_material`](@ref)) and `set`,
@@ -716,10 +722,19 @@ function read_tethers!(points, segments, point_transforms, data, set, materials)
     return tethers, inits
 end
 
-"""The tether `name` of `n` segments from `start_point` to `end_point`, its `n - 1` inner
+"""
+    expand_tether!(points, segments, point_transforms, name, start_point, end_point, n,
+                   init, set, materials; model, spring...)
+
+The tether `name` of `n` segments from `start_point` to `end_point`, its `n - 1` inner
 points `<name>_point_<i>` added to `points` on the straight line between them, in the
-transform of whichever end has one, and its segments `<name>_seg_<i>` to `segments`; the
-tether carries `model`."""
+transform of whichever end has one per `point_transforms`, the transform of each of
+`points` or `nothing`, and its segments `<name>_seg_<i>` to `segments`; the tether carries
+`model`. Together the segments are `init.stretched_length` [m] long, else the distance
+between the ends. `spring` is what [`resolve_material`](@ref) takes with `set`, the
+stiffness a number, a law's name or a callable force law, and `compression_frac` and
+`compression_damping_frac`; each segment's material goes among `materials`.
+"""
 function expand_tether!(points, segments, point_transforms, name, start_point, end_point,
                         n, init, set, materials; model, spring...)
     ends = [start_point, end_point]

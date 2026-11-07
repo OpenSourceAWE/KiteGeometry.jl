@@ -5,6 +5,17 @@ SPDX-License-Identifier: MIT
 
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `KiteGeometry.unit_stiffness(material, diameter)` and `KiteGeometry.unit_stiffness(segment, materials)` give the axial stiffness times rest length [N] of a `linear` material at a diameter, or of a segment from its material, `nothing` for another law, without allocating for a `Float64` modulus; and `KiteGeometry.resolve_material` is public.
+- `KiteGeometry.expand_tether!` and `KiteGeometry.MaterialTable` are public, and a tether's stiffness may be a callable force law, which becomes a material of law `unit_stiffness` holding it.
+
+### Changed
+
+- A transform's `azimuth` and `azimuth_vel` turn anti-clockwise, from east towards north, as `atan(y, x)` and KiteUtils 0.14's `azimuth_east` do, so a YAML with a non-zero azimuth now places mirrored about the east axis: 30° puts the object north of east rather than south. Heading keeps its sense.
+
 ## KiteGeometry v0.3.3 2026-10-28
 
 ### Fixed

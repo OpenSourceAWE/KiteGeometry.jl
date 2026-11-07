@@ -79,6 +79,36 @@ end
     @test norm(pose.pos[4] - kite_origin) ≈ kite_rigid
 end
 
+"""`data`, the chained system's YAML, with its first transform at `azimuth` [deg]."""
+function set_main_azimuth!(data, azimuth)
+    data["transforms"]["data"][1][3] = azimuth
+    return data
+end
+
+@testset "azimuth runs anti-clockwise, from east towards north" begin
+    system, transforms = load_chained(data -> set_main_azimuth!(data, 30.0))
+    kcu = system.points[2].pos_ENU
+    @test atan(kcu[2], kcu[1]) ≈ deg2rad(30)
+
+    main_tf = transforms[1]
+    main_tf.elevation, main_tf.azimuth = 0.0, deg2rad(90)
+    place!(system, transforms)
+    @test normalize(system.points[2].pos_ENU) ≈ [0, 1, 0] atol=1e-12
+end
+
+@testset "azimuth_vel moves an object by the rate of change of atan(y, x)" begin
+    system, transforms = load_chained(data -> set_main_azimuth!(data, 30.0))
+    main_tf = transforms[1]
+    main_tf.azimuth_vel = deg2rad(2)
+    main_tf.elevation_vel = main_tf.turn_rate = 0.0
+    pose = Pose(system)
+    kcu, kcu_vel = pose.pos[2], transform_velocities(pose, transforms)[1][2]
+    dt = 1e-5
+    ahead, behind = kcu + dt * kcu_vel, kcu - dt * kcu_vel
+    @test (atan(ahead[2], ahead[1]) - atan(behind[2], behind[1])) / 2dt ≈
+          main_tf.azimuth_vel rtol=1e-6
+end
+
 @testset "repositioning turns each transform to its angles about its base" begin
     system, transforms = load_chained()
     pose = reposition!(Pose(system), tilt_kite!(transforms))
