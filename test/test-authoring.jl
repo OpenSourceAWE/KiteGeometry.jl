@@ -73,6 +73,7 @@ POINT_UNITS = ("-", "N*s/m", "N*s/m", "m^2", "-")
 SAM_MODELS = [(:points, "sam_point", SamPoint, POINT_UNITS, true),
               (:spanwise_stations, "sam_station", SamStation, ("-", "-", "N*m*s"), true),
               (:pulleys, "sam_pulley", SamPulley, ("-", "-"), true),
+              (:segments, "spring", SamSpring, SPRING_UNITS, true),
               (:wings, "sam_wing", SamWing, ("-", "1/s", "-", "m", "-", "-", "-", "-", "-"),
                true),
               (:bodies, "sam_body", SamBody, ("-",), true),
@@ -200,11 +201,50 @@ end
     @test [material.name for material in system.materials] == [:wing_element, :dyneema]
     @test all(material -> material.law == "linear", system.materials)
     for (segment, row) in zip(system.segments, golden["segments"]["data"])
-        parameters = system.materials[segment.material].parameters
-        @test parameters["density"] == row[5]
-        @test isapprox(parameters["youngs_modulus"] * π * (segment.diameter / 2)^2, row[6];
+        @test system.materials[segment.material].parameters["density"] == row[5]
+        @test isapprox(KiteGeometry.unit_stiffness(segment, system.materials), row[6];
                        rtol=1e-12)
     end
+end
+
+@testset "a segment of a material that is not linear has no unit_stiffness" begin
+    system = load_kite("rigid_structural_geometry.yaml")
+    segment = system.segments[1]
+    system.materials[segment.material].law = "breukels2011"
+    @test isnothing(KiteGeometry.unit_stiffness(segment, system.materials))
+end
+
+@testset "a material's unit_stiffness at a diameter allocates nothing" begin
+    material = Material(; name=:line, law="linear",
+                        parameters=OrderedDict{String, Any}("youngs_modulus" => 1e9))
+    KiteGeometry.unit_stiffness(material, 0.004)
+    @test KiteGeometry.unit_stiffness(material, 0.004) ≈ 1e9 * π * 0.002^2
+    @test (@allocated KiteGeometry.unit_stiffness(material, 0.004)) == 0
+end
+
+@testset "a tether of a material that is not linear has no init_tether_force" begin
+    system = load_kite("particle_structural_geometry.yaml")
+    (; segments, materials) = system
+    tether = only(system.tethers)
+    segment = segments[first(tether.segments)]
+    @test KiteGeometry.tether_unit_stiffness(tether, segments, materials) ≈
+          KiteGeometry.unit_stiffness(segment, materials)
+    materials[segment.material].law = "breukels2011"
+    @test_throws "init_tether_force needs a linear material" (
+        KiteGeometry.tether_unit_stiffness(tether, segments, materials))
+end
+
+@testset "a segment's material is what its row gives, else the settings' tether" begin
+    set = kite_settings()
+    @test KiteGeometry.resolve_material("segment", set; diameter=0.002,
+                                        youngs_modulus=1e9) == (0.002, 1e9, set.rho_tether)
+    @test KiteGeometry.resolve_material("segment", set) ==
+          (0.001 * set.d_tether, set.e_tether, set.rho_tether)
+end
+
+@testset "what a tool builds a definition with is public" begin
+    @test all(name -> Base.ispublic(KiteGeometry, name),
+              (:unit_stiffness, :resolve_material, :expand_tether!, :MaterialTable))
 end
 
 """Whether each point of `system` the authoring `points` table names is at its `pos_cad`
@@ -257,12 +297,13 @@ end
     @test transforms[:main_transform] === transforms[1]
 end
 
-@testset "a segment carries its spring as the segment model spring" begin
+@testset "a segment carries the spring columns its row authors in the tool's model" begin
     system = load_kite("rigid_structural_geometry.yaml")
     segment = system.segments[1]
-    @test segment isa Segment{SegmentSpring}
-    @test segment.unit_damping ≈ 10.0
-    @test model_type(:segments, "spring") === SegmentSpring
+    @test segment.model == SamSpring(nothing, 0.002, 1.0, nothing)
+    tether_spring = SamSpring(nothing, 0.00077, nothing, nothing)
+    @test all(name -> system.segments[name].model == tether_spring,
+              only(system.tethers).segments)
 end
 
 @testset "place=false leaves every authored point where its YAML puts it" begin
@@ -296,6 +337,32 @@ function load_edited(edit, file="rigid_structural_geometry.yaml")
     return first(load_authoring(path; set=kite_settings()))
 end
 
+"""`data` with its segments giving only a line's stiffness and density."""
+function without_segment_spring!(data)
+    data["variables"]["bare_line"] = Dict("youngs_modulus" => 1.0e9, "density" => 724.0)
+    segments = data["segments"]
+    filter!(!in(("damping_per_stiffness", "compression_frac")), segments["headers"])
+    for row in segments["data"]
+        row[6] = "bare_line"
+        pop!(row)
+    end
+    return data
+end
+
+@testset "with no segment model registered, a segment carries none" begin
+    without_sam_models(:segments) do
+        @test_throws "segments columns damping_per_stiffness, compression_frac are read " *
+                     "by neither the loader nor a registered model" load_kite(
+            "rigid_structural_geometry.yaml")
+        @test_throws "tethers columns damping_per_stiffness are read by neither the " *
+                     "loader nor a registered model" load_edited(without_segment_spring!)
+        edited = load_edited() do data
+            delete!(delete!(without_segment_spring!(data), "tethers"), "winches")
+        end
+        @test all(segment -> segment.model isa NoModel, edited.segments)
+    end
+end
+
 """`data` with two bodies and the `timoshenko` tube `strut` between them."""
 function add_timoshenko_tube!(data)
     data["bodies"] = Dict("headers" => ["name", "extra_mass", "pos", "inertia_principal"],
@@ -321,6 +388,36 @@ end
              for density in (970.0, 1100.0, 970.0)]
     @test names == [:rope, :rope_2, :rope]
     @test KiteGeometry.line_material!(materials, "rope", 970.0, 1.0e9) == :rope_3
+end
+
+@testset "a tether of a callable stiffness expands to segments reading that force law" begin
+    set_data_path(joinpath(@__DIR__, "data", "2plate_kite"))
+    force_law(strain) = 1.0e5 * strain
+    tether_end(name, pos) = Point(; name, extra_mass=0.0, pos_ENU=pos,
+                                  model=KiteGeometry.added_row_model(:points))
+    points = [tether_end(:ground, [0.0, 0.0, 0.0]), tether_end(:kite, [0.0, 0.0, 30.0])]
+    segments = Segment[]
+    point_transforms = Union{Nothing, NameRef}[nothing, nothing]
+    materials = KiteGeometry.MaterialTable(Material[], Dict{String, Any}())
+    tether = KiteGeometry.expand_tether!(points, segments, point_transforms, :main, :ground,
+                                         :kite, 3, (; stretched_length=33.0),
+                                         Settings("system.yaml"), materials;
+                                         model=KiteGeometry.added_row_model(:tethers),
+                                         segment_model=SamSpring(5.0, nothing, nothing,
+                                                                 nothing),
+                                         unit_stiffness=force_law)
+    @test tether.segments == [:main_seg_1, :main_seg_2, :main_seg_3]
+    @test length(segments) == 3
+    material = only(materials.rows)
+    @test material.law == "unit_stiffness"
+    @test material.parameters["unit_stiffness"] === force_law
+    @test all(segment -> segment.material == material.name, segments)
+    @test all(segment -> segment.model.unit_damping == 5.0, segments)
+    @test all(segment -> segment.rest_length ≈ 11.0, segments)
+    @test isnothing(KiteGeometry.unit_stiffness(material, 0.004))
+    @test length(points) == length(point_transforms) == 4
+    @test all(isnothing, point_transforms)
+    @test points[3].pos_ENU ≈ [0.0, 0.0, 10.0]
 end
 
 @testset "a breukels2011 tube's material is its own copy of SAM's constants" begin

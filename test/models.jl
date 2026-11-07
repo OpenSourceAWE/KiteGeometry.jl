@@ -15,12 +15,25 @@ struct SamPulley <: AbstractModel
     efficiency::Union{Nothing, Float64}
 end
 
-"""`f()` with `SamPulley` registered as the default pulley model `sam_pulley`."""
-function with_sam_pulley(f)
-    register_model!(:pulleys, "sam_pulley", SamPulley, ("-", "-"); default=true)
+"""`f()` with `M` registered as the default model `name` of `block`, its columns in
+`units`."""
+function with_default_model(f, block, name, M, units)
+    register_model!(block, name, M, units; default=true)
     try
         return f()
     finally
-        unregister_model!(:pulleys, "sam_pulley")
+        unregister_model!(block, name)
     end
 end
+
+"""SAM's segment spring, each column optional and as authored: a stand-in for the default
+segment model SAM registers."""
+struct SamSpring <: AbstractModel
+    unit_damping::Union{Nothing, Float64}
+    damping_per_stiffness::Union{Nothing, Float64}
+    compression_frac::Union{Nothing, Float64}
+    compression_damping_frac::Union{Nothing, Float64}
+end
+
+"""The units of the columns of `SamSpring`."""
+SPRING_UNITS = ("N*s", "s", "-", "-")

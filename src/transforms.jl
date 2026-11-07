@@ -16,7 +16,7 @@ mutable struct Transform
     name::Symbol
     "elevation of the turned object above the base [rad]"
     elevation::Float64
-    "azimuth of the turned object around the base, from east towards south [rad]"
+    "azimuth of the turned object around the base, from east towards north [rad]"
     azimuth::Float64
     "heading of the x axis of `body` in its tangential frame [rad]"
     heading::Float64
@@ -103,11 +103,11 @@ Pose(placement::Placement) = Pose(placement.pos, placement.body_pos, placement.b
     radial_direction(transform)
 
 Unit vector in the world from a transform's base towards where its `elevation` and
-`azimuth` put the turned object: `(cos el cos az, -cos el sin az, sin el)`.
+`azimuth` put the turned object: `(cos el cos az, cos el sin az, sin el)`.
 """
 function radial_direction(transform)
     (; elevation, azimuth) = transform
-    return Vec3(cos(elevation) * cos(azimuth), -cos(elevation) * sin(azimuth),
+    return Vec3(cos(elevation) * cos(azimuth), cos(elevation) * sin(azimuth),
                 sin(elevation))
 end
 
@@ -116,11 +116,11 @@ end
 
 Angular velocity [rad/s] in the world of the rigid rotation about a transform's base its
 `elevation_vel`, `azimuth_vel` and `turn_rate` describe, about the tangential `-y`, the
-world's `-z` and [`radial_direction`](@ref).
+world's `z` and [`radial_direction`](@ref).
 """
 function spherical_spin(transform)
     (; azimuth, elevation_vel, azimuth_vel, turn_rate) = transform
-    return elevation_vel * Vec3(-sin(azimuth), -cos(azimuth), 0) -
+    return elevation_vel * Vec3(sin(azimuth), -cos(azimuth), 0) +
            azimuth_vel * Vec3(0, 0, 1) + turn_rate * radial_direction(transform)
 end
 
@@ -180,10 +180,9 @@ function turn!(pose, transform, base_pos)
     radial = radial_direction(transform)
     rotate_members!(pose, transform, base_pos, min_rotation(normalize(rel_pos), radial)...)
     isnothing(transform.body) && return nothing
-    cos_el = cos(transform.elevation)
-    # KiteUtils' azimuth runs from east to north; its heading turns the other way to ours
+    # KiteUtils' heading turns the other way to ours
     heading = -calc_heading(pose.body_R[transform.body], transform.elevation,
-                            atan(radial[2] / cos_el, radial[1] / cos_el))
+                            transform.azimuth)
     rotate_members!(pose, transform, base_pos, radial,
                     wrap2pi(transform.heading - heading))
     return nothing
