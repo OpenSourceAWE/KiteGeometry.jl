@@ -244,8 +244,7 @@ end
 
 @testset "what a tool builds a definition with is public" begin
     @test all(name -> Base.ispublic(KiteGeometry, name),
-              (:column_type, :unit_stiffness, :resolve_material, :expand_tether!,
-               :MaterialTable))
+              (:unit_stiffness, :resolve_material, :expand_tether!, :MaterialTable))
 end
 
 """Whether each point of `system` the authoring `points` table names is at its `pos_cad`
@@ -304,71 +303,6 @@ end
     @test segment isa Segment{SegmentSpring}
     @test segment.unit_damping ≈ 10.0
     @test model_type(:segments, "spring") === SegmentSpring
-end
-
-"""A segment model like SymbolicAWEModels': a `SegmentSpring` and an index of its own,
-the spring's fields its columns."""
-struct NestedSpring <: AbstractModel
-    spring::SegmentSpring
-    idx::Int
-end
-NestedSpring(columns...) = NestedSpring(SegmentSpring(columns...), 0)
-KiteGeometry.model_columns(::Type{NestedSpring}) = fieldnames(SegmentSpring)
-KiteGeometry.column_type(::Type{NestedSpring}, column::Symbol) =
-    fieldtype(SegmentSpring, column)
-function Base.getproperty(model::NestedSpring, name::Symbol)
-    hasfield(NestedSpring, name) && return getfield(model, name)
-    return getproperty(getfield(model, :spring), name)
-end
-Base.propertynames(model::NestedSpring) = (fieldnames(NestedSpring)...,
-                                           fieldnames(SegmentSpring)...)
-
-@testset "a model keeping its columns in a nested SegmentSpring reads and writes them" begin
-    document = structure_document(load_kite("rigid_structural_geometry.yaml"))
-    segments = document["segments"]
-    model = findfirst(==("model"), segments["headers"])
-    foreach(row -> row[model] = "nested", segments["data"])
-    register_model!(:segments, "nested", NestedSpring, ("N*s", "-", "-"))
-    try
-        system = SystemDefinition(document)
-        segment = system.segments[1]
-        @test segment isa Segment{NestedSpring}
-        @test segment.unit_damping ≈ 10.0
-        @test :compression_frac in propertynames(segment)
-        @test structure_document(system) == document
-    finally
-        unregister_model!(:segments, "nested")
-    end
-end
-
-"""A segment model whose `unit_damping` property falls back to a default where its own
-field is unset, as SymbolicAWEModels' winch model forwards `friction_epsilon`."""
-struct DefaultedDamping <: AbstractModel
-    unit_damping::Union{Nothing, Float64}
-end
-function Base.getproperty(model::DefaultedDamping, name::Symbol)
-    name === :unit_damping && return something(getfield(model, name), 6.0)
-    return getfield(model, name)
-end
-
-@testset "a model's unset field writes no column, whatever its getproperty gives" begin
-    document = structure_document(load_kite("rigid_structural_geometry.yaml"))
-    segments = document["segments"]
-    keep = findall(header -> !(Symbol(header) in fieldnames(SegmentSpring)),
-                   segments["headers"])
-    segments["headers"] = segments["headers"][keep]
-    segments["units"] = segments["units"][keep]
-    segments["data"] = [row[keep] for row in segments["data"]]
-    model = findfirst(==("model"), segments["headers"])
-    foreach(row -> row[model] = "defaulted", segments["data"])
-    register_model!(:segments, "defaulted", DefaultedDamping, ("N*s",))
-    try
-        system = SystemDefinition(document)
-        @test system.segments[1].unit_damping == 6.0
-        @test structure_document(system) == document
-    finally
-        unregister_model!(:segments, "defaulted")
-    end
 end
 
 @testset "place=false leaves every authored point where its YAML puts it" begin

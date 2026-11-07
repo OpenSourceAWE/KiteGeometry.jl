@@ -9,7 +9,6 @@ SPDX-License-Identifier: MIT
 
 ### Added
 
-- A registered model may keep its columns in a model it holds: a column that is not one of its fields is read and written with `getproperty`, and every column is typed by `KiteGeometry.column_type(M, column)`, its field's type unless `M` adds a method. A model holding a `SegmentSpring` and forwarding `getproperty` to it reads and writes the spring's three columns.
 - `KiteGeometry.unit_stiffness(material, diameter)` and `KiteGeometry.unit_stiffness(segment, materials)` give the axial stiffness times rest length [N] of a `linear` material at a diameter, or of a segment from its material, `nothing` for another law, without allocating for a `Float64` modulus; and `KiteGeometry.resolve_material` is public.
 - `KiteGeometry.expand_tether!` and `KiteGeometry.MaterialTable` are public, and a tether's stiffness may be a callable force law, which becomes a material of law `unit_stiffness` holding it.
 
