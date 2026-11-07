@@ -16,6 +16,19 @@ KITE = joinpath(@__DIR__, "data", "2plate_kite")
 AUTHORING_SYSTEMS = filter(endswith("_structural_geometry.yaml"), readdir(KITE))
 SCHEMA = Schema(YAML.load_file(joinpath(pkgdir(KiteGeometry), "src", "awesio",
                                          "structure_schema.yml")))
+SYSTEM_SCHEMA = Schema(YAML.load_file(joinpath(pkgdir(KiteGeometry), "src", "awesio",
+                                                "system_schema.yml")))
+
+"""The structure document of `system` as JSON reads it back, naming a system file."""
+function schema_document(system)
+    return JSON.parse(to_json(structure_document(system; system="system.yml",
+                                                 system_sha="0"^64)))
+end
+
+"""`system` written to YAML and read back."""
+function written_again(system)
+    return from_yaml(to_yaml(structure_document(system)), to_yaml(system_document(system)))
+end
 
 """SAM's point columns, each optional, as a stand-in for the default point model SAM
 registers."""
@@ -277,11 +290,44 @@ end
     @test length(AUTHORING_SYSTEMS) == 2
     for file in AUTHORING_SYSTEMS
         system = load_kite(file)
-        document = JSON.parse(to_json(system))
+        document = schema_document(system)
         @test isnothing(validate(SCHEMA, document))
         @test length(system.canopy_faces) == 2
-        @test structure_document(from_yaml(to_yaml(system))) == structure_document(system)
+        @test structure_document(written_again(system)) == structure_document(system)
     end
+end
+
+@testset "SAM's lines and tether land in the system's materials and tether" begin
+    system = load_kite("particle_structural_geometry.yaml")
+    tether = only(system.tethers)
+    segments = [system.segments[segment] for segment in tether.segments]
+    written = system_document(system; name="kite", note="noted")
+    @test written["metadata"]["note"] == "noted"
+    @test [row["name"] for row in written["materials"]] ==
+          [String(material.name) for material in system.materials]
+    row = only(written["components"]["tethers"])
+    @test row["name"] == String(tether.name)
+    @test row["type"] == "non_conductive_tether"
+    @test row["version"] == 1.0
+    @test row["joints"]["upper_tether_joint"]["id"] ==
+          String(system.points[tether.start_point].name)
+    @test row["joints"]["lower_tether_joint"]["id"] ==
+          String(system.points[tether.end_point].name)
+    @test row["structure"]["length"] ≈ sum(segment.rest_length for segment in segments)
+    @test row["structure"]["diameter"] == first(segments).diameter
+    @test row["structure"]["material"] ==
+          String(system.materials[first(segments).material].name)
+    @test isnothing(validate(SYSTEM_SCHEMA, JSON.parse(to_json(written))))
+    @test system_document(written_again(system)) == system_document(system)
+end
+
+@testset "a tether whose segments differ states only what they share" begin
+    system = load_kite("particle_structural_geometry.yaml")
+    tether = only(system.tethers)
+    system.segments[first(tether.segments)].diameter = 0.5
+    system_tether = KiteGeometry.design_tether(system, tether, system.segments)
+    @test isnothing(system_tether.diameter)
+    @test !isnothing(system_tether.material)
 end
 
 @testset "a parsed authoring document loads as its file does" begin
@@ -290,7 +336,7 @@ end
     system, transforms = load_authoring(authored; set=kite_settings(),
                                         name="rigid_structural_geometry")
     from_file, file_transforms = load_kite_transforms("rigid_structural_geometry.yaml")
-    @test to_yaml(system) == to_yaml(from_file)
+    @test structure_document(system) == structure_document(from_file)
     members(transform) = (transform.name, transform.points, transform.bodies)
     @test members.(transforms) == members.(file_transforms)
     @test transforms isa Rows{Transform}
@@ -432,12 +478,12 @@ end
     system = load_edited(add_timoshenko_tube!)
     @test system.points[1] isa Point{SamPoint}
     @test only(system.tubes).model == Timoshenko(120.0, 80.0, 0.85)
-    document = JSON.parse(to_json(system))
+    document = schema_document(system)
     @test isnothing(validate(SCHEMA, document))
     damping = column(authored, "body_frame_damping")
     @test column(document["points"], "body_frame_damping")[eachindex(damping)] == damping
     @test isnothing(column(document["points"], "model"))
-    @test from_yaml(to_yaml(system)).points[1] isa Point{SamPoint}
+    @test written_again(system).points[1] isa Point{SamPoint}
     tubes = document["tubes"]
     @test [column(tubes, header) for header in ("model", "EI", "GJ", "shear_coeff")] ==
           [["timoshenko"], [120.0], [80.0], [0.85]]
@@ -494,7 +540,7 @@ end
     end
     @test collect(keys(system.extras)) == ["surfaces"]
     @test system.extras["surfaces"] == surfaces
-    @test structure_document(from_yaml(to_yaml(system)))["surfaces"] == surfaces
+    @test structure_document(written_again(system))["surfaces"] == surfaces
     @test_throws "block metadata is a block of the structure document" load_edited() do data
         data["metadata"] = Dict("author" => "x")
     end
@@ -520,14 +566,48 @@ end
     system, _ = load_authoring(joinpath(v3_psm, "struc_geometry.yaml");
                                set=kite_settings(v3_psm))
     document = structure_document(system)
-    golden = YAML.load_file(joinpath(@__DIR__, "data", "v3_psm_structure.yml"))
+    golden = YAML.load_file(joinpath(@__DIR__, "data", "structure", "v3_psm_structure.yml"))
     faces, expected = document["canopy_faces"], golden["canopy_faces"]
     @test column(faces, "name") == column(expected, "name")
     @test column(faces, "points") == column(expected, "points")
     @test unique(column(faces, "wing")) == column(document["wings"], "name")
     @test unique(column(expected, "wing")) == column(golden["wings"], "name")
     @test isnothing(only(system.wings).canopy_material)
-    @test isnothing(validate(SCHEMA, JSON.parse(to_json(system))))
+    @test isnothing(validate(SCHEMA, schema_document(system)))
+end
+
+@testset "a tether no winch holds is a bridle line, in neither file as a tether" begin
+    authored = YAML.load_file(joinpath(KITE, "rigid_structural_geometry.yaml");
+                              dicttype=OrderedDict{String, Any})
+    main_row = only(authored["tethers"]["data"])
+    bridle_row = Any["bridle_line", "kcu", "steering_left", 2, main_row[5:(end - 1)]...,
+                     nothing]
+    push!(authored["tethers"]["data"], bridle_row)
+    system, _ = load_authoring(authored; set=kite_settings(), name="bridled")
+    @test haskey(system.tethers, :bridle_line)
+    @test [tether.name for tether in system.system_tethers] == [:main_tether]
+    document = structure_document(system)
+    @test [row[1] for row in document["tethers"]["data"]] == ["main_tether"]
+    @test "bridle_line_seg_1" in [row[1] for row in document["segments"]["data"]]
+    again = written_again(system)
+    @test structure_document(again) == document
+    @test system_document(again) == system_document(system)
+end
+
+@testset "a system from two authored definitions lists both winches' tethers" begin
+    v3_psm = joinpath(@__DIR__, "data", "v3_psm")
+    psm, _ = load_authoring(joinpath(v3_psm, "struc_geometry.yaml");
+                            set=kite_settings(v3_psm))
+    kite, _ = load_kite_transforms("rigid_structural_geometry.yaml")
+    document = system_document([psm, kite]; name="pair")
+    @test [tether["name"] for tether in document["components"]["tethers"]] ==
+          String.(vcat([tether.name for tether in psm.system_tethers],
+                       [tether.name for tether in kite.system_tethers]))
+    names(rows) = [row["name"] for row in rows]
+    for definition in (psm, kite)
+        @test !isempty(definition.system_tethers)
+        @test names(system_document(definition)["materials"]) ⊆ names(document["materials"])
+    end
 end
 
 """The authoring YAML of each system SymbolicAWEModels' placed pose is recorded for."""
@@ -648,7 +728,7 @@ model_types(system) = [typeof.(getfield.(getfield(system, block), :model))
 @testset "a row the loader adds carries its block's default model" begin
     for system in (load_kite("particle_structural_geometry.yaml"),
                    load_case("tether_wing.yaml"))
-        @test model_types(from_yaml(to_yaml(system))) == model_types(system)
+        @test model_types(written_again(system)) == model_types(system)
         @test all(point -> point.model isa SamPoint, system.points)
         @test all(body -> body.model isa SamBody, system.bodies)
     end
