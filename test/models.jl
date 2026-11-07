@@ -15,6 +15,29 @@ struct SamPulley <: AbstractModel
     efficiency::Union{Nothing, Float64}
 end
 
+"""`f()` with `M` registered as the default model `name` of `block`, its columns in
+`units`."""
+function with_default_model(f, block, name, M, units)
+    register_model!(block, name, M, units; default=true)
+    try
+        return f()
+    finally
+        unregister_model!(block, name)
+    end
+end
+
+"""SAM's segment spring, each column optional and as authored: a stand-in for the default
+segment model SAM registers."""
+struct SamSpring <: AbstractModel
+    unit_damping::Union{Nothing, Float64}
+    damping_per_stiffness::Union{Nothing, Float64}
+    compression_frac::Union{Nothing, Float64}
+    compression_damping_frac::Union{Nothing, Float64}
+end
+
+"""The units of the columns of `SamSpring`."""
+SPRING_UNITS = ("N*s", "s", "-", "-")
+
 """The columns SAM's default models add to awesIO's V3 files, block by block, with units."""
 const V3_COLUMNS = (
     points=(type="-", body_frame_damping="N*s/m", world_frame_damping="N*s/m", area="m^2",
@@ -43,14 +66,17 @@ end
 const V3_MODELS = NamedTuple{keys(V3_COLUMNS)}(Tuple(
     v3_model(block, keys(units)) for (block, units) in pairs(V3_COLUMNS)))
 
-"""`f()` with `V3_MODELS` registered as the default models of their blocks."""
+"""`f()` with `V3_MODELS` registered as the default models of their blocks, and `SamSpring`
+as the segment model `spring` the V3 files name on every segment."""
 function with_v3_columns(f)
     for (block, units) in pairs(V3_COLUMNS)
         register_model!(block, "v3_columns", V3_MODELS[block], values(units); default=true)
     end
+    register_model!(:segments, "spring", SamSpring, SPRING_UNITS)
     try
         return f()
     finally
         foreach(block -> unregister_model!(block, "v3_columns"), keys(V3_COLUMNS))
+        unregister_model!(:segments, "spring")
     end
 end
