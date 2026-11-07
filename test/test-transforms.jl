@@ -6,6 +6,8 @@ using KiteUtils: Settings, set_data_path
 using LinearAlgebra: norm, normalize
 using YAML
 
+include("models.jl")
+
 """The chained-transform system with `edit` applied to its parsed authoring YAML, loaded
 and placed, and its transforms."""
 function load_chained(edit=identity)
@@ -14,7 +16,9 @@ function load_chained(edit=identity)
     edit(data)
     path = joinpath(mktempdir(), "chained_transforms.yaml")
     YAML.write_file(path, data)
-    return load_authoring(path; set=Settings("system.yaml"))
+    return with_default_model(:segments, "spring", SamSpring, SPRING_UNITS) do
+        return load_authoring(path; set=Settings("system.yaml"))
+    end
 end
 
 """The names of the `rows` at `indices`."""

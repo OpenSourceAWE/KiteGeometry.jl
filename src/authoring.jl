@@ -351,15 +351,16 @@ function read_rows(data, block, columns; modelled=true, key=String(block))
 end
 
 """
-    authoring_model(block, row)
+    authoring_model(block, row, name=<its model cell>)
 
-The model of `row` of `block`: the one its `model` cell names, else, where the row has no
-`model` column, the block's default, built from the columns named after its fields;
-`NoModel` where that names no registered model. An absent column is an unset cell, refused
-for a field that cannot hold `nothing`.
+The model of `row` of `block`: the one `name` names, by default its `model` cell, else,
+where `name` is `missing` as for a row with no `model` column, the block's default, built
+from the columns named after its fields; `NoModel` where that names no registered model.
+An absent column is an unset cell, refused for a field that cannot hold `nothing`.
 """
-function authoring_model(block, row)
-    name = hasfield(typeof(row), :model) ? yaml_field(row, :model) : missing
+function authoring_model(block, row,
+                         name=hasfield(typeof(row), :model) ? yaml_field(row, :model) :
+                              missing)
     return row_model(block, name) do M, field, _
         model_value(M, field, yaml_field(row, field))
     end
@@ -376,49 +377,34 @@ end
 # ==================== MATERIAL ==================== #
 
 """
-    resolve_material(label, set; diameter, unit_stiffness, unit_damping, density,
-                     youngs_modulus, damping_per_stiffness)
+    resolve_material(label, set; diameter, unit_stiffness, density, youngs_modulus)
 
-`(diameter, stiffness, unit_damping, density)` of a segment from what its row gives, `NaN`
-for what it leaves out: `stiffness` is its Young's modulus [Pa], from `youngs_modulus` or
-from `unit_stiffness` [N] over its cross-section, or the nonlinear law `unit_stiffness`
-gives, the name of one or a callable force law. `damping_per_stiffness` [s] stands in for
-`unit_damping` [N*s], and `set`'s `d_tether` [mm], `rho_tether`, `e_tether` and
-`rel_damping` for the rest. A nonlinear law needs `unit_damping` given.
+`(diameter, stiffness, density)` of a segment from what its row gives, `NaN` for what it
+leaves out: `stiffness` is its Young's modulus [Pa], from `youngs_modulus` or from
+`unit_stiffness` [N] over its cross-section, or the nonlinear law `unit_stiffness` gives,
+the name of one or a callable force law. `set`'s `d_tether` [mm], `rho_tether` and
+`e_tether` stand in for the rest.
 """
 function resolve_material(label, set::Settings; diameter=NaN, unit_stiffness=NaN,
-                          unit_damping=NaN, density=NaN, youngs_modulus=NaN,
-                          damping_per_stiffness=NaN)
+                          density=NaN, youngs_modulus=NaN)
     isnan(diameter) && (diameter = 0.001 * set.d_tether)
     isnan(density) && (density = set.rho_tether)
-    area = π * (diameter / 2)^2
     linear = unit_stiffness isa Real
     if !isnan(youngs_modulus)
         (!linear || !isnan(unit_stiffness)) && error(
             "$label: give either `unit_stiffness` or `youngs_modulus`, not both")
         stiffness = youngs_modulus
     elseif linear
+        area = π * (diameter / 2)^2
         stiffness = isnan(unit_stiffness) ? set.e_tether : unit_stiffness / area
     else
         stiffness = unit_stiffness
     end
-    if !isnan(damping_per_stiffness)
-        isnan(unit_damping) || error(
-            "$label: give either `unit_damping` or `damping_per_stiffness`, not both")
-        linear || error("$label: `damping_per_stiffness` needs a linear `unit_stiffness`")
-        unit_damping = damping_per_stiffness * stiffness * area
-    elseif isnan(unit_damping)
-        linear || error("$label: give `unit_damping` for a nonlinear `unit_stiffness`")
-        set.rel_damping == 0 &&
-            @warn "$label: unit_damping is zero (no rel_damping in the settings)."
-        unit_damping = set.rel_damping * stiffness * area
-    end
-    return Float64(diameter), stiffness, Float64(unit_damping), Float64(density)
+    return Float64(diameter), stiffness, Float64(density)
 end
 
 """The columns [`material`](@ref) reads."""
-const MATERIAL_COLUMNS = (:diameter_mm, :unit_stiffness, :unit_damping, :density,
-                          :youngs_modulus, :damping_per_stiffness)
+const MATERIAL_COLUMNS = (:diameter_mm, :unit_stiffness, :density, :youngs_modulus)
 
 """The material columns of a segment or tether row, `NaN` where a column is unset."""
 function material(row)
@@ -502,17 +488,13 @@ function line_material!(materials, label, density, force_law)
     return material!(materials, label, "unit_stiffness", parameters)
 end
 
-"""A segment with its spring resolved from `spring` ([`resolve_material`](@ref)) and `set`,
-its material among `materials`; a zero `rest_length` is set from the design pose before
-placement."""
-function spring_segment(name, points, set, materials; rest_length=0.0,
-                        compression_frac=0.1, compression_damping_frac=1.0, spring...)
-    diameter, stiffness, unit_damping, density =
-        resolve_material("segment $name", set; spring...)
+"""A segment carrying `model`, its material resolved from `line`
+([`resolve_material`](@ref)) and `set` and named among `materials`; a zero `rest_length` is
+set from the design pose before placement."""
+function line_segment(name, points, set, materials; rest_length=0.0, model, line...)
+    diameter, stiffness, density = resolve_material("segment $name", set; line...)
     return Segment(; name, points, rest_length, diameter,
-                   material=line_material!(materials, name, density, stiffness),
-                   model=SegmentSpring(unit_damping, compression_frac,
-                                       compression_damping_frac))
+                   material=line_material!(materials, name, density, stiffness), model)
 end
 
 # ==================== BLOCKS ==================== #
@@ -554,22 +536,17 @@ function read_points(data)
     return points, point_wings, point_transforms
 end
 
-"""The segments of the `segments` block, their springs resolved against `set` and their
-materials among `materials`."""
+"""The segments of the `segments` block, their materials resolved against `set` and named
+among `materials`."""
 function read_segments(data, set, materials)
-    columns = (:name, :type, :point_i, :point_j, :l0, :compression_frac,
-               :compression_damping_frac, MATERIAL_COLUMNS...)
-    rows = read_rows(data, :segments, columns; modelled=false)
-    return map(enumerate(rows)) do (i, (row, _))
+    columns = (:name, :type, :point_i, :point_j, :l0, MATERIAL_COLUMNS...)
+    return map(enumerate(read_rows(data, :segments, columns))) do (i, (row, model))
         isnothing(yaml_field(row, :type)) || error(
             "the segment `type` column was removed; delete it")
-        spring_segment(yaml_row_name(row, i),
-                       (yaml_to_ref(row.point_i), yaml_to_ref(row.point_j)), set, materials;
-                       rest_length=something(yaml_float(row, :l0), 0.0),
-                       compression_frac=something(yaml_float(row, :compression_frac), 0.1),
-                       compression_damping_frac=something(
-                           yaml_float(row, :compression_damping_frac), 1.0),
-                       material(row)...)
+        line_segment(yaml_row_name(row, i),
+                     (yaml_to_ref(row.point_i), yaml_to_ref(row.point_j)), set, materials;
+                     rest_length=something(yaml_float(row, :l0), 0.0), model,
+                     material(row)...)
     end
 end
 
@@ -686,15 +663,16 @@ The tethers of the `tethers` block and the length each starts at. A tether row n
 `segment_idxs` runs over those segments, between the points they chain unless it names
 them; one naming `n_segments` adds that many segments and the points between them, on the
 straight line between its ends, to `points` and `segments`, its material resolved against
-`set` and named among `materials`.
+`set` and named among `materials`, each carrying the segments' default model read from the
+row's columns.
 """
 function read_tethers!(points, segments, point_transforms, data, set, materials)
     tethers = Tether[]
     inits = TetherInit[]
     columns = (:name, :segment_idxs, :start_point, :end_point, :n_segments,
                :init_unstretched_length, :init_stretched_length, :init_tether_force,
-               :init_stretch_frac, :compression_frac, :compression_damping_frac,
-               MATERIAL_COLUMNS...)
+               :init_stretch_frac, MATERIAL_COLUMNS...,
+               model_columns(model_type(:segments, default_model(:segments)))...)
     for (i, (row, model)) in enumerate(read_rows(data, :tethers, columns))
         name = yaml_row_name(row, i)
         push!(inits, tether_init(row, name))
@@ -711,32 +689,28 @@ function read_tethers!(points, segments, point_transforms, data, set, materials)
         start_point, end_point = yaml_to_ref(row.start_point), yaml_to_ref(row.end_point)
         push!(tethers, expand_tether!(points, segments, point_transforms, name, start_point,
                                       end_point, Int(row.n_segments), last(inits), set,
-                                      materials;
-                                      model,
-                                      compression_frac=something(
-                                          yaml_float(row, :compression_frac), 0.1),
-                                      compression_damping_frac=something(
-                                          yaml_float(row, :compression_damping_frac), 1.0),
-                                      material(row)...))
+                                      materials; model, material(row)...,
+                                      segment_model=authoring_model(:segments, row,
+                                                                    missing)))
     end
     return tethers, inits
 end
 
 """
     expand_tether!(points, segments, point_transforms, name, start_point, end_point, n,
-                   init, set, materials; model, spring...)
+                   init, set, materials; model, segment_model, line...)
 
 The tether `name` of `n` segments from `start_point` to `end_point`, its `n - 1` inner
 points `<name>_point_<i>` added to `points` on the straight line between them, in the
 transform of whichever end has one per `point_transforms`, the transform of each of
 `points` or `nothing`, and its segments `<name>_seg_<i>` to `segments`; the tether carries
-`model`. Together the segments are `init.stretched_length` [m] long, else the distance
-between the ends. `spring` is what [`resolve_material`](@ref) takes with `set`, the
-stiffness a number, a law's name or a callable force law, and `compression_frac` and
-`compression_damping_frac`; each segment's material goes among `materials`.
+`model` and each segment `segment_model`. Together the segments are `init.stretched_length`
+[m] long, else the distance between the ends. `line` is what [`resolve_material`](@ref)
+takes with `set`, the stiffness a number, a law's name or a callable force law; each
+segment's material goes among `materials`.
 """
 function expand_tether!(points, segments, point_transforms, name, start_point, end_point,
-                        n, init, set, materials; model, spring...)
+                        n, init, set, materials; model, segment_model, line...)
     ends = [start_point, end_point]
     indices = [ref isa Int ? ref : findfirst(point -> point.name == ref, points)
                for ref in ends]
@@ -757,9 +731,9 @@ function expand_tether!(points, segments, point_transforms, name, start_point, e
     end
     segment_names = ["$(name)_seg_$i" for i in 1:n]
     for i in 1:n
-        push!(segments, spring_segment(segment_names[i],
-                                       (point_names[i], point_names[i + 1]), set, materials;
-                                       rest_length, spring...))
+        push!(segments, line_segment(segment_names[i],
+                                     (point_names[i], point_names[i + 1]), set, materials;
+                                     rest_length, model=segment_model, line...))
     end
     return Tether(; name, start_point, end_point, segments=segment_names, model)
 end
@@ -883,8 +857,9 @@ radius. Each distinct line material is named after the multi-variable giving it,
 after its first segment.
 `name` is the metadata name, the file's by default for a path; `ignore_l0` makes every rest
 length the placed length. With `place=false` the definition is left in its design pose,
-for a tool that places it itself. Each non-empty block it does not read is kept as an extra block;
-one named after a block of the structure document, or holding a single value, is refused.
+for a tool that places it itself. Each non-empty block it does not read is kept as an extra
+block; one named after a block of the structure document, or holding a single value, is
+refused.
 """
 function load_authoring(path::AbstractString; set::Settings,
                         name=first(splitext(basename(path))), ignore_l0=false, place=true)
