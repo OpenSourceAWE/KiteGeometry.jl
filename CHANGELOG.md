@@ -16,7 +16,7 @@ SPDX-License-Identifier: MIT
 
 - BREAKING: KiteGeometry no longer defines `SegmentSpring` or registers the segment model `spring`. A segment row, and the segments a tether row expands to, carry the segment model a tool registers, its columns as the YAML authors them, so a document holds `damping_per_stiffness` where the YAML gives it rather than a `unit_damping` worked out from it, and no compression column a row leaves unset. Without such a model a segment is `Segment{NoModel}` and a YAML giving damping or compression columns is refused. `resolve_material` returns `(diameter, stiffness, density)`, and `expand_tether!` takes the model of its segments as `segment_model`.
 - BREAKING: A transform's `azimuth` and `azimuth_vel` turn anti-clockwise, from east towards north, as `atan(y, x)` and KiteUtils 0.14's `azimuth_east` do, so a YAML with a non-zero azimuth now places mirrored about the east axis: 30° puts the object north of east rather than south. Heading keeps its sense.
-- Works with KiteUtils 0.14 as well as 0.13.
+- Works with KiteUtils 0.14 as well as 0.13.1.
 
 ## KiteGeometry v0.3.3 2026-10-28
 
