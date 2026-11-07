@@ -96,13 +96,13 @@ end
 """
     model_registration(block, M)
 
-The name `M` is registered under for `block`, with `M` and its column units, or `nothing`
-for `NoModel`.
+The registration for `block` whose type `M` is a subtype of, such as a parametric model's
+`UnionAll`: its name, that type and its column units. `nothing` for `NoModel`.
 """
 function model_registration(block, M)
     M === NoModel && return nothing
     for ((registered_block, name), model) in MODELS
-        registered_block == block && model.type === M &&
+        registered_block == block && M <: model.type &&
             return (; name, model.type, model.units)
     end
     throw(ArgumentError("$M is no model registered for $block"))
@@ -131,19 +131,4 @@ function Base.hash(value::ByValue, seed::UInt)
         code = hash(getfield(value, field), code)
     end
     return code
-end
-
-"""
-    SegmentSpring <: AbstractModel
-
-The spring of a segment besides its `unit_stiffness`: its damping and how it carries
-compression. Registered as the segment model `spring`.
-"""
-struct SegmentSpring <: AbstractModel
-    "damping per unit length [N*s]"
-    unit_damping::Float64
-    "compressive over tensile stiffness [-]; 0 for a segment that goes slack"
-    compression_frac::Float64
-    "fraction of `unit_damping` still acting under compression [-]"
-    compression_damping_frac::Float64
 end

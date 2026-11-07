@@ -37,5 +37,5 @@ bodies:
 transforms:
   headers: [name, elevation, azimuth, heading, elevation_vel, azimuth_vel, turn_rate, base_pos, base_point_idx, base_transform_idx, rot_point_idx]
   data:
-    - [main_tf, 55.0, 15.0, 0.0, 2.0, -1.5, 0.0, [0.0, 0.0, 0.0], ground, nothing, kcu]
-    - [kite_tilt, 62.0, 15.0, 25.0, 1.0, 0.0, 4.0, nothing, nothing, main_tf, kite_origin]
+    - [main_tf, 55.0, -15.0, 0.0, 2.0, 1.5, 0.0, [0.0, 0.0, 0.0], ground, nothing, kcu]
+    - [kite_tilt, 62.0, -15.0, 25.0, 1.0, 0.0, 4.0, nothing, nothing, main_tf, kite_origin]

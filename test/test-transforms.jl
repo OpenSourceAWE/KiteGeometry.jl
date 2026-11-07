@@ -6,6 +6,8 @@ using KiteUtils: Settings, set_data_path
 using LinearAlgebra: norm, normalize
 using YAML
 
+include("models.jl")
+
 """The chained-transform system with `edit` applied to its parsed authoring YAML, loaded
 and placed, and its transforms."""
 function load_chained(edit=identity)
@@ -14,7 +16,9 @@ function load_chained(edit=identity)
     edit(data)
     path = joinpath(mktempdir(), "chained_transforms.yaml")
     YAML.write_file(path, data)
-    return load_authoring(path; set=Settings("system.yaml"))
+    return with_default_model(:segments, "spring", SamSpring, SPRING_UNITS) do
+        return load_authoring(path; set=Settings("system.yaml"))
+    end
 end
 
 """The names of the `rows` at `indices`."""
@@ -77,6 +81,36 @@ end
     @test normalize(kite_origin - kcu) ≈ radial_direction(kite_tilt)
     @test calc_heading(pose.body_R[1], kite_origin - kcu) ≈ kite_tilt.heading
     @test norm(pose.pos[4] - kite_origin) ≈ kite_rigid
+end
+
+"""`data`, the chained system's YAML, with its first transform at `azimuth` [deg]."""
+function set_main_azimuth!(data, azimuth)
+    data["transforms"]["data"][1][3] = azimuth
+    return data
+end
+
+@testset "azimuth runs anti-clockwise, from east towards north" begin
+    system, transforms = load_chained(data -> set_main_azimuth!(data, 30.0))
+    kcu = system.points[2].pos_ENU
+    @test atan(kcu[2], kcu[1]) ≈ deg2rad(30)
+
+    main_tf = transforms[1]
+    main_tf.elevation, main_tf.azimuth = 0.0, deg2rad(90)
+    place!(system, transforms)
+    @test normalize(system.points[2].pos_ENU) ≈ [0, 1, 0] atol=1e-12
+end
+
+@testset "azimuth_vel moves an object by the rate of change of atan(y, x)" begin
+    system, transforms = load_chained(data -> set_main_azimuth!(data, 30.0))
+    main_tf = transforms[1]
+    main_tf.azimuth_vel = deg2rad(2)
+    main_tf.elevation_vel = main_tf.turn_rate = 0.0
+    pose = Pose(system)
+    kcu, kcu_vel = pose.pos[2], transform_velocities(pose, transforms)[1][2]
+    dt = 1e-5
+    ahead, behind = kcu + dt * kcu_vel, kcu - dt * kcu_vel
+    @test (atan(ahead[2], ahead[1]) - atan(behind[2], behind[1])) / 2dt ≈
+          main_tf.azimuth_vel rtol=1e-6
 end
 
 @testset "repositioning turns each transform to its angles about its base" begin

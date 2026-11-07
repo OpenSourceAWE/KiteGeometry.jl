@@ -30,9 +30,18 @@ Base.insert!(rows::Rows, index::Integer, row) = (insert!(rows.rows, index, row);
 Base.deleteat!(rows::Rows, index) = (deleteat!(rows.rows, index); rows)
 Base.empty!(rows::Rows) = (empty!(rows.rows); rows)
 
-"""The index of the row of `rows` named `name`, refusing a name no row has."""
-function row_index(rows::Rows, name)
-    index = findfirst(row -> row.name == Symbol(name), rows.rows)
+"""The index of the row of `rows` named `name`, refusing a name no row or two rows have."""
+function row_index(rows::Rows{T}, name) where {T}
+    name = Symbol(name)
+    index = findfirst(row -> row.name == name, rows.rows)
     isnothing(index) && throw(KeyError(name))
+    isnothing(findnext(row -> row.name == name, rows.rows, index + 1)) ||
+        throw(duplicate_name(block_name(T), name))
     return index
 end
+
+"""The block a row of type `T` belongs to."""
+block_name(::Type{T}) where {T} = findfirst(==(T), BLOCKS)
+
+"""The error for two rows of `block` named `name`."""
+duplicate_name(block, name) = ArgumentError("two $block are named $name")

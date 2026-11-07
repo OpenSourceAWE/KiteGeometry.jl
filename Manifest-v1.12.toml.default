@@ -2,7 +2,7 @@
 
 julia_version = "1.12.7"
 manifest_format = "2.0"
-project_hash = "2f08b443572f28de37d0d4f3b0b4ff060c7efac2"
+project_hash = "b60949f11eed3b9d9882dc1b02602ec177b08992"
 
 [[deps.ANSIColoredPrinters]]
 git-tree-sha1 = "574baf8110975760d391c710b6341da1afa48d8c"
@@ -338,6 +338,18 @@ weakdeps = ["ArrowTypes"]
     [deps.JSON.extensions]
     JSONArrowExt = ["ArrowTypes"]
 
+[[deps.JSONSchema]]
+deps = ["Downloads", "JSON", "URIs"]
+git-tree-sha1 = "d13f79c4242969874da7d00bda17d59bc7699aa7"
+uuid = "7d188eb4-7ad8-530c-ae41-71a32a6d4692"
+version = "1.5.0"
+
+    [deps.JSONSchema.extensions]
+    JSONSchemaJSON3Ext = "JSON3"
+
+    [deps.JSONSchema.weakdeps]
+    JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
+
 [[deps.JuliaSyntaxHighlighting]]
 deps = ["StyledStrings"]
 uuid = "ac6e5ff7-fb65-4e79-a425-ec3bc9c03011"
@@ -347,13 +359,13 @@ version = "1.12.0"
 deps = ["JSON", "KiteUtils", "LinearAlgebra", "OrderedCollections", "SHA", "StaticArrays", "YAML"]
 path = "."
 uuid = "941ca69c-4b42-4a27-9601-abc4d37bf99e"
-version = "0.1.0"
+version = "0.3.2"
 
 [[deps.KiteUtils]]
 deps = ["Arrow", "CSV", "DocStringExtensions", "LinearAlgebra", "OrderedCollections", "Parameters", "Parsers", "Pkg", "PrecompileTools", "RecursiveArrayTools", "ReferenceFrameRotations", "Rotations", "StaticArrays", "StructArrays", "StructTypes", "YAML"]
-git-tree-sha1 = "85b4f730bf098b5afc796daa11dd8fde66a1db2c"
+git-tree-sha1 = "df41c5cf55009887666b447d66ee7857eaf00af6"
 uuid = "90980105-b163-44e5-ba9f-8b1c83bb0533"
-version = "0.13.1"
+version = "0.14.0"
 
 [[deps.LazilyInitializedFields]]
 git-tree-sha1 = "0f2da712350b020bc3957f269c9caad516383ee0"
@@ -788,6 +800,12 @@ weakdeps = ["RecipesBase"]
 git-tree-sha1 = "0c45878dcfdcfa8480052b6ab162cdd138781742"
 uuid = "3bb67fe8-82b1-5028-8e26-92a6c54297fa"
 version = "0.11.3"
+
+[[deps.URIs]]
+deps = ["Serialization"]
+git-tree-sha1 = "0392e5e3c5327b90a487b0ff3e818c4aecd3660b"
+uuid = "5c2747f8-b7ea-4ff2-ba2e-563bfd36b1d4"
+version = "1.7.1"
 
 [[deps.UUIDs]]
 deps = ["Random", "SHA"]

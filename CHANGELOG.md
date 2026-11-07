@@ -9,12 +9,37 @@ SPDX-License-Identifier: MIT
 
 ### Added
 
-- A block's rows are `Rows`, found by their name as well as their position: `system.points[:kite]` and `system.points["kite"]`. `load_authoring` returns its transforms as `Rows` too.
-- `load_authoring(authored::AbstractDict; set, name)` loads a parsed authoring document, so a tool can build one in code rather than write a file.
+- `KiteGeometry.unit_stiffness(material, diameter)` and `KiteGeometry.unit_stiffness(segment, materials)` give the axial stiffness times rest length [N] of a `linear` material at a diameter, or of a segment from its material, `nothing` for another law, without allocating for a `Float64` modulus; and `KiteGeometry.resolve_material` is public.
+- `KiteGeometry.expand_tether!` and `KiteGeometry.MaterialTable` are public, and a tether's stiffness may be a callable force law, which becomes a material of law `unit_stiffness` holding it.
 
 ### Changed
 
-- BREAKING: a row's `name`, a `Transform`'s `name` and a reference by name (`NameRef`) are `Symbol`s, not `String`s: `system.points[1].name == :kite`. Documents and keyword constructors still take names as strings, and writing a document writes them as strings.
+- BREAKING: `load_authoring` no longer takes `place`; it always returns the placed definition.
+- BREAKING: KiteGeometry no longer defines `SegmentSpring` or registers the segment model `spring`. A segment row, and the segments a tether row expands to, carry the segment model a tool registers, its columns as the YAML authors them, so a document holds `damping_per_stiffness` where the YAML gives it rather than a `unit_damping` worked out from it, and no compression column a row leaves unset. Without such a model a segment is `Segment{NoModel}` and a YAML giving damping or compression columns is refused. `resolve_material` returns `(diameter, stiffness, density)`, and `expand_tether!` takes the model of its segments as `segment_model`.
+- A transform's `azimuth` and `azimuth_vel` turn anti-clockwise, from east towards north, as `atan(y, x)` and KiteUtils 0.14's `azimuth_east` do, so a YAML with a non-zero azimuth now places mirrored about the east axis: 30° puts the object north of east rather than south. Heading keeps its sense.
+
+## KiteGeometry v0.3.3 2026-10-28
+
+### Fixed
+
+- A row whose model is an instance of a registered parametric model type, such as `BodyModel{AeroVSM, RigidDynamics}` registered as `BodyModel`, is written under that model's name rather than refused as unregistered.
+- Two rows of a block with one name are refused wherever a definition gets them, with `ArgumentError: two tethers are named main_tether`: two authored tethers no longer report the points generated from their name, and looking up or writing a definition whose rows were renamed or pushed into a clash refuses it rather than taking the first row or writing a document that cannot be read back.
+
+### Changed
+
+- Works with KiteUtils 0.14 as well as 0.13.
+
+## KiteGeometry v0.3.2 2026-10-21
+
+### Added
+
+- A block's rows are `Rows`, found by their name as well as their position: `system.points[:kite]` and `system.points["kite"]`. `load_authoring` returns its transforms as `Rows` too.
+- `load_authoring(authored::AbstractDict; set, name)` loads a parsed authoring document, so a tool can build one in code rather than write a file.
+- `load_authoring(...; place=false)` leaves the definition in its design pose, for a tool that places it itself.
+
+### Changed
+
+- A row's `name`, a `Transform`'s `name` and a reference by name (`NameRef`) are `Symbol`s, not `String`s: `system.points[1].name == :kite`. Documents and keyword constructors still take names as strings, and writing a document writes them as strings.
 
 ## KiteGeometry v0.3.1 2026-10-19
 
