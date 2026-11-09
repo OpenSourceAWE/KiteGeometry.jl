@@ -14,15 +14,24 @@ SPDX-License-Identifier: MIT
 - BREAKING: `SystemDefinition` has the fields `system_metadata`, `system_tethers` and `system_extras`, and its materials are the system's. `Metadata` has the fields `system` and `system_sha`.
 - `to_yaml` writes YAML 1.2 that 1.1 readers read the same: a unit of `-` is quoted, and every float has its point and its exponent's sign. `to_yaml(definition)` refuses a definition whose metadata names no system file.
 - BREAKING: a structure document lists only the tethers its system lists. `load_authoring` makes a system tether of each tether a winch holds, so another row of its `tethers` block is a bridle line: its segments are written and it stays in the definition's `tethers`, but it is not read back as a tether.
-- BREAKING: KiteGeometry no longer defines `SegmentSpring` or registers the segment model `spring`. A segment row, and the segments a tether row expands to, carry the segment model a tool registers, its columns as the YAML authors them, so a document holds `damping_per_stiffness` where the YAML gives it rather than a `unit_damping` worked out from it, and no compression column a row leaves unset. Without such a model a segment is `Segment{NoModel}` and a YAML giving damping or compression columns is refused. `resolve_material` returns `(diameter, stiffness, density)`, and `expand_tether!` takes the model of its segments as `segment_model`.
-- A transform's `azimuth` and `azimuth_vel` turn anti-clockwise, from east towards north, as `atan(y, x)` and KiteUtils 0.14's `azimuth_east` do, so a YAML with a non-zero azimuth now places mirrored about the east axis: 30° puts the object north of east rather than south. Heading keeps its sense.
 
 ### Added
 
 - `system_document` writes a system document from one definition or the union by name of several, refusing one name with two different values; `system_sha` gives a file's hash; `structure_document` takes `description`, `note`, `system` and `system_sha`; `to_yaml` and `to_json` take a document.
 - `SystemMetadata` and `SystemTether`, generated from the system schema. `load_authoring` gives each tether a winch holds a `SystemTether`: its ends, its length and the diameter and material its segments share.
+
+## KiteGeometry v0.4.0 2026-11-07
+
+### Added
+
 - `KiteGeometry.unit_stiffness(material, diameter)` and `KiteGeometry.unit_stiffness(segment, materials)` give the axial stiffness times rest length [N] of a `linear` material at a diameter, or of a segment from its material, `nothing` for another law, without allocating for a `Float64` modulus; and `KiteGeometry.resolve_material` is public.
 - `KiteGeometry.expand_tether!` and `KiteGeometry.MaterialTable` are public, and a tether's stiffness may be a callable force law, which becomes a material of law `unit_stiffness` holding it.
+
+### Changed
+
+- BREAKING: KiteGeometry no longer defines `SegmentSpring` or registers the segment model `spring`. A segment row, and the segments a tether row expands to, carry the segment model a tool registers, its columns as the YAML authors them, so a document holds `damping_per_stiffness` where the YAML gives it rather than a `unit_damping` worked out from it, and no compression column a row leaves unset. Without such a model a segment is `Segment{NoModel}` and a YAML giving damping or compression columns is refused. `resolve_material` returns `(diameter, stiffness, density)`, and `expand_tether!` takes the model of its segments as `segment_model`.
+- BREAKING: A transform's `azimuth` and `azimuth_vel` turn anti-clockwise, from east towards north, as `atan(y, x)` and KiteUtils 0.14's `azimuth_east` do, so a YAML with a non-zero azimuth now places mirrored about the east axis: 30° puts the object north of east rather than south. Heading keeps its sense.
+- Works with KiteUtils 0.14 as well as 0.13.1.
 
 ## KiteGeometry v0.3.3 2026-10-28
 
@@ -30,10 +39,6 @@ SPDX-License-Identifier: MIT
 
 - A row whose model is an instance of a registered parametric model type, such as `BodyModel{AeroVSM, RigidDynamics}` registered as `BodyModel`, is written under that model's name rather than refused as unregistered.
 - Two rows of a block with one name are refused wherever a definition gets them, with `ArgumentError: two tethers are named main_tether`: two authored tethers no longer report the points generated from their name, and looking up or writing a definition whose rows were renamed or pushed into a clash refuses it rather than taking the first row or writing a document that cannot be read back.
-
-### Changed
-
-- Works with KiteUtils 0.14 as well as 0.13.
 
 ## KiteGeometry v0.3.2 2026-10-21
 
