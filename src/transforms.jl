@@ -255,7 +255,7 @@ end
 """Move the KA frame of each wing of `system` as the body sharing its name moved from
 `before` to `after`."""
 function carry_wings!(system, before::Pose, after::Pose)
-    bodies = name_indices(system.bodies, :bodies)
+    bodies = name_indices(system.bodies)
     for wing in system.wings
         body = get(bodies, wing.name, nothing)
         isnothing(body) && continue

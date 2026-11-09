@@ -163,8 +163,9 @@ function row_numbers(system, block, column)
 end
 row_number(index::Int, rows, target) = index
 function row_number(name::Symbol, rows, target)
-    haskey(rows, name) || throw(ArgumentError("no $target named $name"))
-    return row_index(rows, name)
+    index = get(name_indices(rows), name, nothing)
+    isnothing(index) && throw(ArgumentError("no $target named $name"))
+    return index
 end
 
 """

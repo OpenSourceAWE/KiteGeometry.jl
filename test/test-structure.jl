@@ -421,6 +421,13 @@ allocated_lookup(rows, name) = @allocated rows[name]
     @test Rows([(; name="legacy"), (; name=7)])["7"].name == 7
 end
 
+@testset "an element named nothing is read by position alone" begin
+    records = Rows(Any[(; name=nothing), (; name=:kept), (; name=nothing)])
+    @test records[:kept] === records[2]
+    @test records[3].name === nothing
+    @test !haskey(records, :nothing)
+end
+
 @testset "a lookup follows every change of the rows" begin
     records = run_records()
     @test records[:back].tension == 3.0

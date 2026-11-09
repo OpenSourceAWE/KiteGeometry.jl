@@ -9,7 +9,7 @@ SPDX-License-Identifier: MIT
 
 ### Added
 
-- `Rows` holds any elements with a `name`, not only a block's rows, a name lookup no longer scans the rows, and `KiteGeometry.row_index(rows, name)` gives the position of a name.
+- `Rows` holds any elements with a `name`, not only a block's rows, a name lookup no longer scans the rows, and `KiteGeometry.row_index(rows, name)` gives the position of a name. An element named `nothing` is found by position alone.
 
 ### Changed
 
