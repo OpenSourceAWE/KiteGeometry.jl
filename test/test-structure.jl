@@ -379,11 +379,85 @@ end
 
 @testset "a name two rows share is refused on lookup and on writing" begin
     system = small_system()
-    system.points[2].name = :anchor
+    @test_throws "const field" system.points[2].name = :anchor
+    system.points[2] = Point(; name="anchor", pos_ENU=[0, 0, 100])
     @test_throws "two points are named anchor" system.points[:anchor]
     @test_throws "two points are named anchor" structure_document(system)
     push!(system.segments, Segment(; name="line", points=(1, 2)))
     @test_throws "two segments are named line" system.segments[:line]
+end
+
+"""A run's record: named, and no row of any block."""
+struct RunRecord
+    name::Symbol
+    tension::Float64
+end
+
+"""A record counting the reads of its name in `reads`."""
+struct CountedRecord
+    name::Symbol
+    reads::Base.RefValue{Int}
+end
+function Base.getproperty(record::CountedRecord, field::Symbol)
+    field === :name && (getfield(record, :reads)[] += 1)
+    return getfield(record, field)
+end
+
+function run_records()
+    return Rows([RunRecord(:front, 1.0), RunRecord(:middle, 2.0), RunRecord(:back, 3.0)])
+end
+allocated_lookup(rows, name) = @allocated rows[name]
+
+@testset "rows of a type no block holds are read by name and by position" begin
+    records = run_records()
+    @test records[:middle] === records["middle"] === records[2]
+    @test KiteGeometry.row_index(records, :back) == 3
+    @test KiteGeometry.row_index(records, "back") == 3
+    @test haskey(records, :front) && !haskey(records, :rear)
+    @test_throws KeyError records[:rear]
+    @test findfirst(record -> record.name == :back, records) == 3
+    records[:back] = RunRecord(:back, 4.0)
+    @test records[3].tension == 4.0
+    @test Rows([(; name="legacy"), (; name=7)])["7"].name == 7
+end
+
+@testset "a lookup follows every change of the rows" begin
+    records = run_records()
+    @test records[:back].tension == 3.0
+    push!(records, RunRecord(:tail, 5.0))
+    @test records[:tail] === records[4]
+    deleteat!(records, 1)
+    @test KiteGeometry.row_index(records, :tail) == 3 && !haskey(records, :front)
+    insert!(records, 1, RunRecord(:nose, 6.0))
+    @test KiteGeometry.row_index(records, :back) == 3
+    records[1] = RunRecord(:bow, 7.0)
+    @test records[:bow] === records[1] && !haskey(records, :nose)
+    append!(records, [RunRecord(:wake, 8.0)])
+    @test records[:wake] === records[5]
+    reverse!(records)
+    @test KiteGeometry.row_index(records, :wake) == 1
+    resize!(records, 2)
+    @test !haskey(records, :bow)
+    empty!(records)
+    @test !haskey(records, :wake)
+end
+
+@testset "two records of one name are refused, naming their type" begin
+    records = run_records()
+    records[1] = RunRecord(:back, 9.0)
+    @test_throws "two RunRecord are named back" records[:back]
+end
+
+@testset "a name lookup reads no row's name once indexed, and allocates nothing" begin
+    reads = Ref(0)
+    counted = Rows([CountedRecord(name, reads) for name in (:front, :middle, :back)])
+    counted[:middle]
+    reads[] = 0
+    counted[:front], counted[:back]
+    @test reads[] == 0
+    records = run_records()
+    records[:front]
+    @test allocated_lookup(records, :back) == 0
 end
 
 @testset "metadata by keyword defaults to this awesIO version and an empty checksum" begin

@@ -132,7 +132,8 @@ function component_source(block, spec)
     push!(fields, ("model", "M", "the model the `model` column names, else `NoModel`", "-"))
     name = type_name(block)
     description = "A row of the `$block` block. " * get(spec, "description", "")
-    body = join(("    $field::$type" for (field, type) in fields), "\n")
+    body = join(("    $(field == "name" ? "const " : "")$field::$type"
+                 for (field, type) in fields), "\n")
     return docstring("$name{M}", description, fields) *
            "mutable struct $name{M <: AbstractModel} <: Component\n$body\nend\n"
 end

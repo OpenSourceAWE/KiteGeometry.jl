@@ -59,16 +59,6 @@ function SystemDefinition(; metadata::Metadata, extras=OrderedDict{String, Any}(
     return SystemDefinition(metadata, resolved..., extras)
 end
 
-"""The index of each component of `rows` by its name, refusing a name used twice."""
-function name_indices(rows, block)
-    indices = Dict{Symbol, Int}()
-    for (index, component) in enumerate(rows)
-        haskey(indices, component.name) && throw(duplicate_name(block, component.name))
-        indices[component.name] = index
-    end
-    return indices
-end
-
 """`component` of `block` with every reference in it an index into `indices`' blocks."""
 function resolve(component::Component, block, indices)
     T = typeof(component)
@@ -173,9 +163,8 @@ function row_numbers(system, block, column)
 end
 row_number(index::Int, rows, target) = index
 function row_number(name::Symbol, rows, target)
-    index = findfirst(row -> row.name == name, rows)
-    isnothing(index) && throw(ArgumentError("no $target named $name"))
-    return index
+    haskey(rows, name) || throw(ArgumentError("no $target named $name"))
+    return row_index(rows, name)
 end
 
 """

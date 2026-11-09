@@ -5,6 +5,17 @@ SPDX-License-Identifier: MIT
 
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `Rows` holds any elements with a `name`, not only a block's rows, a name lookup no longer scans the rows, and `KiteGeometry.row_index(rows, name)` gives the position of a name.
+
+### Changed
+
+- BREAKING: A row's `name` and a `Transform`'s `name` are constant: `point.name = :x` errors, and a row is renamed by replacing it, `system.points[2] = Point(; name="x", ...)`.
+- BREAKING: Two rows of one name refuse every name lookup and `haskey` on those rows, rather than only a lookup of that name.
+
 ## KiteGeometry v0.4.0 2026-11-07
 
 ### Added
