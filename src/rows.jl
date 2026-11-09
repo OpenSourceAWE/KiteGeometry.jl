@@ -6,8 +6,8 @@
 
 Elements with a `name`, indexed by position or by name: `system.points[3]`,
 `system.points[:kite]` and `system.points["kite"]` are rows of `points`. An element named
-`nothing` has a position alone. The name index follows writes through the `Rows`, not a write
-to the vector it wraps or to an element's `name`: a row is renamed by replacing it.
+`nothing` has a position alone. The name index follows writes through the `Rows`, not a
+write to the vector it wraps or to an element's `name`: a row is renamed by replacing it.
 """
 mutable struct Rows{T} <: AbstractVector{T}
     const rows::Vector{T}
