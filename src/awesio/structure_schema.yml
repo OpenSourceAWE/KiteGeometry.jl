@@ -180,8 +180,8 @@ properties:
               - const: body
                 description: >
                   The rigid body the point is fixed in, moving with it and
-                  passing its force and moment on to it; null for a point of its
-                  own.
+                  passing its force and moment on to it; null for a point on no
+                  body.
               - const: pos_ENU
                 description: >
                   Position in the world.
@@ -609,7 +609,7 @@ properties:
           $ref: "#/definitions/component_name"
 
 additionalProperties: true
-pointTubes: true # enforced by awesio.validator, skipped by other draft-07 validators
+pointTubes: true
 
 definitions:
   # ============================================================================
