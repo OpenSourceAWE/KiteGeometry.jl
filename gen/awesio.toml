@@ -4,5 +4,5 @@
 # The awesIO commit src/awesio/structure_schema.yml and test/data/v3_*_structure.yml are
 # vendored from, unchanged, and src/_structure.jl is generated from.
 repository = "1-Bart-1/awesIO"
-commit = "99a36e20667387beeb2096b0ee36a9178a66eabb"
+commit = "4a992374367ff288ba7a38f6f757c7f140947e29"
 awesIO_version = "0.1.0"

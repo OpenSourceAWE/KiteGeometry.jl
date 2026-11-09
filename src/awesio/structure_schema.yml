@@ -176,7 +176,7 @@ properties:
               - const: fixed
                 description: >
                   True where the point is held in the world, false where it is
-                  free or moves with its `body`.
+                  free or moves with its `body` or `tube`.
               - const: body
                 description: >
                   The rigid body the point is fixed in, moving with it and
@@ -215,9 +215,9 @@ properties:
           $ref: "#/definitions/non_negative"
       tube:
         description: >
-          The tube the point rides, moving with the tube's two bodies and
-          passing its force on to them; null for a point that does not. A
-          point rides a tube or a body, never both.
+          The tube the point rides, moving with the tube's two bodies and passing
+          its force on to them; null for a point that does not. A point rides a
+          tube or a body, never both.
         unit: "-"
         value:
           $ref: "#/definitions/optional_name"
@@ -551,8 +551,8 @@ properties:
           $ref: "#/definitions/matrix3"
       fixed:
         description: >
-          True where the body is held in the world and nothing moves it; false
-          or left out for a body that moves.
+          True where the body is held in the world and nothing moves it; false or
+          left out for a body that moves.
         unit: "-"
         value:
           type: boolean
@@ -609,6 +609,7 @@ properties:
           $ref: "#/definitions/component_name"
 
 additionalProperties: true
+pointTubes: true # enforced by awesio.validator, skipped by other draft-07 validators
 
 definitions:
   # ============================================================================

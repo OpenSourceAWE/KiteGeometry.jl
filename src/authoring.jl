@@ -1067,12 +1067,9 @@ function design_pose!(draft, set, point_wings, authored_wings, authored_bodies)
         isnothing(inertia) ||
             (draft.bodies[wing] = with_fields(draft.bodies[wing]; extra_inertia_KA=inertia))
     end
-    for (offset, authored) in zip(length(authored_wings):length(draft.bodies),
-                                  authored_bodies)
-        index = offset + 1
-        body = draft.bodies[index]
-        R = quaternion_to_rotation_matrix(body.Q_KA2ENU)
-        draft.bodies[index] = with_fields(body; pos_ENU=body.pos_ENU + R * authored.com_offset)
+    for (i, authored) in enumerate(authored_bodies)
+        body = draft.bodies[length(authored_wings) + i]
+        body.pos_ENU .+= quaternion_to_rotation_matrix(body.Q_KA2ENU) * authored.com_offset
     end
     return nothing
 end

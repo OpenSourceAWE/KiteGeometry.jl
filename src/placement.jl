@@ -22,13 +22,15 @@ end
 """
     TetherInit(; stretched_length=nothing, force=nothing, stretch_frac=nothing)
 
-How a tether starts when it is placed, each optional: the length to stretch it to [m], and
-what sets its rest length, the tension it carries [N] or its rest length as a fraction of
-its placed length. All `nothing` leaves the tether as it stands.
+How a tether starts when it is placed, each optional. All `nothing` leaves the tether as it
+stands.
 """
 @kwdef struct TetherInit
+    "length the tether is stretched to [m]"
     stretched_length::Union{Nothing, Float64} = nothing
+    "tension the placed tether carries, which sets its rest length [N]"
     force::Union{Nothing, Float64} = nothing
+    "rest length as a fraction of the placed length"
     stretch_frac::Union{Nothing, Float64} = nothing
 end
 
@@ -176,7 +178,7 @@ Place `system` from where it stands, in place: each unset rest length to the len
 there, tethers to their `tether_inits` ([`TetherInit`](@ref)) and the rest lengths those
 give, pulley rest lengths shared out, `transforms` applied ([`place_transforms!`](@ref)),
 each body's points carried with it, and each wing's KA frame with its body. `ignore_l0`
-makes every rest length the placed length. A definition already placed stays where it is.
+makes every rest length the placed length.
 """
 function place!(system::SystemDefinition, transforms=Transform[];
                 tether_inits=[tether_init(tether.model) for tether in system.tethers],
