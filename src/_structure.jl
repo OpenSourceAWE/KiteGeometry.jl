@@ -82,6 +82,9 @@ A row of the `points` block. Mass points.
 - `pos_ENU::MVector{3, Float64}` [m]: Position in the world.
 - `extra_mass::Union{Nothing, Float64}` [kg]: Optional. Mass the point carries beyond its
   segments and canopy faces.
+- `tube::Union{Nothing, NameRef}`: Optional. The tube the point rides, moving with the
+  tube's two bodies and passing its force on to them; null for a point that does not. A
+  point rides a tube or a body, never both.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct Point{M <: AbstractModel} <: Component
@@ -90,6 +93,7 @@ mutable struct Point{M <: AbstractModel} <: Component
     body::Union{Nothing, NameRef}
     pos_ENU::MVector{3, Float64}
     extra_mass::Union{Nothing, Float64}
+    tube::Union{Nothing, NameRef}
     model::M
 end
 
@@ -252,6 +256,8 @@ writer likes where it has no leading edge.
 - `extra_inertia_KA::Union{Nothing, MMatrix{3, 3, Float64, 9}}` [kg*m^2]: Optional. Inertia
   tensor of `extra_mass` about the body's origin, in its KA axes. Principal moments are the
   case where the KA axes are the principal axes and the tensor is diagonal.
+- `fixed::Union{Nothing, Bool}`: Optional. True where the body is held in the world and
+  nothing moves it; false or left out for a body that moves.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct Body{M <: AbstractModel} <: Component
@@ -260,6 +266,7 @@ mutable struct Body{M <: AbstractModel} <: Component
     Q_KA2ENU::MVector{4, Float64}
     extra_mass::Union{Nothing, Float64}
     extra_inertia_KA::Union{Nothing, MMatrix{3, 3, Float64, 9}}
+    fixed::Union{Nothing, Bool}
     model::M
 end
 
@@ -356,7 +363,7 @@ const UNITS = (
 """The unit of each optional column of each table block, by name."""
 const OPTIONAL_UNITS = (
     materials = (;),
-    points = (extra_mass = "kg",),
+    points = (extra_mass = "kg", tube = "-"),
     segments = (rest_length = "m", diameter = "m", material = "-"),
     spanwise_stations = (;),
     pulleys = (;),
@@ -364,7 +371,7 @@ const OPTIONAL_UNITS = (
     winches = (gear_ratio = "-", drum_radius = "m"),
     wings = (canopy_material = "-",),
     canopy_faces = (;),
-    bodies = (extra_mass = "kg", extra_inertia_KA = "kg*m^2"),
+    bodies = (extra_mass = "kg", extra_inertia_KA = "kg*m^2", fixed = "-"),
     tubes = (diameter = "m", pressure = "Pa", material = "-"),
 )
 

@@ -60,23 +60,34 @@ KiteGeometry.MaterialTable
 
 ## Transforms
 
-A transform turns some of a system's points and bodies, its members, about a base: what it turns goes to an elevation and azimuth seen from that base, the azimuth running anti-clockwise from east towards north as `atan(y, x)` does, and the body it heads to a heading about the radial. Its base is a point moved to a base position, or what another transform turns, so one transform can be chained on another. The transforms are kept beside the definition rather than in it: `place!` applies changed ones to a definition before a run, and `reposition!` and `transform_velocities` act on a `Pose`, the positions and body frames a run holds.
-
-```julia
-system, transforms = load_authoring("kite.yaml"; set)
-transforms[1].elevation = deg2rad(40)
-place!(system, transforms)
-```
+A transform turns some of a system's points and bodies, its members, about a base: what it turns goes to an elevation and azimuth seen from that base, the azimuth running anti-clockwise from east towards north as `atan(y, x)` does, and the body it heads to a heading about the radial. Its base is a point moved to a base position, or what another transform turns, so one transform can be chained on another. The transforms are kept beside the definition rather than in it, and `reposition!` and `transform_velocities` act on a `Pose`, the positions and body frames a run holds.
 
 ```@docs
 Transform
 Pose
-place!
 place_transforms!
 reposition!
 transform_velocities
 calc_heading
 ```
+
+## Placing
+
+`place!` puts a definition where its transforms and its tethers say, from wherever it stands, whether a YAML load built it, it was built row by row in Julia, or a transform changed since it was last placed. It runs one sequence: every unset rest length to the length it has there, each tether given one to its stretched length and the rest length its force or stretch fraction makes it, pulley rest lengths shared in proportion to their segments' lengths, the transforms, each body's points carried with it. A body whose `fixed` is true stays where it is, and a point with a `tube` rides both of that tube's bodies. What a tether starts at is a `TetherInit`, given as `tether_inits` or read from each row's model through `KiteGeometry.tether_init`; a tether without one keeps its rest lengths, so a placed definition placed again stays where it is.
+
+```julia
+system, transforms = load_authoring("kite.yaml"; set)
+transforms[1].elevation = deg2rad(40)
+place!(system, transforms)                              # the tethers keep their lengths
+place!(system, transforms; tether_inits=[TetherInit(; stretched_length=120.0)])
+```
+
+```@docs
+place!
+TetherInit
+KiteGeometry.tether_init
+```
+
 
 ## Components
 

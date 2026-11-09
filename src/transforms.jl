@@ -232,26 +232,6 @@ function place_transforms!(pose::Pose, design::Pose, transforms)
     return pose
 end
 
-"""
-    place!(system::SystemDefinition, transforms)
-
-Apply `transforms` ([`place_transforms!`](@ref)) to `system` where it stands, writing
-its points, its bodies and the wings sharing their names in place.
-"""
-function place!(system::SystemDefinition, transforms)
-    design = Pose(system)
-    pose = place_transforms!(copy(design), design, transforms)
-    carry_wings!(system, design, pose)
-    for (point, pos) in zip(system.points, pose.pos)
-        point.pos_ENU .= pos
-    end
-    for (body, pos, R) in zip(system.bodies, pose.body_pos, pose.body_R)
-        body.pos_ENU .= pos
-        body.Q_KA2ENU .= rotation_matrix_to_quaternion(R)
-    end
-    return system
-end
-
 """Move the KA frame of each wing of `system` as the body sharing its name moved from
 `before` to `after`."""
 function carry_wings!(system, before::Pose, after::Pose)

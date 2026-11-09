@@ -4,6 +4,7 @@
 """The block each reference column of a table block refers into."""
 const REFERENCES = Dict(
     (:points, :body) => :bodies,
+    (:points, :tube) => :tubes,
     (:segments, :points) => :points,
     (:segments, :material) => :materials,
     (:spanwise_stations, :wing) => :wings,

@@ -11,10 +11,14 @@ SPDX-License-Identifier: MIT
 
 - `KiteGeometry.unit_stiffness(material, diameter)` and `KiteGeometry.unit_stiffness(segment, materials)` give the axial stiffness times rest length [N] of a `linear` material at a diameter, or of a segment from its material, `nothing` for another law, without allocating for a `Float64` modulus; and `KiteGeometry.resolve_material` is public.
 - `KiteGeometry.expand_tether!` and `KiteGeometry.MaterialTable` are public, and a tether's stiffness may be a callable force law, which becomes a material of law `unit_stiffness` holding it.
+- `place!(system, transforms; tether_inits, ignore_l0)` places any definition from where it stands: tether lengths, rest lengths, pulleys, transforms and body points, whether it was loaded, built in Julia, or a transform changed. `TetherInit` says how a tether starts, and a tool's tether model hands it over by adding a method to `KiteGeometry.tether_init`.
+- A body's `fixed` and a point's `tube` columns, from awesIO: a body held in the world, and the tube a point rides between its two bodies.
 
 ### Changed
 
 - BREAKING: `load_authoring` no longer takes `place`; it always returns the placed definition.
+- BREAKING: `place!(system, transforms)` is the whole placement rather than the transforms alone. A tether row with no `init_*` column keeps its rest lengths instead of having them shared equally over its placed length, and a body transform with no `rot_point` turns the body's centre of mass rather than its origin.
+- BREAKING: a point's `tube` column is read by the loader and is no model's field, so a tool's registered model must drop it. A `BODY_STATIC` point naming a `tube` rides both of its bodies rather than the body of the wing it names, and naming a `tube` and a `body` is refused.
 - BREAKING: KiteGeometry no longer defines `SegmentSpring` or registers the segment model `spring`. A segment row, and the segments a tether row expands to, carry the segment model a tool registers, its columns as the YAML authors them, so a document holds `damping_per_stiffness` where the YAML gives it rather than a `unit_damping` worked out from it, and no compression column a row leaves unset. Without such a model a segment is `Segment{NoModel}` and a YAML giving damping or compression columns is refused. `resolve_material` returns `(diameter, stiffness, density)`, and `expand_tether!` takes the model of its segments as `segment_model`.
 - A transform's `azimuth` and `azimuth_vel` turn anti-clockwise, from east towards north, as `atan(y, x)` and KiteUtils 0.14's `azimuth_east` do, so a YAML with a non-zero azimuth now places mirrored about the east axis: 30° puts the object north of east rather than south. Heading keeps its sense.
 

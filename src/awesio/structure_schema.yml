@@ -213,6 +213,14 @@ properties:
         unit: kg
         value:
           $ref: "#/definitions/non_negative"
+      tube:
+        description: >
+          The tube the point rides, moving with the tube's two bodies and
+          passing its force on to them; null for a point that does not. A
+          point rides a tube or a body, never both.
+        unit: "-"
+        value:
+          $ref: "#/definitions/optional_name"
 
   segments:
     description: Straight elastic elements between two points.
@@ -541,6 +549,13 @@ properties:
         unit: kg*m^2
         value:
           $ref: "#/definitions/matrix3"
+      fixed:
+        description: >
+          True where the body is held in the world and nothing moves it; false
+          or left out for a body that moves.
+        unit: "-"
+        value:
+          type: boolean
 
   tubes:
     description: >
