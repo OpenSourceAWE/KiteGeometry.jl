@@ -83,7 +83,8 @@ function Placement(system::SystemDefinition, tether_inits)
     bodies = name_indices(system.bodies, :bodies)
     station_body = zeros(Int, length(system.points))
     for station in system.spanwise_stations
-        station_body[Int.(station.points)] .= get(bodies, system.wings[station.wing].name, 0)
+        wing_name = system.wings[station.wing].name
+        station_body[Int.(station.points)] .= get(bodies, wing_name, 0)
     end
     return Placement(system, pos, [segment.rest_length for segment in system.segments],
                      body_pos, body_R, anchor, station_body,
@@ -196,7 +197,8 @@ function place!(system::SystemDefinition, transforms=Transform[];
     return system
 end
 
-"""Write where `placement` stands into its system's rows, its wings carried from `design`."""
+"""Write where `placement` stands into its system's rows, its wings carried from
+`design`."""
 function store_placement!(placement::Placement, design)
     (; system) = placement
     carry_wings!(system, design, Pose(placement))

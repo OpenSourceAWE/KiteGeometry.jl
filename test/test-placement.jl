@@ -23,7 +23,8 @@ function authored_rider_kite(; elevation=60.0, azimuth=30.0)
             "headers" => ["name", "pos_cad", "type", "transform_idx", "tube", "body_idx"],
             "data" => [Any["ground", [0.0, 0.0, 0.0], "STATIC", "tf", nothing, nothing],
                        Any["kcu", [0.0, 0.0, 10.0], "DYNAMIC", "tf", nothing, nothing],
-                       Any["rider", [0.0, 0.0, 11.0], "BODY_STATIC", "tf", "strut", nothing],
+                       Any["rider", [0.0, 0.0, 11.0], "BODY_STATIC", "tf", "strut",
+                           nothing],
                        Any["carried", [0.0, 1.0, 11.0], "BODY_STATIC", "tf", nothing,
                            "strut_b"]]),
         "segments" => OrderedDict{String, Any}(
@@ -32,14 +33,16 @@ function authored_rider_kite(; elevation=60.0, azimuth=30.0)
             "data" => [Any["bridle", "kcu", "rider", TETHER_LINE.youngs_modulus,
                            TETHER_LINE.density, 1000 * TETHER_LINE.diameter]]),
         "tethers" => OrderedDict{String, Any}(
-            "headers" => ["name", "start_point", "end_point", "n_segments", "youngs_modulus",
-                          "density", "diameter_mm", "init_stretched_length",
+            "headers" => ["name", "start_point", "end_point", "n_segments",
+                          "youngs_modulus", "density", "diameter_mm",
+                          "init_stretched_length",
                           "init_tether_force"],
             "data" => [Any["main", "ground", "kcu", 3, TETHER_LINE.youngs_modulus,
                            TETHER_LINE.density, 1000 * TETHER_LINE.diameter,
                            STRETCHED_LENGTH, TETHER_FORCE]]),
         "bodies" => OrderedDict{String, Any}(
-            "headers" => ["name", "extra_mass", "pos", "inertia_principal", "transform_idx"],
+            "headers" => ["name", "extra_mass", "pos", "inertia_principal",
+                          "transform_idx"],
             "data" => [Any["strut_a", 1.0, [0.0, -1.0, 11.0], [1.0, 1.0, 1.0], "tf"],
                        Any["strut_b", 1.0, [0.0, 1.0, 11.0], [1.0, 1.0, 1.0], "tf"]]),
         "tubes" => OrderedDict{String, Any}(
@@ -57,7 +60,8 @@ transform."""
 function rider_kite_in_julia(; elevation=60.0, azimuth=30.0)
     set = placement_settings()
     materials = MaterialTable(Material[], Dict{String, Any}())
-    points = Point[Point(; name=:ground, fixed=true, pos_ENU=[0.0, 0.0, 0.0], extra_mass=0.0),
+    points = Point[Point(; name=:ground, fixed=true, pos_ENU=[0.0, 0.0, 0.0],
+                         extra_mass=0.0),
                    Point(; name=:kcu, pos_ENU=[0.0, 0.0, 10.0], extra_mass=0.0),
                    Point(; name=:rider, tube=:strut, pos_ENU=[0.0, 0.0, 11.0],
                          extra_mass=0.0),
@@ -67,8 +71,8 @@ function rider_kite_in_julia(; elevation=60.0, azimuth=30.0)
                                     model=NoModel(), TETHER_LINE...)]
     init = TetherInit(; stretched_length=STRETCHED_LENGTH, force=TETHER_FORCE)
     point_transforms = Any[1, 1, 1, 1]
-    tether = expand_tether!(points, segments, point_transforms, :main, :ground, :kcu, 3, init,
-                            set, materials; model=NoModel(), segment_model=NoModel(),
+    tether = expand_tether!(points, segments, point_transforms, :main, :ground, :kcu, 3,
+                            init, set, materials; model=NoModel(), segment_model=NoModel(),
                             TETHER_LINE...)
     bodies = [Body(; name=:strut_a, pos_ENU=[0.0, -1.0, 11.0], extra_mass=1.0),
               Body(; name=:strut_b, pos_ENU=[0.0, 1.0, 11.0], extra_mass=1.0)]
@@ -94,15 +98,15 @@ function placed_alike(a, b; atol=1e-9)
 end
 
 @testset "a structure placed by each route lands on the same pose and rest lengths" begin
-    from_yaml_route, yaml_transforms = load_authoring(authored_rider_kite();
-                                                       set=placement_settings(), name="rider")
+    from_yaml_route, _ = load_authoring(authored_rider_kite(); set=placement_settings(),
+                                        name="rider")
     in_julia, julia_transforms, tether_inits = rider_kite_in_julia()
     place!(in_julia, julia_transforms; tether_inits)
     @test placed_alike(from_yaml_route, in_julia)
 
-    replaced, replaced_transforms = load_authoring(authored_rider_kite(; elevation=30.0,
-                                                                       azimuth=-40.0);
-                                                   set=placement_settings(), name="rider")
+    replaced, replaced_transforms = load_authoring(
+        authored_rider_kite(; elevation=30.0, azimuth=-40.0); set=placement_settings(),
+        name="rider")
     only(replaced_transforms).elevation = deg2rad(60)
     only(replaced_transforms).azimuth = deg2rad(30)
     place!(replaced, replaced_transforms)
@@ -110,7 +114,8 @@ end
 end
 
 @testset "a tube rider moves with the tube's bodies, on the line between them" begin
-    system, _ = load_authoring(authored_rider_kite(); set=placement_settings(), name="rider")
+    system, _ = load_authoring(authored_rider_kite(); set=placement_settings(),
+                               name="rider")
     pose = Pose(system)
     rider, carried = system.points[:rider], system.points[:carried]
     @test rider.tube == 1 && isnothing(rider.body)
@@ -119,10 +124,11 @@ end
 end
 
 @testset "tether inits put the tether at its length and rest length" begin
-    system, _ = load_authoring(authored_rider_kite(); set=placement_settings(), name="rider")
+    system, _ = load_authoring(authored_rider_kite(); set=placement_settings(),
+                               name="rider")
     tether = only(system.tethers)
     lengths = [norm(system.points[a].pos_ENU - system.points[b].pos_ENU)
-               for (a, b) in (system.segments[segment].points for segment in tether.segments)]
+               for (a, b) in (system.segments[index].points for index in tether.segments)]
     @test sum(lengths) ≈ STRETCHED_LENGTH atol=1e-9
     stiffness = TETHER_LINE.youngs_modulus * π * (TETHER_LINE.diameter / 2)^2
     @test sum(system.segments[segment].rest_length for segment in tether.segments) ≈

@@ -1062,7 +1062,8 @@ function design_pose!(draft, set, point_wings, authored_wings, authored_bodies)
         isempty(members) && continue
         origin, R, com_offset, inertia = wing_body_pose(draft, authored, members,
                                                         point_names)
-        draft.bodies[wing] = with_fields(draft.bodies[wing]; pos_ENU=origin + R * com_offset,
+        draft.bodies[wing] = with_fields(draft.bodies[wing];
+                                         pos_ENU=origin + R * com_offset,
                                          Q_KA2ENU=rotation_matrix_to_quaternion(R))
         isnothing(inertia) ||
             (draft.bodies[wing] = with_fields(draft.bodies[wing]; extra_inertia_KA=inertia))
