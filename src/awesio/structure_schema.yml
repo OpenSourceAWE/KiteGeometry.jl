@@ -35,6 +35,10 @@ description: >
 
   An absent optional block means the same as an empty one.
 
+  `pointTubes` is awesio.validator's own keyword, which other draft-07
+  validators skip: a point's tube names a row of tubes, and that point is
+  neither on a body nor held in the world.
+
   A column's suffix names the frame of its vectors and a rotation is named
   `Q_<from>2<to>`, as docs/source/conventions.rst defines them.
 
