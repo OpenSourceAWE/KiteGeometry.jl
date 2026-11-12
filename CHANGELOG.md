@@ -11,7 +11,7 @@ SPDX-License-Identifier: MIT
 
 - `KiteGeometry.unit_stiffness(material, diameter)` and `KiteGeometry.unit_stiffness(segment, materials)` give the axial stiffness times rest length [N] of a `linear` material at a diameter, or of a segment from its material, `nothing` for another law, without allocating for a `Float64` modulus; and `KiteGeometry.resolve_material` is public.
 - `KiteGeometry.expand_tether!` and `KiteGeometry.MaterialTable` are public, and a tether's stiffness may be a callable force law, which becomes a material of law `unit_stiffness` holding it.
-- `place!(system, transforms; tether_inits, ignore_l0)` places any definition from where it stands: tether lengths, rest lengths, pulleys, transforms and body points, whether it was loaded, built in Julia, or a transform changed. `TetherInit` says how a tether starts, and a tool's tether model hands it over by adding a method to `KiteGeometry.tether_init`.
+- `place!(system, transforms; tether_inits, ignore_l0)` places any definition from where it stands: tether lengths, rest lengths, pulleys, transforms and body points, whether it was loaded, built in Julia, or a transform changed. `TetherInit` says how a tether starts, and a tool's tether model hands it over by adding a method to `KiteGeometry.tether_init`. `KiteGeometry.line_segment` is public, making one segment as the loader does for a definition built in Julia.
 - A body's `fixed` and a point's `tube` columns, from awesIO: a body held in the world, and the tube a point rides between its two bodies.
 
 ### Changed

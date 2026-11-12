@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Bart van de Lint
 # SPDX-License-Identifier: MIT
 
-using KiteGeometry: expand_tether!, MaterialTable
+using KiteGeometry: expand_tether!, line_segment, MaterialTable
 using KiteUtils: Settings, set_data_path
 using LinearAlgebra: norm
 using OrderedCollections: OrderedDict
@@ -67,7 +67,7 @@ function rider_kite_in_julia(; elevation=60.0, azimuth=30.0)
                          extra_mass=0.0),
                    Point(; name=:carried, body=:strut_b, pos_ENU=[0.0, 1.0, 11.0],
                          extra_mass=0.0)]
-    segments = Segment[KiteGeometry.line_segment(:bridle, (:kcu, :rider), set, materials;
+    segments = Segment[line_segment(:bridle, (:kcu, :rider), set, materials;
                                     model=NoModel(), TETHER_LINE...)]
     init = TetherInit(; stretched_length=STRETCHED_LENGTH, force=TETHER_FORCE)
     point_transforms = Any[1, 1, 1, 1]
@@ -93,8 +93,8 @@ function placed_alike(a, b; atol=1e-9)
     return all(isapprox.(pose_a.pos, pose_b.pos; atol)) &&
            all(isapprox.(pose_a.body_pos, pose_b.body_pos; atol)) &&
            all(isapprox.(pose_a.body_R, pose_b.body_R; atol)) &&
-           all(isapprox.([s.rest_length for s in a.segments],
-                         [s.rest_length for s in b.segments]; atol))
+           all(isapprox.([segment.rest_length for segment in a.segments],
+                         [segment.rest_length for segment in b.segments]; atol))
 end
 
 @testset "a structure placed by each route lands on the same pose and rest lengths" begin

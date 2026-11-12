@@ -488,9 +488,13 @@ function line_material!(materials, label, density, force_law)
     return material!(materials, label, "unit_stiffness", parameters)
 end
 
-"""A segment carrying `model`, its material resolved from `line`
-([`resolve_material`](@ref)) and `set` and named among `materials`; a zero `rest_length` is
-set from the design pose before placement."""
+"""
+    line_segment(name, points, set, materials; rest_length=0.0, model, line...)
+
+A segment carrying `model`, its material resolved from `line` ([`resolve_material`](@ref))
+and `set` and named among `materials`; a zero `rest_length` is set from the design pose
+when placed.
+"""
 function line_segment(name, points, set, materials; rest_length=0.0, model, line...)
     diameter, stiffness, density = resolve_material("segment $name", set; line...)
     return Segment(; name, points, rest_length, diameter,
@@ -1153,6 +1157,6 @@ function with_connectivity_sha(system::SystemDefinition)
     metadata = Metadata((field == :connectivity_sha ? connectivity_sha(system) :
                          getfield(system.metadata, field)
                          for field in fieldnames(Metadata))...)
-    tables = (getfield(system, field) for field in fieldnames(SystemDefinition)[2:end])
-    return SystemDefinition(metadata, tables...)
+    return SystemDefinition((field == :metadata ? metadata : getfield(system, field)
+                             for field in fieldnames(SystemDefinition))...)
 end

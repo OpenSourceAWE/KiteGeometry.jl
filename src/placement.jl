@@ -42,6 +42,10 @@ adds a method.
 """
 tether_init(::AbstractModel) = TetherInit()
 
+"""Whether `init` gives a stretched length, force or stretch fraction."""
+gives_anything(init::TetherInit) =
+    !all(isnothing, (init.stretched_length, init.force, init.stretch_frac))
+
 """
     Placement
 
@@ -425,11 +429,6 @@ function apply_cluster_init_stretched_len!(placement::Placement, cluster, downst
         (; index, free, anchor_pos=pos[anchor], free_pos=pos[free], ordered, seg_lens,
          path_len)
     end
-    if length(cluster) > 1
-        names = join((system.tethers[snap.index].name for snap in snaps), ", ")
-        @info "Tethers ($names) feed one structure; placing it at their mean stretched " *
-              "length."
-    end
     stretched = [placement.tether_inits[snap.index].stretched_length for snap in snaps]
     delta = cluster_standoff_shift([snap.free_pos - snap.anchor_pos for snap in snaps],
                                    sum(stretched) / length(stretched))
@@ -578,7 +577,7 @@ unit_stiffness(segment::Segment, materials) =
 ([`init_unstretched_len`](@ref)) equally over its segments."""
 function apply_tether_init_forces!(placement::Placement)
     for (index, tether) in enumerate(placement.system.tethers)
-        placement.tether_inits[index] == TetherInit() && continue
+        gives_anything(placement.tether_inits[index]) || continue
         isempty(tether.segments) && continue
         len = init_unstretched_len(placement, index)
         len > 0 || error("tether $(tether.name): rest length $len m must be positive")
