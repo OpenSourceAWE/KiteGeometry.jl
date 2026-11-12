@@ -317,10 +317,9 @@ function yaml_unit_inertia(row)
     return Mat3(Ixx, Ixy, Ixz, Ixy, Iyy, Iyz, Ixz, Iyz, Izz)
 end
 
-"""`component` with the fields `changes` names replaced."""
-function with_fields(component::T; changes...) where {T <: Component}
-    return T((get(changes, field, getfield(component, field))
-              for field in fieldnames(T))...)
+"""`value` with the fields `changes` names replaced."""
+function with_fields(value::T; changes...) where {T}
+    return T((get(changes, field, getfield(value, field)) for field in fieldnames(T))...)
 end
 
 """
@@ -1154,9 +1153,6 @@ end
 
 """`system` with the metadata's `connectivity_sha` that of its tables."""
 function with_connectivity_sha(system::SystemDefinition)
-    metadata = Metadata((field == :connectivity_sha ? connectivity_sha(system) :
-                         getfield(system.metadata, field)
-                         for field in fieldnames(Metadata))...)
-    return SystemDefinition((field == :metadata ? metadata : getfield(system, field)
-                             for field in fieldnames(SystemDefinition))...)
+    sha = connectivity_sha(system)
+    return with_fields(system; metadata=with_fields(system.metadata; connectivity_sha=sha))
 end
