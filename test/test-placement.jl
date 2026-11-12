@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Bart van de Lint
 # SPDX-License-Identifier: MIT
 
-using KiteGeometry: expand_tether!, line_segment, MaterialTable
+using KiteGeometry: expand_tether!, MaterialTable
 using KiteUtils: Settings, set_data_path
 using LinearAlgebra: norm
 using OrderedCollections: OrderedDict
@@ -67,8 +67,8 @@ function rider_kite_in_julia(; elevation=60.0, azimuth=30.0)
                          extra_mass=0.0),
                    Point(; name=:carried, body=:strut_b, pos_ENU=[0.0, 1.0, 11.0],
                          extra_mass=0.0)]
-    segments = Segment[line_segment(:bridle, (:kcu, :rider), set, materials;
-                                    model=NoModel(), TETHER_LINE...)]
+    segments = Segment[KiteGeometry.line_segment(:bridle, (:kcu, :rider), set, materials;
+                                                 model=NoModel(), TETHER_LINE...)]
     init = TetherInit(; stretched_length=STRETCHED_LENGTH, force=TETHER_FORCE)
     point_transforms = Any[1, 1, 1, 1]
     tether = expand_tether!(points, segments, point_transforms, :main, :ground, :kcu, 3,
