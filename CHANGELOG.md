@@ -7,6 +7,12 @@ SPDX-License-Identifier: MIT
 
 ## Unreleased
 
+### Changed
+
+- BREAKING: `load_authoring` no longer takes `place`; it always returns the placed definition.
+
+## KiteGeometry v0.4.0 2026-11-07
+
 ### Added
 
 - `KiteGeometry.unit_stiffness(material, diameter)` and `KiteGeometry.unit_stiffness(segment, materials)` give the axial stiffness times rest length [N] of a `linear` material at a diameter, or of a segment from its material, `nothing` for another law, without allocating for a `Float64` modulus; and `KiteGeometry.resolve_material` is public.
