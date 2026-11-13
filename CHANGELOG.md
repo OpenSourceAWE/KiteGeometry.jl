@@ -14,6 +14,7 @@ SPDX-License-Identifier: MIT
 - BREAKING: `SystemDefinition` has the fields `system_metadata`, `system_tethers` and `system_extras`, and its materials are the system's. `Metadata` has the fields `system` and `system_sha`.
 - `to_yaml` writes YAML 1.2 that 1.1 readers read the same: a unit of `-` is quoted, and every float has its point and its exponent's sign. `to_yaml(definition)` refuses a definition whose metadata names no system file.
 - BREAKING: a structure document lists only the tethers its system lists. `load_authoring` makes a system tether of each tether a winch holds, so another row of its `tethers` block is a bridle line: its segments are written and it stays in the definition's `tethers`, but it is not read back as a tether.
+- BREAKING: `load_authoring` no longer takes `place`; it always returns the placed definition.
 
 ### Added
 
