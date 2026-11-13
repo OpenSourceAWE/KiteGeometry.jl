@@ -76,16 +76,6 @@ function SystemDefinition(; metadata::Metadata,
     return SystemDefinition(metadata, system_metadata, resolved..., extras, system_extras)
 end
 
-"""The index of each component of `rows` by its name, refusing a name used twice."""
-function name_indices(rows, block)
-    indices = Dict{Symbol, Int}()
-    for (index, component) in enumerate(rows)
-        haskey(indices, component.name) && throw(duplicate_name(block, component.name))
-        indices[component.name] = index
-    end
-    return indices
-end
-
 """`component` of `block` with every reference in it an index into `indices`' blocks."""
 function resolve(component::Component, block, indices)
     T = typeof(component)
@@ -263,7 +253,7 @@ function row_numbers(system, block, column)
 end
 row_number(index::Int, rows, target) = index
 function row_number(name::Symbol, rows, target)
-    index = findfirst(row -> row.name == name, rows)
+    index = get(name_indices(rows), name, nothing)
     isnothing(index) && throw(ArgumentError("no $target named $name"))
     return index
 end
@@ -491,7 +481,6 @@ function structure_document(structure::SystemDefinition;
     for block in keys(BLOCKS)
         rows = block == :tethers ? listed_tethers(structure) : getfield(structure, block)
         block in REQUIRED_BLOCKS || !isempty(rows) || continue
-        name_indices(rows, block)
         document[String(block)] = write_table(structure, block, rows)
     end
     return merge!(document, structure.extras)

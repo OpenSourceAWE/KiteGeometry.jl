@@ -86,7 +86,7 @@ naming it.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct Material{M <: AbstractModel} <: Component
-    name::Symbol
+    const name::Symbol
     law::String
     parameters::OrderedDict{String, Any}
     model::M
@@ -110,7 +110,7 @@ structure sharing its name discretises.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct SystemTether{M <: AbstractModel} <: Component
-    name::Symbol
+    const name::Symbol
     type::String
     version::Union{String, Float64}
     joints::OrderedDict{String, Any}
@@ -139,7 +139,7 @@ A row of the `points` block. Mass points.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct Point{M <: AbstractModel} <: Component
-    name::Symbol
+    const name::Symbol
     fixed::Bool
     body::Union{Nothing, NameRef}
     pos_ENU::MVector{3, Float64}
@@ -162,7 +162,7 @@ A row of the `segments` block. Straight elastic elements between two points.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct Segment{M <: AbstractModel} <: Component
-    name::Symbol
+    const name::Symbol
     points::NTuple{2, NameRef}
     rest_length::Union{Nothing, Float64}
     diameter::Union{Nothing, Float64}
@@ -186,7 +186,7 @@ wing's stations run from +y to -y of its KA frame.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct SpanwiseStation{M <: AbstractModel} <: Component
-    name::Symbol
+    const name::Symbol
     wing::NameRef
     points::Vector{NameRef}
     model::M
@@ -202,7 +202,7 @@ A row of the `pulleys` block.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct Pulley{M <: AbstractModel} <: Component
-    name::Symbol
+    const name::Symbol
     segments::NTuple{2, NameRef}
     model::M
 end
@@ -223,7 +223,7 @@ this file alone.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct Tether{M <: AbstractModel} <: Component
-    name::Symbol
+    const name::Symbol
     start_point::NameRef
     end_point::NameRef
     segments::Vector{NameRef}
@@ -243,7 +243,7 @@ A row of the `winches` block.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct Winch{M <: AbstractModel} <: Component
-    name::Symbol
+    const name::Symbol
     tethers::Vector{NameRef}
     winch_point::NameRef
     gear_ratio::Union{Nothing, Float64}
@@ -267,7 +267,7 @@ most one canopy, meshed by the `canopy_faces` that name the wing.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct Wing{M <: AbstractModel} <: Component
-    name::Symbol
+    const name::Symbol
     pos_ENU::MVector{3, Float64}
     Q_KA2ENU::MVector{4, Float64}
     canopy_material::Union{Nothing, NameRef}
@@ -287,7 +287,7 @@ membrane or as springs along its edges, is the reader's model.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct CanopyFace{M <: AbstractModel} <: Component
-    name::Symbol
+    const name::Symbol
     wing::NameRef
     points::Vector{NameRef}
     model::M
@@ -312,7 +312,7 @@ writer likes where it has no leading edge.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct Body{M <: AbstractModel} <: Component
-    name::Symbol
+    const name::Symbol
     pos_ENU::MVector{3, Float64}
     Q_KA2ENU::MVector{4, Float64}
     extra_mass::Union{Nothing, Float64}
@@ -336,7 +336,7 @@ element: only a shape its material's law cannot hold, or a taper, is a chain of 
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct Tube{M <: AbstractModel} <: Component
-    name::Symbol
+    const name::Symbol
     bodies::NTuple{2, NameRef}
     diameter::Union{Nothing, Float64}
     pressure::Union{Nothing, Float64}

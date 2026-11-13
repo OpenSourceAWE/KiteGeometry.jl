@@ -141,7 +141,8 @@ end
 function row_source(name, description, fields)
     fields = [fields;
               ("model", "M", "the model the `model` column names, else `NoModel`", "-")]
-    body = join(("    $field::$type" for (field, type) in fields), "\n")
+    body = join(("    $(field == "name" ? "const " : "")$field::$type"
+                 for (field, type) in fields), "\n")
     return docstring("$name{M}", description, fields) *
            "mutable struct $name{M <: AbstractModel} <: Component\n$body\nend\n"
 end
