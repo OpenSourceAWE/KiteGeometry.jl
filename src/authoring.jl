@@ -618,7 +618,7 @@ function read_wings(data)
 end
 
 """The spanwise stations of the `stations` block, each on the wing it names or the wing
-listing it among its `stations`."""
+listing it among its `stations`, else on no wing where its `wing` cell is null."""
 function read_stations(data, wings, authored)
     rows = read_rows(data, :spanwise_stations, (:name, :wing, :points, :point_idxs);
                      key="stations")
@@ -628,8 +628,10 @@ function read_stations(data, wings, authored)
         if isnothing(wing)
             listing = findfirst(wing -> name in wing.stations || i in wing.stations,
                                 authored)
-            isnothing(listing) && error("station $name names no wing and no wing lists it")
-            wing = wings[listing].name
+            isnothing(listing) && !hasfield(typeof(row), :wing) &&
+                error("station $name names no wing and no wing lists it; a null `wing` " *
+                      "puts it on none")
+            wing = isnothing(listing) ? nothing : wings[listing].name
         end
         points = something(yaml_field(row, :points), yaml_field(row, :point_idxs), [])
         SpanwiseStation(; name, wing, points=yaml_to_ref.(points), model)
@@ -1030,13 +1032,13 @@ end
     point_wing_indices(draft, point_wings, wing_names) -> Vector{Int}
 
 The index of the wing each point of `draft` names in `point_wings`, none for a point a
-tether adds ([`point_wing_index`](@ref)). Refuses a station's point that names another wing
-than the station's, or none.
+tether adds ([`point_wing_index`](@ref)). Refuses a point of a wing's station that names
+another wing than the station's, or none.
 """
 function point_wing_indices(draft, point_wings, wing_names)
     point_wing = [point_wing_index(point, get(point_wings, index, nothing), wing_names)
                   for (index, point) in enumerate(draft.points)]
-    for station in draft.spanwise_stations, index in station.points
+    for station in wing_stations(draft), index in station.points
         point_wing[index] == station.wing && continue
         named = point_wing[index] == 0 ? "no wing" : draft.wings[point_wing[index]].name
         error("point $(draft.points[index].name) is a point of station $(station.name) " *
@@ -1044,6 +1046,10 @@ function point_wing_indices(draft, point_wings, wing_names)
     end
     return point_wing
 end
+
+"""The spanwise stations of `draft` that a wing owns."""
+wing_stations(draft) = Iterators.filter(station -> !isnothing(station.wing),
+                                        draft.spanwise_stations)
 
 """
     design_pose(draft, set, point_wings, authored_wings, authored_bodies, inits)
@@ -1056,7 +1062,7 @@ function design_pose(draft, set, point_wings, authored_wings, authored_bodies, i
     point_names, wing_names = indices_of(draft, :points), indices_of(draft, :wings)
     point_wing = point_wing_indices(draft, point_wings, wing_names)
     wing_node = falses(length(draft.points))
-    foreach(station -> wing_node[Int.(station.points)] .= true, draft.spanwise_stations)
+    foreach(station -> wing_node[Int.(station.points)] .= true, wing_stations(draft))
     body_pos = [body.pos_ENU for body in draft.bodies]
     body_R = [quaternion_to_rotation_matrix(body.Q_KA2ENU) for body in draft.bodies]
     com_offset = [fill(zero(Vec3), length(draft.wings));
