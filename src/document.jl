@@ -332,7 +332,6 @@ function structure_document(system::SystemDefinition)
     for block in keys(BLOCKS)
         rows = getfield(system, block)
         block in REQUIRED_BLOCKS || !isempty(rows) || continue
-        name_indices(rows, block)
         document[String(block)] = write_table(system, block, rows)
     end
     return merge!(document, system.extras)

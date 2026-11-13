@@ -9,12 +9,12 @@ SPDX-License-Identifier: MIT
 
 ### Added
 
-- `Rows` holds any elements with a `name`, not only a block's rows, a name lookup no longer scans the rows, and `KiteGeometry.row_index(rows, name)` gives the position of a name. An element named `nothing` is found by position alone.
+- `Rows` holds any elements named by a `Symbol`, not only a block's rows, a name lookup takes constant time without scanning, and `KiteGeometry.row_index(rows, name)` gives the position of a name.
 
 ### Changed
 
-- BREAKING: A row's `name` and a `Transform`'s `name` are constant: `point.name = :x` errors, and a row is renamed by replacing it, `system.points[2] = Point(; name="x", ...)`.
-- BREAKING: Two rows of one name refuse every name lookup and `haskey` on those rows, rather than only a lookup of that name.
+- BREAKING: A row's `name` and a `Transform`'s `name` are constant: `point.name = :x` errors, and a row is renamed by replacing it, `system.points[2] = Point(; name="x", ...)`. `Rows` refuses an element whose name is not a `Symbol` or can change in place.
+- BREAKING: `Rows` refuses the write that would give two rows one name, rather than a later lookup of that name, so a reordering in place such as `reverse!(rows)` is refused; `Rows(reverse(rows))` builds the reordered rows. `Rows(vector)` holds a copy of `vector`, and `resize!` of rows is gone: rows are added by `push!`, `insert!` or `append!`.
 
 ## KiteGeometry v0.4.0 2026-11-07
 

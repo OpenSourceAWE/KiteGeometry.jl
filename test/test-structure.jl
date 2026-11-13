@@ -377,20 +377,26 @@ end
     @test system.segments[:spare].points == (1, 2)
 end
 
-@testset "a name two rows share is refused on lookup and on writing" begin
+@testset "a write giving two rows one name is refused and changes nothing" begin
     system = small_system()
     @test_throws "const field" system.points[2].name = :anchor
-    system.points[2] = Point(; name="anchor", pos_ENU=[0, 0, 100])
-    @test_throws "two points are named anchor" system.points[:anchor]
-    @test_throws "two points are named anchor" structure_document(system)
-    push!(system.segments, Segment(; name="line", points=(1, 2)))
-    @test_throws "two segments are named line" system.segments[:line]
+    @test_throws "two points are named anchor" system.points[2] =
+                                                  Point(; name="anchor", pos_ENU=[0, 0, 1])
+    @test system.points[:kite] === system.points[2]
+    @test_throws "two segments are named line" push!(system.segments,
+                                                     Segment(; name="line", points=(1, 2)))
+    @test length(system.segments) == 1
 end
 
 """A run's record: named, and no row of any block."""
 struct RunRecord
     name::Symbol
     tension::Float64
+end
+
+"""A record whose name can change in place."""
+mutable struct RenamableRecord
+    name::Symbol
 end
 
 """A record counting the reads of its name in `reads`."""
@@ -418,47 +424,47 @@ allocated_lookup(rows, name) = @allocated rows[name]
     @test findfirst(record -> record.name == :back, records) == 3
     records[:back] = RunRecord(:back, 4.0)
     @test records[3].tension == 4.0
-    @test Rows([(; name="legacy"), (; name=7)])["7"].name == 7
 end
 
-@testset "an element named nothing is read by position alone" begin
-    records = Rows(Any[(; name=nothing), (; name=:kept), (; name=nothing)])
-    @test records[:kept] === records[2]
-    @test records[3].name === nothing
-    @test !haskey(records, :nothing)
+@testset "an element is refused unless a Symbol names it for good" begin
+    @test_throws "named by a Symbol, not nothing" Rows([(; name=nothing)])
+    @test_throws "named by a Symbol, not 7" Rows([(; name=7)])
+    @test_throws "const field" Rows([RenamableRecord(:front)])
+    @test_throws "const field" push!(Rows{Any}(), RenamableRecord(:front))
 end
 
 @testset "a lookup follows every change of the rows" begin
-    records = run_records()
-    @test records[:back].tension == 3.0
+    elements = [RunRecord(:front, 1.0), RunRecord(:middle, 2.0), RunRecord(:back, 3.0)]
+    records = Rows(elements)
+    push!(elements, RunRecord(:tail, 0.0))
+    @test length(records) == 3
     push!(records, RunRecord(:tail, 5.0))
     @test records[:tail] === records[4]
     deleteat!(records, 1)
     @test KiteGeometry.row_index(records, :tail) == 3 && !haskey(records, :front)
     insert!(records, 1, RunRecord(:nose, 6.0))
     @test KiteGeometry.row_index(records, :back) == 3
+    @test_throws BoundsError insert!(records, 9, RunRecord(:far, 0.0))
+    @test !haskey(records, :far)
     records[1] = RunRecord(:bow, 7.0)
     @test records[:bow] === records[1] && !haskey(records, :nose)
     append!(records, [RunRecord(:wake, 8.0)])
     @test records[:wake] === records[5]
-    reverse!(records)
-    @test KiteGeometry.row_index(records, :wake) == 1
-    resize!(records, 2)
-    @test !haskey(records, :bow)
+    @test_throws "two RunRecord are named wake" reverse!(records)
+    @test KiteGeometry.row_index(records, :wake) == 5 && records[1].name == :bow
+    deleteat!(records, 2:5)
+    @test !haskey(records, :wake) && records[:bow] === records[1]
     empty!(records)
-    @test !haskey(records, :wake)
+    @test !haskey(records, :bow)
 end
 
 @testset "two records of one name are refused, naming their type" begin
-    records = run_records()
-    records[1] = RunRecord(:back, 9.0)
-    @test_throws "two RunRecord are named back" records[:back]
+    @test_throws "two RunRecord are named back" run_records()[1] = RunRecord(:back, 9.0)
 end
 
-@testset "a name lookup reads no row's name once indexed, and allocates nothing" begin
+@testset "a name lookup reads no row's name and allocates nothing" begin
     reads = Ref(0)
     counted = Rows([CountedRecord(name, reads) for name in (:front, :middle, :back)])
-    counted[:middle]
     reads[] = 0
     counted[:front], counted[:back]
     @test reads[] == 0
