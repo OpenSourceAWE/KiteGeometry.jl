@@ -33,7 +33,7 @@ The `metadata` block of a structure document.
   in zero-based languages agree with each other; a reader that gets this wrong sees every
   file as a mismatch.
 """
-struct Metadata
+mutable struct Metadata
     name::String
     description::String
     note::String
@@ -84,7 +84,7 @@ A row of the `points` block. Mass points.
   segments and canopy faces.
 - `tube::Union{Nothing, NameRef}`: Optional. The tube the point rides, moving with the
   tube's two bodies and passing its force on to them; null for a point that does not. A
-  point rides a tube or a body, never both.
+  point riding a tube is on no body and not held in the world.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct Point{M <: AbstractModel} <: Component
@@ -168,6 +168,13 @@ its segments' `rest_length`.
 - `end_point::NameRef`: The point the tether ends at.
 - `segments::Vector{NameRef}`: The tether's segments, in order from `start_point` to
   `end_point`.
+- `init_stretched_length::Union{Nothing, Float64}` [m]: Optional. Length the tether is
+  placed at, moving its end that is not held in the world along it, with what hangs from
+  that end.
+- `init_tether_force::Union{Nothing, Float64}` [N]: Optional. Tension the placed tether
+  carries, which sets its segments' rest length from its placed length.
+- `init_stretch_frac::Union{Nothing, Float64}` [-]: Optional. Its segments' rest length as a
+  fraction of the tether's placed length.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct Tether{M <: AbstractModel} <: Component
@@ -175,6 +182,9 @@ mutable struct Tether{M <: AbstractModel} <: Component
     start_point::NameRef
     end_point::NameRef
     segments::Vector{NameRef}
+    init_stretched_length::Union{Nothing, Float64}
+    init_tether_force::Union{Nothing, Float64}
+    init_stretch_frac::Union{Nothing, Float64}
     model::M
 end
 
@@ -211,6 +221,8 @@ most one canopy, meshed by the `canopy_faces` that name the wing.
 - `Q_KA2ENU::MVector{4, Float64}` [-]: Rotation from the wing's KA frame into the world.
 - `canopy_material::Union{Nothing, NameRef}`: Optional. The material every face of the
   wing's canopy is made of, or null where the wing has no canopy.
+- `body::Union{Nothing, NameRef}`: Optional. The rigid body the wing's KA frame moves with,
+  or null where the wing is on no body.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct Wing{M <: AbstractModel} <: Component
@@ -218,6 +230,7 @@ mutable struct Wing{M <: AbstractModel} <: Component
     pos_ENU::MVector{3, Float64}
     Q_KA2ENU::MVector{4, Float64}
     canopy_material::Union{Nothing, NameRef}
+    body::Union{Nothing, NameRef}
     model::M
 end
 
@@ -256,8 +269,7 @@ writer likes where it has no leading edge.
 - `extra_inertia_KA::Union{Nothing, MMatrix{3, 3, Float64, 9}}` [kg*m^2]: Optional. Inertia
   tensor of `extra_mass` about the body's origin, in its KA axes. Principal moments are the
   case where the KA axes are the principal axes and the tensor is diagonal.
-- `fixed::Union{Nothing, Bool}`: Optional. True where the body is held in the world and
-  nothing moves it; false or left out for a body that moves.
+- `fixed::Bool`: Optional. True where the body is held in the world and nothing moves it.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct Body{M <: AbstractModel} <: Component
@@ -266,7 +278,7 @@ mutable struct Body{M <: AbstractModel} <: Component
     Q_KA2ENU::MVector{4, Float64}
     extra_mass::Union{Nothing, Float64}
     extra_inertia_KA::Union{Nothing, MMatrix{3, 3, Float64, 9}}
-    fixed::Union{Nothing, Bool}
+    fixed::Bool
     model::M
 end
 
@@ -367,12 +379,27 @@ const OPTIONAL_UNITS = (
     segments = (rest_length = "m", diameter = "m", material = "-"),
     spanwise_stations = (;),
     pulleys = (;),
-    tethers = (;),
+    tethers = (init_stretched_length = "m", init_tether_force = "N", init_stretch_frac = "-"),
     winches = (gear_ratio = "-", drum_radius = "m"),
-    wings = (canopy_material = "-",),
+    wings = (canopy_material = "-", body = "-"),
     canopy_faces = (;),
     bodies = (extra_mass = "kg", extra_inertia_KA = "kg*m^2", fixed = "-"),
     tubes = (diameter = "m", pressure = "Pa", material = "-"),
+)
+
+"""The default of each optional column of each table block that has one, by name."""
+const OPTIONAL_DEFAULTS = (
+    materials = (;),
+    points = (;),
+    segments = (;),
+    spanwise_stations = (;),
+    pulleys = (;),
+    tethers = (;),
+    winches = (;),
+    wings = (;),
+    canopy_faces = (;),
+    bodies = (fixed = false,),
+    tubes = (;),
 )
 
 """The blocks a structure document must carry."""

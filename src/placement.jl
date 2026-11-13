@@ -19,83 +19,6 @@ struct WingFrame
     y_ref_points::NTuple{2, RefPoints}
 end
 
-"""
-    TetherInit(; stretched_length=nothing, force=nothing, stretch_frac=nothing)
-
-How a tether starts when it is placed, each optional. All `nothing` leaves the tether as it
-stands.
-"""
-@kwdef struct TetherInit
-    "length the tether is stretched to [m]"
-    stretched_length::Union{Nothing, Float64} = nothing
-    "tension the placed tether carries, which sets its rest length [N]"
-    force::Union{Nothing, Float64} = nothing
-    "rest length as a fraction of the placed length"
-    stretch_frac::Union{Nothing, Float64} = nothing
-end
-
-"""
-    tether_init(model) -> TetherInit
-
-How a tether whose row carries `model` starts when placed: nothing unless a tool's model
-adds a method.
-"""
-tether_init(::AbstractModel) = TetherInit()
-
-"""Whether `init` gives a stretched length, force or stretch fraction."""
-gives_anything(init::TetherInit) =
-    !all(isnothing, (init.stretched_length, init.force, init.stretch_frac))
-
-"""
-    Placement
-
-A `SystemDefinition` while it is placed: where each point and body is, each segment's rest
-length, and what placing reads of it, derived from its rows; the vectors are indexed as its
-blocks.
-"""
-struct Placement
-    system::SystemDefinition
-    "position of each point [m]"
-    pos::Vector{Vec3}
-    "rest length of each segment [m]"
-    l0::Vector{Float64}
-    "position of each body [m]"
-    body_pos::Vector{Vec3}
-    "rotation of each body's frame into the world"
-    body_R::Vector{Mat3}
-    "position of each body-carried point in its body's frame [m]"
-    anchor::Vector{Vec3}
-    "index of the body named after the wing whose station holds each point, 0 for none"
-    station_body::Vector{Int}
-    "whether each body is held in the world"
-    static_body::Vector{Bool}
-    tether_inits::Vector{TetherInit}
-end
-
-"""
-    Placement(system::SystemDefinition, tether_inits)
-
-`system` where it stands. Refuses `tether_inits` that are not one per tether.
-"""
-function Placement(system::SystemDefinition, tether_inits)
-    length(tether_inits) == length(system.tethers) || throw(ArgumentError(
-        "$(length(tether_inits)) tether_inits for $(length(system.tethers)) tethers"))
-    (; pos, body_pos, body_R) = Pose(system)
-    anchor = [isnothing(point.body) ? zero(Vec3) :
-              body_R[point.body]' * (pos[index] - body_pos[point.body])
-              for (index, point) in enumerate(system.points)]
-    bodies = name_indices(system.bodies, :bodies)
-    station_body = zeros(Int, length(system.points))
-    for station in system.spanwise_stations
-        wing_name = system.wings[station.wing].name
-        station_body[Int.(station.points)] .= get(bodies, wing_name, 0)
-    end
-    return Placement(system, pos, [segment.rest_length for segment in system.segments],
-                     body_pos, body_R, anchor, station_body,
-                     [body.fixed === true for body in system.bodies],
-                     collect(TetherInit, tether_inits))
-end
-
 # ==================== ROTATIONS ==================== #
 
 """Rotation matrix of the scalar-first quaternion `q`."""
@@ -175,86 +98,69 @@ end
 # ==================== PLACE ==================== #
 
 """
-    place!(system::SystemDefinition, transforms=Transform[];
-           tether_inits=[tether_init(tether.model) for tether in system.tethers],
-           ignore_l0=false) -> system
+    place!(system::SystemDefinition, transforms=Transform[]; ignore_l0=false) -> system
 
 Place `system` from where it stands, in place: each unset rest length to the length it has
-there, tethers to their `tether_inits` ([`TetherInit`](@ref)) and the rest lengths those
-give, pulley rest lengths shared out, `transforms` applied ([`place_transforms!`](@ref)),
-each body's points carried with it, and each wing's KA frame with its body. `ignore_l0`
-makes every rest length the placed length.
+there, each tether to the length and rest length its `init_*` columns give, pulley rest
+lengths shared out, `transforms` applied ([`place_transforms!`](@ref)), each body's points
+carried with it, and each wing's KA frame with its body. `ignore_l0` makes every rest length
+the placed length.
 """
-function place!(system::SystemDefinition, transforms=Transform[];
-                tether_inits=[tether_init(tether.model) for tether in system.tethers],
-                ignore_l0=false)
-    design = Pose(system)
-    placement = Placement(system, tether_inits)
-    update_segment_lengths!(placement)
-    apply_tether_init_stretched_lens!(placement)
-    apply_tether_init_forces!(placement)
-    init_pulley_lengths!(placement)
-    place_transforms!(Pose(placement), design, transforms)
-    carry_body_points!(placement)
-    ignore_l0 && relax_segments!(placement)
-    store_placement!(placement, design)
+function place!(system::SystemDefinition, transforms=Transform[]; ignore_l0=false)
+    pose = Pose(system)
+    design = copy(pose)
+    update_segment_lengths!(system.segments, pose.pos)
+    apply_tether_init_stretched_lens!(system, pose)
+    set_tether_rest_lengths!(system, pose.pos)
+    init_pulley_lengths!(system, pose.pos)
+    place_transforms!(pose, design, transforms)
+    carry_body_points!(pose, design, system.points)
+    ignore_l0 && relax_segments!(system.segments, pose.pos)
+    carry_wings!(system.wings, design, pose)
     return system
-end
-
-"""Write where `placement` stands into its system's rows, its wings carried from
-`design`."""
-function store_placement!(placement::Placement, design)
-    (; system) = placement
-    carry_wings!(system, design, Pose(placement))
-    foreach((point, pos) -> point.pos_ENU .= pos, system.points, placement.pos)
-    foreach((segment, l0) -> segment.rest_length = l0, system.segments, placement.l0)
-    for (body, pos, R) in zip(system.bodies, placement.body_pos, placement.body_R)
-        body.pos_ENU .= pos
-        body.Q_KA2ENU .= rotation_matrix_to_quaternion(R)
-    end
-    return nothing
 end
 
 """Length of `segment` between the positions `pos` [m]."""
 segment_length(segment, pos) = norm(pos[segment.points[1]] - pos[segment.points[2]])
 
-"""Set every unset (zero) rest length to the segment's length."""
-function update_segment_lengths!(placement::Placement)
-    for (i, segment) in enumerate(placement.system.segments)
-        placement.l0[i] ≈ 0 && (placement.l0[i] = segment_length(segment, placement.pos))
+"""Set every unset (zero) rest length of `segments` to its length between the positions
+`pos`."""
+function update_segment_lengths!(segments, pos)
+    for segment in segments
+        something(segment.rest_length, 0.0) ≈ 0 &&
+            (segment.rest_length = segment_length(segment, pos))
     end
     return nothing
 end
 
-"""Make every rest length the segment's length, so no segment is stretched."""
-function relax_segments!(placement::Placement)
-    for (i, segment) in enumerate(placement.system.segments)
-        placement.l0[i] = segment_length(segment, placement.pos)
-    end
+"""Make every rest length of `segments` its length between the positions `pos`, so none is
+stretched."""
+function relax_segments!(segments, pos)
+    foreach(segment -> segment.rest_length = segment_length(segment, pos), segments)
     return nothing
 end
 
 """Share each pulley's summed rest length between its two segments in proportion to their
-lengths."""
-function init_pulley_lengths!(placement::Placement)
-    (; system, pos, l0) = placement
+lengths between the positions `pos`."""
+function init_pulley_lengths!(system, pos)
     for pulley in system.pulleys
-        segment_a, segment_b = pulley.segments
-        sum_len = l0[segment_a] + l0[segment_b]
-        len_a = segment_length(system.segments[segment_a], pos)
-        len_b = segment_length(system.segments[segment_b], pos)
-        l0[segment_a] = len_a / (len_a + len_b) * sum_len
-        l0[segment_b] = sum_len - l0[segment_a]
+        segment_a, segment_b = (system.segments[index] for index in pulley.segments)
+        sum_len = segment_a.rest_length + segment_b.rest_length
+        len_a, len_b = segment_length(segment_a, pos), segment_length(segment_b, pos)
+        segment_a.rest_length = len_a / (len_a + len_b) * sum_len
+        segment_b.rest_length = sum_len - segment_a.rest_length
     end
     return nothing
 end
 
-"""Put every body-carried point at its anchor on its body, where the body now is."""
-function carry_body_points!(placement::Placement)
-    for (i, point) in enumerate(placement.system.points)
-        isnothing(point.body) && continue
-        placement.pos[i] = placement.body_pos[point.body] +
-                           placement.body_R[point.body] * placement.anchor[i]
+"""Put every point of `points` fixed in a body where it stood on that body in `design`,
+where the body is in `pose`."""
+function carry_body_points!(pose, design, points)
+    for (index, point) in enumerate(points)
+        (; body) = point
+        isnothing(body) && continue
+        anchor = design.body_R[body]' * (design.pos[index] - design.body_pos[body])
+        pose.pos[index] = pose.body_pos[body] + pose.body_R[body] * anchor
     end
     return nothing
 end
@@ -275,15 +181,20 @@ function tether_anchor_free(tether, boundary)
     return nothing, nothing
 end
 
-"""Body indices whose placement carries point `index`: the body it rides, both bodies of the
-tube it rides, or the wing body of the station it is a member of. Empty for a point that
-stands free."""
-function anchor_body_idxs(placement::Placement, index)
-    point = placement.system.points[index]
-    isnothing(point.body) || return (point.body,)
-    isnothing(point.tube) || return placement.system.tubes[point.tube].bodies
-    station_body = placement.station_body[index]
-    return station_body == 0 ? () : (station_body,)
+"""Body indices carrying each point of `system` when a tether moves it: the body it is fixed
+in, both bodies of the tube it rides, or the body of the wing whose station holds it; none
+for a point that stands free."""
+function point_carriers(system)
+    carriers = map(system.points) do point
+        isnothing(point.body) || return [Int(point.body)]
+        isnothing(point.tube) || return collect(Int, system.tubes[point.tube].bodies)
+        return Int[]
+    end
+    for station in system.spanwise_stations, index in station.points
+        body = system.wings[station.wing].body
+        isempty(carriers[index]) && !isnothing(body) && push!(carriers[index], body)
+    end
+    return carriers
 end
 
 """Each body index mapped to the bodies it shares a tube with."""
@@ -308,18 +219,18 @@ function connected_body_groups(n_bodies, tubes)
 end
 
 """The bodies that translate with `seeds`: the seeds and every body reached from them over
-tubes, stopping at the bodies `static_body` clamps."""
-function translated_body_idxs(seeds, static_body, body_neighbors)
+tubes, stopping at the `fixed` ones of `bodies`."""
+function translated_body_idxs(seeds, bodies, body_neighbors)
     moved = Set{Int}()
     queue = Int[]
     for seed in seeds
-        (seed in moved || static_body[seed]) && continue
+        (seed in moved || bodies[seed].fixed) && continue
         push!(moved, seed)
         push!(queue, seed)
     end
     while !isempty(queue)
         for neighbor in get(body_neighbors, pop!(queue), Int[])
-            (neighbor in moved || static_body[neighbor]) && continue
+            (neighbor in moved || bodies[neighbor].fixed) && continue
             push!(moved, neighbor)
             push!(queue, neighbor)
         end
@@ -327,11 +238,11 @@ function translated_body_idxs(seeds, static_body, body_neighbors)
     return moved
 end
 
-"""Each point riding a body, a tube or a wing mapped to all the points riding any body of
+"""Each point some body carries (`carriers`) mapped to all the points carried by any body of
 its tube-connected group (`root`)."""
-function rigid_point_siblings(placement::Placement, root)
+function rigid_point_siblings(carriers, root)
     group_members = Dict{Int, Set{Int}}()
-    for index in eachindex(placement.pos), body in anchor_body_idxs(placement, index)
+    for (index, bodies) in enumerate(carriers), body in bodies
         push!(get!(group_members, root[body], Set{Int}()), index)
     end
     siblings = Dict{Int, Set{Int}}()
@@ -407,12 +318,13 @@ function cluster_standoff_shift(spans, mean_len)
     return t * direction
 end
 
-"""Move one cluster of tethers to their mean stretched length: the free ends, what is
-downstream of them and the bodies those ride translate along the mean tether, and each
-tether's inner points are spread along it in proportion to their segment lengths."""
-function apply_cluster_init_stretched_len!(placement::Placement, cluster, downstream,
-                                           boundary, body_neighbors)
-    (; system, pos) = placement
+"""Move one cluster of tethers to their mean stretched length in `pose`: the free ends, what
+is downstream of them and the bodies those ride (`carriers`) translate along the mean
+tether, and each tether's inner points are spread along it in proportion to their segment
+lengths."""
+function apply_cluster_init_stretched_len!(system, pose, cluster, downstream, boundary,
+                                           carriers, body_neighbors)
+    (; pos) = pose
     snaps = map(cluster) do index
         tether = system.tethers[index]
         anchor, free = tether_anchor_free(tether, boundary)
@@ -429,7 +341,7 @@ function apply_cluster_init_stretched_len!(placement::Placement, cluster, downst
         (; index, free, anchor_pos=pos[anchor], free_pos=pos[free], ordered, seg_lens,
          path_len)
     end
-    stretched = [placement.tether_inits[snap.index].stretched_length for snap in snaps]
+    stretched = [system.tethers[snap.index].init_stretched_length for snap in snaps]
     delta = cluster_standoff_shift([snap.free_pos - snap.anchor_pos for snap in snaps],
                                    sum(stretched) / length(stretched))
     norm(delta) ≈ 0 && return nothing
@@ -441,11 +353,9 @@ function apply_cluster_init_stretched_len!(placement::Placement, cluster, downst
         pos[index] += delta
     end
     seeds = Set{Int}()
-    for index in moved
-        union!(seeds, anchor_body_idxs(placement, index))
-    end
-    for body in translated_body_idxs(seeds, placement.static_body, body_neighbors)
-        placement.body_pos[body] += delta
+    foreach(index -> union!(seeds, carriers[index]), moved)
+    for body in translated_body_idxs(seeds, system.bodies, body_neighbors)
+        pose.body_pos[body] += delta
     end
     for snap in snaps
         line = snap.free_pos + delta - snap.anchor_pos
@@ -459,25 +369,23 @@ function apply_cluster_init_stretched_len!(placement::Placement, cluster, downst
 end
 
 """
-    apply_tether_init_stretched_lens!(placement::Placement)
+    apply_tether_init_stretched_lens!(system, pose)
 
-Move every tether given a stretched length to it, from the endpoint on the boundary —
-a fixed or winch point, or one carried only by bodies held in the world. Tethers whose reach
-overlaps are placed together at their mean length. Refuses a tether with neither endpoint
-on the boundary, and skips one with both, warning.
+Move every tether of `system` given an `init_stretched_length` to it in `pose`, from the
+endpoint on the boundary — a fixed or winch point, or one carried only by bodies held in the
+world. Tethers whose reach overlaps are placed together at their mean length. Refuses a
+tether with neither endpoint on the boundary, and skips one with both, warning.
 """
-function apply_tether_init_stretched_lens!(placement::Placement)
-    (; system) = placement
-    specified = [index for (index, init) in enumerate(placement.tether_inits)
-                 if !isnothing(init.stretched_length)]
+function apply_tether_init_stretched_lens!(system, pose)
+    specified = [index for (index, tether) in enumerate(system.tethers)
+                 if !isnothing(tether.init_stretched_length)]
     isempty(specified) && return nothing
+    carriers = point_carriers(system)
     boundary = Set{Int}(winch.winch_point for winch in system.winches)
     for (index, point) in enumerate(system.points)
         point.fixed && push!(boundary, index)
         isnothing(point.body) && isnothing(point.tube) && continue
-        carriers = anchor_body_idxs(placement, index)
-        !isempty(carriers) && all(body -> placement.static_body[body], carriers) &&
-            push!(boundary, index)
+        all(body -> system.bodies[body].fixed, carriers[index]) && push!(boundary, index)
     end
     anchored = filter(specified) do index
         tether = system.tethers[index]
@@ -493,7 +401,7 @@ function apply_tether_init_stretched_lens!(placement::Placement)
             "it cannot be placed at its stretched length")
     end
     rigid_siblings = rigid_point_siblings(
-        placement, connected_body_groups(length(system.bodies), system.tubes))
+        carriers, connected_body_groups(length(system.bodies), system.tubes))
     downstream = Dict(map(anchored) do index
         tether = system.tethers[index]
         anchor, free = tether_anchor_free(tether, boundary)
@@ -505,36 +413,38 @@ function apply_tether_init_stretched_lens!(placement::Placement)
                 boundary), downstream[index]) for index in anchored)
     body_neighbors = beam_body_neighbors(system.tubes)
     for cluster in tether_clusters(anchored, reach)
-        apply_cluster_init_stretched_len!(placement, cluster, downstream, boundary,
-                                          body_neighbors)
+        apply_cluster_init_stretched_len!(system, pose, cluster, downstream, boundary,
+                                          carriers, body_neighbors)
     end
     return nothing
 end
 
 """
-    init_unstretched_len(placement, index)
+    tether_rest_length(tether, system, pos)
 
-Rest length [m] of tether `index` from its placed length: that length times its
-`stretch_frac`, or the length its `force` [N] stretches to at the segments' common
-`unit_stiffness`; the placed length where neither is given.
+Rest length [m] of `tether` of `system` at the positions `pos`: its placed length times its
+`init_stretch_frac`, or the length its `init_tether_force` [N] stretches to that length at
+its segments' common unit stiffness, or that length where it gives only an
+`init_stretched_length`; its segments' summed rest length where it gives none.
 """
-function init_unstretched_len(placement::Placement, index)
-    tether = placement.system.tethers[index]
-    segments = placement.system.segments
-    stretched = sum(segment_length(segments[segment], placement.pos)
-                    for segment in tether.segments)
-    (; force, stretch_frac) = placement.tether_inits[index]
-    !isnothing(force) && !isnothing(stretch_frac) && error(
+function tether_rest_length(tether, system, pos)
+    segments = [system.segments[index] for index in tether.segments]
+    (; init_stretched_length, init_tether_force, init_stretch_frac) = tether
+    all(isnothing, (init_stretched_length, init_tether_force, init_stretch_frac)) &&
+        return sum(segment.rest_length for segment in segments; init=0.0)
+    stretched = sum(segment_length(segment, pos) for segment in segments; init=0.0)
+    stretched > 0 || error("tether $(tether.name) has no placed length")
+    !isnothing(init_tether_force) && !isnothing(init_stretch_frac) && error(
         "tether $(tether.name): give init_stretch_frac or init_tether_force, not both")
-    if !isnothing(stretch_frac)
-        stretch_frac > 0 || error(
-            "tether $(tether.name): init_stretch_frac $stretch_frac must be positive")
-        return stretched * stretch_frac
+    if !isnothing(init_stretch_frac)
+        init_stretch_frac > 0 || error(
+            "tether $(tether.name): init_stretch_frac $init_stretch_frac must be positive")
+        return stretched * init_stretch_frac
     end
-    force = something(force, 0.0)
+    force = something(init_tether_force, 0.0)
     force >= 0 || error("tether $(tether.name): init_tether_force $force N is negative")
     force == 0 && return stretched
-    stiffness = tether_unit_stiffness(tether, segments, placement.system.materials)
+    stiffness = tether_unit_stiffness(tether, system.segments, system.materials)
     force < stiffness || error(
         "tether $(tether.name): init_tether_force $force N is not below its " *
         "unit_stiffness $stiffness N")
@@ -573,15 +483,14 @@ end
 unit_stiffness(segment::Segment, materials) =
     unit_stiffness(materials[segment.material], segment.diameter)
 
-"""Share the rest length of each tether with a [`TetherInit`](@ref) that gives anything
-([`init_unstretched_len`](@ref)) equally over its segments."""
-function apply_tether_init_forces!(placement::Placement)
-    for (index, tether) in enumerate(placement.system.tethers)
-        gives_anything(placement.tether_inits[index]) || continue
-        isempty(tether.segments) && continue
-        len = init_unstretched_len(placement, index)
-        len > 0 || error("tether $(tether.name): rest length $len m must be positive")
-        placement.l0[Int.(tether.segments)] .= len / length(tether.segments)
+"""Scale the rest lengths of each tether's segments, keeping their ratios, to the tether's
+[`tether_rest_length`](@ref) at the positions `pos`."""
+function set_tether_rest_lengths!(system, pos)
+    for tether in system.tethers
+        segments = [system.segments[index] for index in tether.segments]
+        total = sum(segment.rest_length for segment in segments; init=0.0)
+        scale = tether_rest_length(tether, system, pos) / total
+        foreach(segment -> segment.rest_length *= scale, segments)
     end
     return nothing
 end

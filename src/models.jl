@@ -120,15 +120,3 @@ function Base.propertynames(component::Component)
     return (fieldnames(typeof(component))..., propertynames(component.model)...)
 end
 
-"""Rows, and models, of one type are equal where every field is."""
-const ByValue = Union{Component, AbstractModel}
-function Base.:(==)(a::T, b::T) where {T <: ByValue}
-    return all(getfield(a, field) == getfield(b, field) for field in fieldnames(T))
-end
-function Base.hash(value::ByValue, seed::UInt)
-    code = hash(typeof(value), seed)
-    for field in fieldnames(typeof(value))
-        code = hash(getfield(value, field), code)
-    end
-    return code
-end

@@ -74,19 +74,18 @@ calc_heading
 
 ## Placing
 
-`place!` puts a definition where its transforms and its tethers say, from wherever it stands, whether a YAML load built it, it was built row by row in Julia, or a transform changed since it was last placed. It runs one sequence: every unset rest length to the length it has there, each tether given one to its stretched length and the rest length its force or stretch fraction makes it, pulley rest lengths shared in proportion to their segments' lengths, the transforms, each body's points carried with it. A body whose `fixed` is true stays where it is, and a point with a `tube` rides both of that tube's bodies. What a tether starts at is a `TetherInit`, given as `tether_inits` or read from each row's model through `KiteGeometry.tether_init`; a tether without one keeps its rest lengths, so a placed definition placed again stays where it is.
+`place!` puts a definition where its transforms and its tethers say, from wherever it stands, whether a YAML load built it, it was built row by row in Julia, or a transform changed since it was last placed. It works on the definition's own rows and runs one sequence: every unset rest length to the length it has there, each tether with an `init_stretched_length` to that length and the rest length its `init_tether_force` or `init_stretch_frac` makes it, pulley rest lengths shared in proportion to their segments' lengths, the transforms, each body's points carried with it, and each wing's KA frame with the body it names. A body whose `fixed` is true stays where it is, and a point with a `tube` rides both of that tube's bodies. A tether without `init_*` columns keeps its rest lengths, and a placed definition placed again stays where it is.
 
 ```julia
 system, transforms = load_authoring("kite.yaml"; set)
 transforms[1].elevation = deg2rad(40)
-place!(system, transforms)                              # the tethers keep their lengths
-place!(system, transforms; tether_inits=[TetherInit(; stretched_length=120.0)])
+place!(system, transforms)                        # the tethers keep their lengths
+system.tethers[:main].init_stretched_length = 120.0
+place!(system, transforms)                        # the main tether is now 120 m long
 ```
 
 ```@docs
 place!
-TetherInit
-KiteGeometry.tether_init
 ```
 
 ## Components

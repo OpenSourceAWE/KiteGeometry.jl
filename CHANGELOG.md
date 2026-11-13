@@ -5,20 +5,31 @@ SPDX-License-Identifier: MIT
 
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `place!(system, transforms; ignore_l0)` places any definition from where it stands, working on its own rows: tether lengths, rest lengths, pulleys, transforms, body points and wing frames, whether it was loaded, built in Julia, or a transform changed. `KiteGeometry.line_segment` is public, making one segment as the loader does for a definition built in Julia.
+- Columns from awesIO: a tether's `init_stretched_length`, `init_tether_force` and `init_stretch_frac`, which `place!` places it by; a body's `fixed`, true for a body held in the world; a point's `tube`, the tube it rides between its two bodies; and a wing's `body`, the body its KA frame moves with. `load_authoring` fills them from the authoring YAML.
+
+### Changed
+
+- BREAKING: `place!(system, transforms)` is the whole placement rather than the transforms alone. A tether with no `init_*` column keeps its rest lengths instead of having them shared equally over its placed length, a tether's rest length is shared over its segments in proportion to their rest lengths rather than equally, and a body transform with no `rot_point` turns the body's centre of mass rather than its origin.
+- BREAKING: `Pose(system)` reads and writes the definition's rows rather than copying them; `copy` it for a snapshot.
+- BREAKING: `expand_tether!` takes a tether's `init_*` columns as the keyword `init` instead of a positional argument.
+- BREAKING: a point's `tube` column is read by the loader and is no model's field, so a tool's registered model must drop it. A `BODY_STATIC` point naming a `tube` rides both of its bodies rather than the body of the wing it names, and naming a `tube` and a `body` is refused.
+- An optional column with a default in the schema, as a body's `fixed`, holds that default rather than `nothing` where a document leaves it out, and is written only where a row differs from it. `Metadata` is mutable and compares by its fields.
+
 ## KiteGeometry v0.4.0 2026-11-07
 
 ### Added
 
 - `KiteGeometry.unit_stiffness(material, diameter)` and `KiteGeometry.unit_stiffness(segment, materials)` give the axial stiffness times rest length [N] of a `linear` material at a diameter, or of a segment from its material, `nothing` for another law, without allocating for a `Float64` modulus; and `KiteGeometry.resolve_material` is public.
 - `KiteGeometry.expand_tether!` and `KiteGeometry.MaterialTable` are public, and a tether's stiffness may be a callable force law, which becomes a material of law `unit_stiffness` holding it.
-- `place!(system, transforms; tether_inits, ignore_l0)` places any definition from where it stands: tether lengths, rest lengths, pulleys, transforms and body points, whether it was loaded, built in Julia, or a transform changed. `TetherInit` says how a tether starts, and a tool's tether model hands it over by adding a method to `KiteGeometry.tether_init`. `KiteGeometry.line_segment` is public, making one segment as the loader does for a definition built in Julia.
-- A body's `fixed` and a point's `tube` columns, from awesIO: a body held in the world, and the tube a point rides between its two bodies.
 
 ### Changed
 
 - BREAKING: `load_authoring` no longer takes `place`; it always returns the placed definition.
-- BREAKING: `place!(system, transforms)` is the whole placement rather than the transforms alone. A tether row with no `init_*` column keeps its rest lengths instead of having them shared equally over its placed length, and a body transform with no `rot_point` turns the body's centre of mass rather than its origin.
-- BREAKING: a point's `tube` column is read by the loader and is no model's field, so a tool's registered model must drop it. A `BODY_STATIC` point naming a `tube` rides both of its bodies rather than the body of the wing it names, and naming a `tube` and a `body` is refused.
 - BREAKING: KiteGeometry no longer defines `SegmentSpring` or registers the segment model `spring`. A segment row, and the segments a tether row expands to, carry the segment model a tool registers, its columns as the YAML authors them, so a document holds `damping_per_stiffness` where the YAML gives it rather than a `unit_damping` worked out from it, and no compression column a row leaves unset. Without such a model a segment is `Segment{NoModel}` and a YAML giving damping or compression columns is refused. `resolve_material` returns `(diameter, stiffness, density)`, and `expand_tether!` takes the model of its segments as `segment_model`.
 - BREAKING: A transform's `azimuth` and `azimuth_vel` turn anti-clockwise, from east towards north, as `atan(y, x)` and KiteUtils 0.14's `azimuth_east` do, so a YAML with a non-zero azimuth now places mirrored about the east axis: 30° puts the object north of east rather than south. Heading keeps its sense.
 - Works with KiteUtils 0.14 as well as 0.13.1.

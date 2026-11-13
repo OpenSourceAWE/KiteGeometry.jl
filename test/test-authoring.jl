@@ -387,13 +387,14 @@ end
     point_transforms = Union{Nothing, NameRef}[nothing, nothing]
     materials = KiteGeometry.MaterialTable(Material[], Dict{String, Any}())
     tether = KiteGeometry.expand_tether!(points, segments, point_transforms, :main, :ground,
-                                         :kite, 3, (; stretched_length=33.0),
-                                         Settings("system.yaml"), materials;
+                                         :kite, 3, Settings("system.yaml"), materials;
+                                         init=(; init_stretched_length=33.0),
                                          model=KiteGeometry.added_row_model(:tethers),
                                          segment_model=SamSpring(5.0, nothing, nothing,
                                                                  nothing),
                                          unit_stiffness=force_law)
     @test tether.segments == [:main_seg_1, :main_seg_2, :main_seg_3]
+    @test tether.init_stretched_length == 33.0
     @test length(segments) == 3
     material = only(materials.rows)
     @test material.law == "unit_stiffness"

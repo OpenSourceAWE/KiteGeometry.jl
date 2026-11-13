@@ -107,23 +107,41 @@ function columns(block, spec)
     return fields
 end
 
-"""`type` or `nothing`, as Julia source."""
-optional_type(type) = startswith(type, "Union{Nothing, ") ? type : "Union{Nothing, $type}"
+"""Julia type of the optional `column`: its value's, admitting `nothing` unless the value
+has a `default`."""
+function optional_type(column)
+    type = column_type(column["value"])
+    haskey(column["value"], "default") || startswith(type, "Union{Nothing, ") ||
+        return "Union{Nothing, $type}"
+    return type
+end
 
-"""`(header, Julia type, description, unit)` of every optional column of a block's `spec`,
-its type admitting `nothing`."""
+"""`(header, Julia type, description, unit)` of every optional column of a block's
+`spec`."""
 function optional_columns(spec)
-    return [(name, optional_type(column_type(column["value"])),
-             "Optional. " * column["description"], column["unit"])
+    return [(name, optional_type(column), "Optional. " * column["description"],
+             column["unit"])
             for (name, column) in get(spec, "optionalColumns", ())]
 end
 
+"""Source of the named tuple of `entries`, each `name => value`."""
+function named_tuple_source(entries)
+    sources = ["$name = $(repr(value))" for (name, value) in entries]
+    isempty(sources) && return "(;)"
+    length(sources) == 1 && return "($(only(sources)),)"
+    return "($(join(sources, ", ")))"
+end
+
 """Source of the named tuple of the unit of each optional column of a block's `spec`."""
-function optional_units_source(spec)
-    entries = ["$name = $(repr(unit))" for (name, _, _, unit) in optional_columns(spec)]
-    isempty(entries) && return "(;)"
-    length(entries) == 1 && return "($(only(entries)),)"
-    return "($(join(entries, ", ")))"
+optional_units_source(spec) =
+    named_tuple_source(name => unit for (name, _, _, unit) in optional_columns(spec))
+
+"""Source of the named tuple of the default of each optional column of a block's `spec`
+that has one."""
+function optional_defaults_source(spec)
+    return named_tuple_source(name => column["value"]["default"]
+                              for (name, column) in get(spec, "optionalColumns", ())
+                              if haskey(column["value"], "default"))
 end
 
 """Source of the struct holding one row of `block`."""
@@ -147,11 +165,11 @@ function metadata_source(spec)
     end
     body = join(("    $field::$type" for (field, type) in fields), "\n")
     return docstring("Metadata", "The `metadata` block of a structure document.", fields) *
-           "struct Metadata\n$body\nend\n"
+           "mutable struct Metadata\n$body\nend\n"
 end
 
-"""Source of `SystemDefinition`, one vector per table block, and of `BLOCKS`, `UNITS`
-and `OPTIONAL_UNITS`."""
+"""Source of `SystemDefinition`, one vector per table block, and of `BLOCKS`, `UNITS`,
+`OPTIONAL_UNITS` and `OPTIONAL_DEFAULTS`."""
 function system_source(schema, blocks)
     fields = [("metadata", "Metadata", "the document's metadata", "-")]
     for (block, _) in blocks
@@ -165,6 +183,8 @@ function system_source(schema, blocks)
                   for (block, spec) in blocks))
     optional_units = join(("    $block = $(optional_units_source(spec)),\n"
                            for (block, spec) in blocks))
+    optional_defaults = join(("    $block = $(optional_defaults_source(spec)),\n"
+                              for (block, spec) in blocks))
     required = join((":$block" for block in schema["required"]), ", ")
     description = "A structure document: its metadata, the rows of each table block, and " *
                   "the blocks the schema does not name."
@@ -176,6 +196,9 @@ function system_source(schema, blocks)
            "const UNITS = (\n$units)\n\n" *
            "\"\"\"The unit of each optional column of each table block, by name.\"\"\"\n" *
            "const OPTIONAL_UNITS = (\n$optional_units)\n\n" *
+           "\"\"\"The default of each optional column of each table block that has " *
+           "one, by name.\"\"\"\n" *
+           "const OPTIONAL_DEFAULTS = (\n$optional_defaults)\n\n" *
            "\"\"\"The blocks a structure document must carry.\"\"\"\n" *
            "const REQUIRED_BLOCKS = ($required)\n"
 end

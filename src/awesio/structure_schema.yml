@@ -35,10 +35,6 @@ description: >
 
   An absent optional block means the same as an empty one.
 
-  `pointTubes` is awesio.validator's own keyword, which other draft-07
-  validators skip: a point's tube names a row of tubes, and that point is
-  neither on a body nor held in the world.
-
   A column's suffix names the frame of its vectors and a rotation is named
   `Q_<from>2<to>`, as docs/source/conventions.rst defines them.
 
@@ -220,8 +216,8 @@ properties:
       tube:
         description: >
           The tube the point rides, moving with the tube's two bodies and passing
-          its force on to them; null for a point that does not. A point rides a
-          tube or a body, never both.
+          its force on to them; null for a point that does not. A point riding a
+          tube is on no body and not held in the world.
         unit: "-"
         value:
           $ref: "#/definitions/optional_name"
@@ -377,6 +373,27 @@ properties:
                 - $ref: "#/definitions/component_name"
                 - $ref: "#/definitions/name_list"
               minItems: 4
+    optionalColumns:
+      init_stretched_length:
+        description: >
+          Length the tether is placed at, moving its end that is not held in
+          the world along it, with what hangs from that end.
+        unit: m
+        value:
+          $ref: "#/definitions/length"
+      init_tether_force:
+        description: >
+          Tension the placed tether carries, which sets its segments' rest
+          length from its placed length.
+        unit: N
+        value:
+          $ref: "#/definitions/non_negative"
+      init_stretch_frac:
+        description: >
+          Its segments' rest length as a fraction of the tether's placed length.
+        unit: "-"
+        value:
+          $ref: "#/definitions/non_negative"
 
   winches:
     allOf:
@@ -462,6 +479,13 @@ properties:
         description: >
           The material every face of the wing's canopy is made of, or null where
           the wing has no canopy.
+        unit: "-"
+        value:
+          $ref: "#/definitions/optional_name"
+      body:
+        description: >
+          The rigid body the wing's KA frame moves with, or null where the wing
+          is on no body.
         unit: "-"
         value:
           $ref: "#/definitions/optional_name"
@@ -555,11 +579,11 @@ properties:
           $ref: "#/definitions/matrix3"
       fixed:
         description: >
-          True where the body is held in the world and nothing moves it; false or
-          left out for a body that moves.
+          True where the body is held in the world and nothing moves it.
         unit: "-"
         value:
           type: boolean
+          default: false
 
   tubes:
     description: >
@@ -613,7 +637,6 @@ properties:
           $ref: "#/definitions/component_name"
 
 additionalProperties: true
-pointTubes: true
 
 definitions:
   # ============================================================================
