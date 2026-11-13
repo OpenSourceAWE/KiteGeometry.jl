@@ -550,6 +550,42 @@ end
     @test !isempty(system.spanwise_stations)
 end
 
+"""`data` with stations of no wing: `flap` with no points, `hinge` on the point `point`."""
+function add_wingless_stations!(data, point)
+    stations = data["stations"]
+    push!(stations["headers"], "wing")
+    stations["data"] = [[row; nothing] for row in stations["data"]]
+    push!(stations["data"], ["flap", [], "STATIC", 0.0, 0.0, nothing],
+          ["hinge", [point], "STATIC", 0.0, 0.0, nothing])
+    return data
+end
+
+"""The structure document of `system` without its stations."""
+function document_without_stations(system)
+    return delete!(structure_document(system), "spanwise_stations")
+end
+
+@testset "a station of no wing is placed and read back, the wings placed as without it" begin
+    for (file, point) in (("rigid_structural_geometry.yaml", "kcu"),
+                          ("particle_structural_geometry.yaml", "steering_left"))
+        plain = load_edited(identity, file)
+        system = load_edited(data -> add_wingless_stations!(data, point), file)
+        flap, hinge = system.spanwise_stations[:flap], system.spanwise_stations[:hinge]
+        @test isnothing(flap.wing) && isempty(flap.points)
+        @test isnothing(hinge.wing)
+        @test system.points[only(hinge.points)].name == Symbol(point)
+        @test document_without_stations(system) == document_without_stations(plain)
+        @test isnothing(validate(SCHEMA, schema_document(system)))
+        @test structure_document(written_again(system)) == structure_document(system)
+    end
+end
+
+@testset "a station naming no wing that no wing lists is refused" begin
+    @test_throws "station flap names no wing and no wing lists it" load_edited() do data
+        push!(data["stations"]["data"], ["flap", [], "STATIC", 0.0, 0.0])
+    end
+end
+
 @testset "V3Kite's PSM fixture states the canopy faces of awesIO's V3 PSM document" begin
     v3_psm = joinpath(@__DIR__, "data", "v3_psm")
     system, _ = load_authoring(joinpath(v3_psm, "struc_geometry.yaml");

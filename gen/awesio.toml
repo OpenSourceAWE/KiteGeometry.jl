@@ -5,5 +5,5 @@
 # test/data/system_config/v3_system.yml are vendored from, unchanged, and src/_structure.jl
 # is generated from.
 repository = "1-Bart-1/awesIO"
-commit = "5dc983bc363d2fd589db1b2916235aa35a4033f5"
+commit = "2995db0fa55f53d3e7a9721d8c0c4be6815816c4"
 awesIO_version = "0.1.0"

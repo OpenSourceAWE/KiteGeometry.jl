@@ -405,6 +405,16 @@ end
     @test_throws ArgumentError small_system(; rudders=[])
 end
 
+@testset "a station of no wing and no points writes and reads back" begin
+    system = small_system(; spanwise_stations=[SpanwiseStation(; name="flap", wing=nothing,
+                                                                points=[])])
+    document = structure_document(system)
+    @test only(document["spanwise_stations"]["data"]) == ["flap", nothing, []]
+    reloaded = from_json(to_json(system), to_json(system_document(system)))
+    @test structure_document(reloaded) == document
+    @test isnothing(only(reloaded.spanwise_stations).wing)
+end
+
 @testset "a block's rows are found by their name as well as their position" begin
     system = small_system()
     @test system.points[:kite] === system.points["kite"] === system.points[2]
