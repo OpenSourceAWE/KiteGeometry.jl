@@ -1132,7 +1132,7 @@ and the other bodies sharing a tube-connected group with the bodies those points
 """
 function particle_wing_parts(draft, wing, members)
     point_idxs = Set{Int}()
-    for station in draft.spanwise_stations
+    for station in wing_stations(draft)
         station.wing == wing && union!(point_idxs, station.points)
     end
     isempty(point_idxs) && union!(point_idxs, members)

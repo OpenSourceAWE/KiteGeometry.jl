@@ -17,7 +17,7 @@ SPDX-License-Identifier: MIT
 
 ### Added
 
-- A spanwise station may belong to no wing: its `wing` is `nothing` in a definition and null in a structure document, as awesIO allows, and its `points` may be empty. An authoring `stations` table gives one with a `wing` column left null in a row no wing's `stations` lists. Placement and a wing's mass ignore such a station, so its points are not the wings' nodes. `SpanwiseStation`'s `wing` field may be `nothing`.
+- A spanwise station may belong to no wing: its `wing` is `nothing` in a definition and null in a structure document, as awesIO allows, and its `points` may be empty. An authoring `stations` table gives one with a `wing` column left null in a row no wing's `stations` lists. Placement and a wing's mass ignore such a station, so its points are not the wings' nodes.
 - `system_document` writes a system document from one definition or the union by name of several, refusing one name with two different values; `system_sha` gives a file's hash; `structure_document` takes `description`, `note`, `system` and `system_sha`; `to_yaml` and `to_json` take a document.
 - `SystemMetadata` and `SystemTether`, generated from the system schema. `load_authoring` gives each tether a winch holds a `SystemTether`: its ends, its length and the diameter and material its segments share.
 
