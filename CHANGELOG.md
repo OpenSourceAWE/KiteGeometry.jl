@@ -10,9 +10,16 @@ SPDX-License-Identifier: MIT
 ### Added
 
 - `Rows` holds any elements named by a `Symbol`, not only a block's rows, a name lookup takes constant time without scanning, and `KiteGeometry.row_index(rows, name)` gives the position of a name.
+- `system_document` writes a system document from one definition or the union by name of several, refusing one name with two different values; `system_sha` gives a file's hash; `structure_document` takes `description`, `note`, `system` and `system_sha`; `to_yaml` and `to_json` take a document.
+- `SystemMetadata` and `SystemTether`, generated from the system schema. `load_authoring` gives each tether a winch holds a `SystemTether`: its ends, its length and the diameter and material its segments share.
 
 ### Changed
 
+- BREAKING: follows the awesIO schema in which the system file owns the design. A structure document has no `materials` block and its `metadata` requires `system` and `system_sha`. `load_structure` reads a structure with the system file it names and refuses a `system_sha` that is not that file's hash. `SystemDefinition(document, system_document)` refuses a tether the system does not list or whose segments disagree with its material, diameter or length.
+- BREAKING: `SystemDefinition(document, system_document)`, `from_yaml(text, system_text)`, `from_json(text, system_text)` and `KiteGeometry.definition(topology, system)` take the system beside the structure. A log saved with a definition also carries its system under the key `system`, and `KiteGeometry.definition` refuses a log without one.
+- BREAKING: `SystemDefinition` has the fields `system_metadata`, `system_tethers` and `system_extras`, and its materials are the system's. `Metadata` has the fields `system` and `system_sha`.
+- `to_yaml` writes YAML 1.2 that 1.1 readers read the same: a unit of `-` is quoted, and every float has its point and its exponent's sign. `to_yaml(definition)` refuses a definition whose metadata names no system file.
+- BREAKING: a structure document lists only the tethers its system lists. `load_authoring` makes a system tether of each tether a winch holds, so another row of its `tethers` block is a bridle line: its segments are written and it stays in the definition's `tethers`, but it is not read back as a tether.
 - BREAKING: A row's `name` and a `Transform`'s `name` are constant: `point.name = :x` errors, and a row is renamed by replacing it, `system.points[2] = Point(; name="x", ...)`. `Rows` refuses an element whose name is not a `Symbol` or can change in place.
 - BREAKING: `Rows` refuses the write that would give two rows one name, rather than a later lookup of that name, so a reordering in place such as `reverse!(rows)` is refused; `Rows(reverse(rows))` builds the reordered rows. `Rows(vector)` holds a copy of `vector`, and `resize!` of rows is gone: rows are added by `push!`, `insert!` or `append!`.
 - BREAKING: `load_authoring` no longer takes `place`; it always returns the placed definition.

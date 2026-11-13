@@ -1176,9 +1176,45 @@ function placed_definition(placement::Placement, design::Pose)
         mass_centre = placement.body_pos[index] + R * placement.com_offset[index]
         with_fields(body; pos_ENU=mass_centre, Q_KA2ENU=rotation_matrix_to_quaternion(R))
     end
-    placed = SystemDefinition(metadata, system.materials, points, segments,
-                              system.spanwise_stations, system.pulleys, system.tethers,
-                              system.winches, system.wings,
-                              system.canopy_faces, bodies, system.tubes, system.extras)
+    system_tethers = [design_tether(system, tether, segments)
+                      for tether in winch_tethers(system)]
+    placed = SystemDefinition(metadata, system.system_metadata, system.materials,
+                              system_tethers, points, segments, system.spanwise_stations,
+                              system.pulleys, system.tethers, system.winches, system.wings,
+                              system.canopy_faces, bodies, system.tubes, system.extras,
+                              system.system_extras)
     return carry_wings!(placed, design, Pose(placement))
+end
+
+"""The tethers of `system` a winch holds, the rest being lines of the bridle."""
+function winch_tethers(system)
+    held = Set(row_number(tether, system.tethers, :tethers)
+               for winch in system.winches for tether in winch.tethers)
+    return [tether for (index, tether) in enumerate(system.tethers) if index in held]
+end
+
+"""The system's tether of `tether` of `system` made of `segments`: its ends as its joints,
+the sum of its rest lengths as its length, and the diameter and material its segments share,
+`nothing` where they differ."""
+function design_tether(system, tether, segments)
+    rows = [segments[segment] for segment in tether.segments]
+    joints = OrderedDict{String, Any}(
+        "upper_tether_joint" => tether_joint(tether.start_point, system),
+        "lower_tether_joint" => tether_joint(tether.end_point, system))
+    return SystemTether(; name=tether.name, type="non_conductive_tether", version=1.0,
+                        joints,
+                        length=sum(row -> row.rest_length, rows; init=0.0),
+                        diameter=shared_value(row -> row.diameter, rows),
+                        material=shared_value(row -> row.material, rows))
+end
+
+"""The joint of a system tether at `point` of `system`."""
+function tether_joint(point, system)
+    return OrderedDict{String, Any}("id" => document_value(point, :points, system))
+end
+
+"""`field` of `rows` where they all hold one value, else `nothing`."""
+function shared_value(field, rows)
+    values = unique(field.(rows))
+    return length(values) == 1 ? only(values) : nothing
 end

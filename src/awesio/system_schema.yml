@@ -1,0 +1,788 @@
+$schema: http://json-schema.org/draft-07/schema#
+$id: system_schema
+title: Airborne Wind Energy System Schema
+description: >
+  Complete schema for AWE system configurations with type-dependent validation.
+  Validates wing, bridle, control system, tether, and ground station components.
+
+  A system file owns what the system is: its types, design parameters, materials,
+  strength limits and assembly, and a quantity that is one value for a whole
+  component, such as a tether's diameter and length. How it is discretised is a
+  structure file's, which names the system file it discretises. A file says what
+  its writer knows, so one a tool writes from its model may hold only the
+  materials and the tethers.
+
+type: object
+required:
+  - metadata
+  - materials
+  - components
+
+properties:
+  metadata:
+    type: object
+    required:
+      - name
+      - description
+      - note
+      - awesIO_version
+      - schema
+    properties:
+      name:
+        type: string
+      description:
+        type: string
+      note:
+        type: string
+      awesIO_version:
+        type: string
+      schema:
+        type: string
+        enum: [system_schema.yml]
+    additionalProperties: false
+
+  materials:
+    description: >
+      What the components and their structures are made of. A tether, a wing, a
+      bridle, a structure's segment, tube and canopy all name a material here.
+    type: array
+    items:
+      $ref: "#/definitions/material"
+
+  assembly:
+    type: object
+    required:
+      - connectivity_matrix
+    properties:
+      connectivity_matrix:
+        type: array
+        items:
+          type: array
+          items:
+            type: string
+          minItems: 2
+          maxItems: 2
+    additionalProperties: false
+
+  components:
+    type: object
+    required:
+      - tethers
+    properties:
+      kites:
+        type: array
+        items:
+          $ref: "#/definitions/kite"
+      tethers:
+        type: array
+        items:
+          $ref: "#/definitions/tether"
+      ground_station:
+        $ref: "#/definitions/ground_station"
+    additionalProperties: false
+
+additionalProperties: true
+
+definitions:
+  # ============================================================================
+  # MATERIALS
+  # ============================================================================
+  material:
+    description: >
+      A stiffness `law` and that law's `parameters`, which fix how the material
+      deforms and what it weighs. The laws tools share are defined below as
+      `<law>_parameters`, which fix their parameters' names and units and the
+      curve they describe. Any other law is free: it names a model its readers
+      implement, and that model fixes its parameters. A reader that does not
+      implement a material's law cannot build the elements naming it.
+    type: object
+    required:
+      - name
+      - law
+      - parameters
+    properties:
+      name:
+        $ref: "#/definitions/material_name"
+      law:
+        description: >
+          Name of the stiffness law: `linear`, `membrane` or `breukels2011` as
+          defined below, or any law its readers implement.
+        type: string
+        minLength: 1
+      parameters:
+        description: The law's parameters, by name, in the units the law gives them.
+        type: object
+    allOf:
+      - if:
+          properties:
+            law:
+              const: linear
+        then:
+          properties:
+            parameters:
+              $ref: "#/definitions/linear_parameters"
+      - if:
+          properties:
+            law:
+              const: membrane
+        then:
+          properties:
+            parameters:
+              $ref: "#/definitions/membrane_parameters"
+      - if:
+          properties:
+            law:
+              const: breukels2011
+        then:
+          properties:
+            parameters:
+              $ref: "#/definitions/breukels2011_parameters"
+    additionalProperties: false
+
+  material_name:
+    description: Unique name of a material, by which this file and its structures name it.
+    type: string
+    minLength: 1
+
+  optional_material_name:
+    description: Name of a material of this file, or null where none is stated.
+    oneOf:
+      - $ref: "#/definitions/material_name"
+      - type: "null"
+
+  # ============================================================================
+  # STIFFNESS LAWS
+  # ============================================================================
+  linear_parameters:
+    description: >
+      `linear`: a line of cross-section A = π·diameter²/4 carries the axial force
+      youngs_modulus·A·ε at strain ε = (length − rest_length)/rest_length.
+    type: object
+    required:
+      - density
+      - youngs_modulus
+    properties:
+      density:
+        description: Mass per volume of the line [kg/m^3].
+        type: number
+        minimum: 0
+      youngs_modulus:
+        description: Young's modulus of the line [Pa].
+        type: number
+        minimum: 0
+      breaking_strength:
+        description: Force at which the line breaks [N].
+        type: number
+      min_breaking_strength:
+        description: Least force at which the line breaks [N].
+        type: number
+      shear_modulus:
+        description: Shear modulus of the line [Pa].
+        type: number
+      breaking_strain:
+        description: Strain at which the line breaks [-].
+        type: number
+      poisson_ratio:
+        description: Poisson's ratio of the line [-].
+        type: number
+    additionalProperties: false
+
+  membrane_parameters:
+    description: >
+      `membrane`: a fabric carries, per unit width, the in-plane force
+      membrane_stiffness·ε at strain ε.
+    type: object
+    required:
+      - areal_density
+      - membrane_stiffness
+    properties:
+      areal_density:
+        description: Mass per area of the fabric [kg/m^2].
+        type: number
+        minimum: 0
+      membrane_stiffness:
+        description: Young's modulus times thickness, E·t [N/m].
+        type: number
+        minimum: 0
+    additionalProperties: false
+
+  breukels2011_parameters:
+    description: >
+      `breukels2011`: the correlations Breukels (2011, TU Delft PhD thesis) fitted
+      for an inflated tube as a 1 m cantilever. C1…C19 are fitted for the radius
+      r = diameter/2 in m and the pressure p in bar, so a reader divides the
+      tube's pressure [Pa] by 1e5. Loaded at its tip, it deflects δ [m] under the
+      force F·(1 − exp(−(S/F)·δ)) [N], with F = (C1·r + C2)·p² + C3·r³ + C4 and
+      S = (C5·r⁵ + C6)·p + C7·r + C8, until it collapses at
+      δ = (C9·r⁴ + C10)·p + C11·r² + C12. Twisted at rate κ [1/m], it carries
+      the moment c1·atan(c2·κ) [N·m], with c1 = (C13·r + C14)·p + C15·r + C16 and
+      c2 = C17·r⁴·ln(p) + C18·r³ + C19. How a reader derives its element's
+      rigidities from these curves is its own model.
+    type: object
+    required: [C1, C2, C3, C4, C5, C6, C7, C8, C9, C10, C11, C12, C13, C14, C15,
+               C16, C17, C18, C19]
+    additionalProperties:
+      type: number
+    propertyNames:
+      pattern: '^C([1-9]|1[0-9])$'
+
+  # ============================================================================
+  # JOINTS
+  # ============================================================================
+  joints:
+    type: object
+    additionalProperties:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+      additionalProperties: false
+
+  # ============================================================================
+  # KITE - Contains wing, bridle, and control system
+  # ============================================================================
+  kite:
+    type: object
+    required:
+      - name
+      - type
+      - version
+      - joints
+      - wing
+    properties:
+      name:
+        type: string
+      type:
+        type: string
+        enum: [soft_kite_kcu, fixed_wing_gc]
+      version:
+        type: [string, number]
+      joints:
+        $ref: "#/definitions/joints"
+      wing:
+        $ref: "#/definitions/wing"
+      bridle:
+        $ref: "#/definitions/bridle"
+      control_system:
+        $ref: "#/definitions/control_system"
+    additionalProperties: false
+
+  # ============================================================================
+  # WING - Type-dependent validation
+  # ============================================================================
+  wing:
+    type: object
+    required:
+      - name
+      - type
+      - version
+      - structure
+    properties:
+      name:
+        type: string
+      type:
+        type: string
+        enum: [LEI_soft_kite, ram_air_soft_kite, fixed_wing]
+      version:
+        type: [string, number]
+      structure:
+        type: object
+    allOf:
+      # LEI soft kite
+      - if:
+          properties:
+            type:
+              const: LEI_soft_kite
+        then:
+          properties:
+            structure:
+              type: object
+              required:
+                - projected_surface_area
+                - mass
+              properties:
+                projected_surface_area:
+                  type: number
+                  minimum: 0
+                span:
+                  type: number
+                  minimum: 0
+                aspect_ratio:
+                  type: number
+                  minimum: 0
+                mass:
+                  type: number
+                  minimum: 0
+                flattening_factor:
+                  type: number
+                  minimum: 0
+                  maximum: 1
+                wing_sections:
+                  type: object
+                material:
+                  $ref: "#/definitions/optional_material_name"
+              additionalProperties: true
+      
+      # Ram air soft kite - similar to LEI
+      - if:
+          properties:
+            type:
+              const: ram_air_soft_kite
+        then:
+          properties:
+            structure:
+              type: object
+              required:
+                - projected_surface_area
+                - span
+                - aspect_ratio
+                - mass
+              properties:
+                projected_surface_area:
+                  type: number
+                  minimum: 0
+                span:
+                  type: number
+                  minimum: 0
+                aspect_ratio:
+                  type: number
+                  minimum: 0
+                mass:
+                  type: number
+                  minimum: 0
+                flattening_factor:
+                  type: number
+                  minimum: 0
+                  maximum: 1
+                wing_sections:
+                  type: object
+                material:
+                  $ref: "#/definitions/optional_material_name"
+              additionalProperties: true
+      
+      # Fixed wing aircraft
+      - if:
+          properties:
+            type:
+              const: fixed_wing
+        then:
+          properties:
+            structure:
+              type: object
+              required:
+                - projected_surface_area
+                - mass
+              properties:
+                projected_surface_area:
+                  type: number
+                  minimum: 0
+                wing_area:
+                  type: number
+                  minimum: 0
+                span:
+                  type: number
+                  minimum: 0
+                aspect_ratio:
+                  type: number
+                  minimum: 0
+                mass:
+                  type: number
+                  minimum: 0
+                chord:
+                  type: number
+                  minimum: 0
+                taper_ratio:
+                  type: number
+                dihedral_angle:
+                  type: number
+                  description: >
+                    Angle of the line from wing root to tip above the _KA x-y plane
+                    [deg], positive with the tips up (+z).
+                sweep_angle:
+                  type: number
+                  description: >
+                    Angle of the line from the root's to the tip's leading edge,
+                    projected on the _KA x-y plane, from the y axis [deg], positive
+                    with the tips aft (+x).
+                wing_sections:
+                  type: object
+                material:
+                  $ref: "#/definitions/optional_material_name"
+              additionalProperties: true
+    additionalProperties: false
+
+  # ============================================================================
+  # BRIDLE - Type-dependent validation
+  # ============================================================================
+  bridle:
+    type: object
+    required:
+      - name
+      - type
+      - version
+      - structure
+    properties:
+      name:
+        type: string
+      type:
+        type: string
+        enum: [LEI_soft_kite_bridle]
+      version:
+        type: [string, number]
+      structure:
+        type: object
+        required:
+          - mass
+        properties:
+          mass:
+            type: number
+            minimum: 0
+          bridle_nodes:
+            type: object
+          bridle_lines:
+            type: object
+          bridle_connections:
+            type: object
+          material:
+            $ref: "#/definitions/optional_material_name"
+        additionalProperties: true
+    additionalProperties: false
+
+  # ============================================================================
+  # CONTROL SYSTEM - Type-dependent validation
+  # ============================================================================
+  control_system:
+    type: object
+    required:
+      - name
+      - type
+      - version
+      - structure
+    properties:
+      name:
+        type: string
+      type:
+        type: string
+        enum: [kite_control_unit]
+      version:
+        type: [string, number]
+      structure:
+        type: object
+        required:
+          - mass
+        properties:
+          mass:
+            type: number
+            minimum: 0
+          frontal_area:
+            type: number
+            minimum: 0
+        additionalProperties: true
+      actuators:
+        type: object
+        properties:
+          max_steering_line_speed:
+            type: number
+            minimum: 0
+          max_depower_line_speed:
+            type: number
+            minimum: 0
+          max_steering_actuator_force:
+            type: number
+            minimum: 0
+          max_depower_actuator_force:
+            type: number
+            minimum: 0
+        additionalProperties: true
+    additionalProperties: false
+
+  # ============================================================================
+  # TETHER - Type-dependent validation
+  # ============================================================================
+  tether:
+    type: object
+    required:
+      - name
+      - type
+      - version
+      - joints
+      - structure
+    properties:
+      name:
+        type: string
+      type:
+        type: string
+        enum: [non_conductive_tether, conductive_tether]
+      version:
+        type: [string, number]
+      joints:
+        $ref: "#/definitions/joints"
+      structure:
+        type: object
+    allOf:
+      # Non-conductive tether
+      - if:
+          properties:
+            type:
+              object: non_conductive_tether
+        then:
+          properties:
+            structure:
+              type: object
+              required:
+                - length
+              properties:
+                length:
+                  type: number
+                  minimum: 0
+                diameter:
+                  type: number
+                  minimum: 0
+                max_tether_force:
+                  type: number
+                  minimum: 0
+                conductive:
+                  type: boolean
+                material:
+                  $ref: "#/definitions/material_name"
+              additionalProperties: false
+      
+      - if:
+          properties:
+            type:
+              object: conductive_tether
+        then:
+          properties:
+            structure:
+              type: object
+              required:
+                - length
+              properties:
+                length:
+                  type: number
+                  minimum: 0
+                diameter:
+                  type: number
+                  minimum: 0
+                max_tether_force:
+                  type: number
+                  minimum: 0
+                conductive:
+                  type: boolean
+                material:
+                  $ref: "#/definitions/material_name"
+              additionalProperties: false
+      
+  # ============================================================================
+  # DRUM OBJECT
+  # ============================================================================
+  drum_object:
+    type: object
+    required:
+      - type
+    properties:
+      name:
+        type: string
+      type:
+        type: string
+        const: electric_winch
+      min_tether_speed:
+        type: number
+      max_tether_speed:
+        type: number
+        minimum: 0
+      max_tether_force:
+        type: number
+        minimum: 0
+      max_winch_acceleration:
+        type: number
+        minimum: 0
+      drum_diameter:
+        type: number
+        minimum: 0
+      drum_width:
+        type: number
+        minimum: 0
+    additionalProperties: false
+
+  # ============================================================================
+  # GENERATOR OBJECT
+  # ============================================================================
+  generator_object:
+    type: object
+    required:
+      - type
+    properties:
+      name:
+        type: string
+      type:
+        type: string
+        enum: [permanent_magnet_synchronous, induction, dc]
+      rated_power:
+        type: number
+        minimum: 0
+      max_power:
+        type: number
+        minimum: 0
+      rated_speed:
+        type: number
+        minimum: 0
+      efficiency:
+        type: number
+        minimum: 0
+        maximum: 1
+      voltage:
+        type: number
+        minimum: 0
+    additionalProperties: false
+
+  # ============================================================================
+  # GEARBOX OBJECT
+  # ============================================================================
+  gearbox_object:
+    type: object
+    required:
+      - type
+    properties:
+      name:
+        type: string
+      type:
+        type: string
+        enum: [planetary, helical, bevel]
+      gear_ratio:
+        type: number
+        minimum: 0
+      efficiency:
+        type: number
+        minimum: 0
+        maximum: 1
+    additionalProperties: false
+
+  # ============================================================================
+  # STORAGE OBJECT
+  # ============================================================================
+  storage_object:
+    type: object
+    required:
+      - type
+    properties:
+      name:
+        type: string
+      type:
+        type: string
+        enum: [battery_bank, flywheel, capacitor_bank]
+      capacity:
+        type: number
+        minimum: 0
+      max_charge_rate:
+        type: number
+        minimum: 0
+      max_discharge_rate:
+        type: number
+        minimum: 0
+      efficiency:
+        type: number
+        minimum: 0
+        maximum: 1
+      state_of_charge_initial:
+        type: number
+        minimum: 0
+        maximum: 1
+    additionalProperties: false
+
+  # ============================================================================
+  # GROUND STATION - Type-dependent validation
+  # ============================================================================
+  ground_station:
+    type: object
+    required:
+      - name
+      - type
+      - version
+      - joints
+      - structure
+    properties:
+      name:
+        type: string
+      type:
+        type: string
+        enum: [pumping_ground_gen_station, rotary_ground_gen_station, fly_gen_station]
+      version:
+        type: [string, number]
+      joints:
+        $ref: "#/definitions/joints"
+      structure:
+        type: object
+        required:
+          - mass
+        properties:
+          mass:
+            type: number
+            minimum: 0
+          height:
+            type: number
+            minimum: 0
+        additionalProperties: false
+      drums:
+        type: array
+      generators:
+        type: array
+      gearboxes:
+        type: array
+      storages:
+        type: array
+    allOf:
+      # Pumping ground-gen station
+      - if:
+          properties:
+            type:
+              const: pumping_ground_gen_station
+        then:
+          properties:
+            drums:
+              type: array
+              items:
+                $ref: "#/definitions/drum_object"
+            generators:
+              type: array
+              items:
+                $ref: "#/definitions/generator_object"
+            gearboxes:
+              type: array
+              items:
+                $ref: "#/definitions/gearbox_object"
+            storages:
+              type: array
+              items:
+                $ref: "#/definitions/storage_object"
+      
+      # Rotary ground-gen station
+      - if:
+          properties:
+            type:
+              const: rotary_ground_gen_station
+        then:
+          properties:
+            generators:
+              type: array
+              items:
+                $ref: "#/definitions/generator_object"
+            gearboxes:
+              type: array
+              items:
+                $ref: "#/definitions/gearbox_object"
+      
+      # Fly-gen station
+      - if:
+          properties:
+            type:
+              const: fly_gen_station
+        then:
+          properties:
+            storages:
+              type: array
+              items:
+                $ref: "#/definitions/storage_object"
+    additionalProperties: false
