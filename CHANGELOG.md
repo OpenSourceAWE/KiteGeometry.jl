@@ -5,6 +5,12 @@ SPDX-License-Identifier: MIT
 
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- BREAKING: `load_authoring` no longer takes `place`; it always returns the placed definition.
+
 ## KiteGeometry v0.4.0 2026-11-07
 
 ### Added
