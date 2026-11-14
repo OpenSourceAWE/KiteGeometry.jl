@@ -180,9 +180,8 @@ function turn!(pose, transform, base_pos)
     radial = radial_direction(transform)
     rotate_members!(pose, transform, base_pos, min_rotation(normalize(rel_pos), radial)...)
     isnothing(transform.body) && return nothing
-    # KiteUtils' heading turns the other way to ours
-    heading = -calc_heading(pose.body_R[transform.body], transform.elevation,
-                            transform.azimuth)
+    heading = calc_heading(pose.body_R[transform.body], transform.elevation,
+                           transform.azimuth)
     rotate_members!(pose, transform, base_pos, radial,
                     wrap2pi(transform.heading - heading))
     return nothing

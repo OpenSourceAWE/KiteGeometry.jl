@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: MIT
 
 using KiteGeometry: radial_direction
-using KiteUtils: KiteUtils, Settings, calc_heading, set_data_path
+using KiteUtils: KiteUtils, Settings, azimuth_east, calc_elevation, calc_heading,
+    set_data_path
 using LinearAlgebra: norm, normalize
 using YAML
 
@@ -41,8 +42,9 @@ end
 """Heading [rad] of the kite body of `pose`, in the sense of a transform's `heading`, in
 the tangential frame of where its origin stands from the KCU."""
 function kite_heading(pose)
-    x, y, z = pose.pos[7] - pose.pos[2]
-    return -calc_heading(pose.body_R[1], atan(z, hypot(x, y)), atan(y, x); respos=false)
+    rel_pos = pose.pos[7] - pose.pos[2]
+    return calc_heading(pose.body_R[1], calc_elevation(rel_pos), azimuth_east(rel_pos);
+                        respos=false)
 end
 
 """`data`, the chained system's YAML, with its kite tilted as [`tilt_kite!`](@ref)."""
