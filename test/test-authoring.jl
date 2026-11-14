@@ -27,16 +27,6 @@ struct SamPoint <: AbstractModel
     drag_coeff::Union{Nothing, Float64}
 end
 
-"""`SamPoint` with the tube a point rides."""
-struct RidingPoint <: AbstractModel
-    type::String
-    body_frame_damping::Float64
-    world_frame_damping::Float64
-    area::Float64
-    drag_coeff::Float64
-    tube::Union{Nothing, String}
-end
-
 """SAM's station columns."""
 struct SamStation <: AbstractModel
     type::String
@@ -364,10 +354,18 @@ function add_timoshenko_tube!(data)
     return data
 end
 
-"""`data` with a `tube` column, every point riding `strut`."""
-function add_riders!(data)
-    push!(data["points"]["headers"], "tube")
-    foreach(row -> push!(row, "strut"), data["points"]["data"])
+"""`data` with a `tube` column, every `BODY_STATIC` point riding `strut`, in place of its
+body unless `keep_body`."""
+function add_riders!(data; keep_body=false)
+    headers = data["points"]["headers"]
+    type_column, body_column = indexin(("type", "body_idx"), headers)
+    for row in data["points"]["data"]
+        append!(row, fill(nothing, length(headers) - length(row)))
+        rides = row[type_column] == "BODY_STATIC"
+        rides && !keep_body && (row[body_column] = nothing)
+        push!(row, rides ? "strut" : nothing)
+    end
+    push!(headers, "tube")
     return data
 end
 
@@ -389,13 +387,14 @@ end
     point_transforms = Union{Nothing, NameRef}[nothing, nothing]
     materials = KiteGeometry.MaterialTable(Material[], Dict{String, Any}())
     tether = KiteGeometry.expand_tether!(points, segments, point_transforms, :main, :ground,
-                                         :kite, 3, (; stretched_length=33.0),
-                                         Settings("system.yaml"), materials;
+                                         :kite, 3, Settings("system.yaml"), materials;
+                                         init=(; init_stretched_length=33.0),
                                          model=KiteGeometry.added_row_model(:tethers),
                                          segment_model=SamSpring(5.0, nothing, nothing,
                                                                  nothing),
                                          unit_stiffness=force_law)
     @test tether.segments == [:main_seg_1, :main_seg_2, :main_seg_3]
+    @test tether.init_stretched_length == 33.0
     @test length(segments) == 3
     material = only(materials.rows)
     @test material.law == "unit_stiffness"
@@ -441,30 +440,25 @@ end
     @test_throws "tubes columns model, EI, GJ, shear_coeff" without_sam_models(:tubes) do
         load_edited(add_timoshenko_tube!)
     end
-    @test_throws "points columns tube" load_edited(add_riders!)
     @test_throws "points columns colour" load_edited() do data
         push!(data["points"]["headers"], "colour")
         foreach(row -> push!(row, "red"), data["points"]["data"])
     end
 end
 
-@testset "a point rides a tube where its default model reads the tube column" begin
-    system = without_sam_models(:points) do
-        register_model!(:points, "riding_point", RidingPoint, (POINT_UNITS..., "-");
-                        default=true)
-        try
-            return load_edited(data -> add_riders!(add_timoshenko_tube!(data)))
-        finally
-            unregister_model!(:points, "riding_point")
-        end
+@testset "a point names the tube it rides, not a body as well" begin
+    system = load_edited(data -> add_riders!(add_timoshenko_tube!(data)))
+    @test system.points[1].tube == 1
+    @test isnothing(system.points[1].body)
+    @test_throws "rides a `body` or a `tube`, not both" load_edited() do data
+        add_riders!(add_timoshenko_tube!(data); keep_body=true)
     end
-    @test system.points[1].tube == "strut"
 end
 
 @testset "a block takes one default model" begin
     @test_throws "points already reads the default model sam_point" register_model!(
-        :points, "riding_point", RidingPoint, (POINT_UNITS..., "-"); default=true)
-    @test !haskey(KiteGeometry.MODELS, (:points, "riding_point"))
+        :points, "other_point", SamPoint, POINT_UNITS; default=true)
+    @test !haskey(KiteGeometry.MODELS, (:points, "other_point"))
 end
 
 @testset "a transform with both a base_pos and a base_transform is refused" begin

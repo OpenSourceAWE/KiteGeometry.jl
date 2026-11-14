@@ -176,12 +176,12 @@ properties:
               - const: fixed
                 description: >
                   True where the point is held in the world, false where it is
-                  free or moves with its `body`.
+                  free or moves with its `body` or `tube`.
               - const: body
                 description: >
                   The rigid body the point is fixed in, moving with it and
-                  passing its force and moment on to it; null for a point of its
-                  own.
+                  passing its force and moment on to it; null for a point on no
+                  body.
               - const: pos_ENU
                 description: >
                   Position in the world.
@@ -213,6 +213,14 @@ properties:
         unit: kg
         value:
           $ref: "#/definitions/non_negative"
+      tube:
+        description: >
+          The tube the point rides, moving with the tube's two bodies and passing
+          its force on to them; null for a point that does not. A point riding a
+          tube is on no body and not held in the world.
+        unit: "-"
+        value:
+          $ref: "#/definitions/optional_name"
 
   segments:
     description: Straight elastic elements between two points.
@@ -365,6 +373,27 @@ properties:
                 - $ref: "#/definitions/component_name"
                 - $ref: "#/definitions/name_list"
               minItems: 4
+    optionalColumns:
+      init_stretched_length:
+        description: >
+          Length the tether is placed at, moving its end that is not held in
+          the world along it, with what hangs from that end.
+        unit: m
+        value:
+          $ref: "#/definitions/length"
+      init_tether_force:
+        description: >
+          Tension the placed tether carries, which sets its segments' rest
+          length from its placed length.
+        unit: N
+        value:
+          $ref: "#/definitions/non_negative"
+      init_stretch_frac:
+        description: >
+          Its segments' rest length as a fraction of the tether's placed length.
+        unit: "-"
+        value:
+          $ref: "#/definitions/non_negative"
 
   winches:
     allOf:
@@ -450,6 +479,13 @@ properties:
         description: >
           The material every face of the wing's canopy is made of, or null where
           the wing has no canopy.
+        unit: "-"
+        value:
+          $ref: "#/definitions/optional_name"
+      body:
+        description: >
+          The rigid body the wing's KA frame moves with, or null where the wing
+          is on no body.
         unit: "-"
         value:
           $ref: "#/definitions/optional_name"
@@ -541,6 +577,13 @@ properties:
         unit: kg*m^2
         value:
           $ref: "#/definitions/matrix3"
+      fixed:
+        description: >
+          True where the body is held in the world and nothing moves it.
+        unit: "-"
+        value:
+          type: boolean
+          default: false
 
   tubes:
     description: >
