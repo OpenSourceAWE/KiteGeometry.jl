@@ -3,17 +3,35 @@
 
 const IDENTITY_QUATERNION = SVector(1.0, 0.0, 0.0, 0.0)
 
+"""Rows, models and metadata of one type are equal where every field is."""
+const ByValue = Union{Component, AbstractModel, Metadata}
+function Base.:(==)(a::T, b::T) where {T <: ByValue}
+    return all(getfield(a, field) == getfield(b, field) for field in fieldnames(T))
+end
+function Base.hash(value::ByValue, seed::UInt)
+    code = hash(typeof(value), seed)
+    for field in fieldnames(typeof(value))
+        code = hash(getfield(value, field), code)
+    end
+    return code
+end
+
 """
     defaults(T)
 
 The keyword arguments a `T(; kwargs...)` constructor fills in when they are not given: every
-optional column unset, `default_values(T)`, and no model.
+optional column its schema default or unset, `default_values(T)`, and no model.
 """
 function defaults(T::Type{<:Component})
     block = findfirst(==(Base.typename(T).wrapper), BLOCKS)
-    unset = NamedTuple(field => nothing for field in keys(OPTIONAL_UNITS[block]))
-    return (; unset..., default_values(T)..., model=NoModel())
+    optional = NamedTuple(field => optional_default(block, field)
+                          for field in keys(OPTIONAL_UNITS[block]))
+    return (; optional..., default_values(T)..., model=NoModel())
 end
+
+"""The value the optional column `field` of `block` has where it is left out: the schema's
+default, else `nothing`."""
+optional_default(block, field) = get(OPTIONAL_DEFAULTS[block], field, nothing)
 
 """The required columns of `T` its constructor fills in: a free point of its own, and the
 identity rotation of a wing's or a body's frame."""
