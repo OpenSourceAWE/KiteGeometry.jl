@@ -972,7 +972,7 @@ function wing_origin(authored, point_names)
 end
 
 """Index of each component of `block` of `system` by name."""
-indices_of(system, block) = name_indices(getfield(system, block), block)
+indices_of(system, block) = name_indices(getfield(system, block))
 
 """`ref` resolved into the indices `names`, 0 for `nothing`."""
 resolve_index(::Nothing, names, block) = 0

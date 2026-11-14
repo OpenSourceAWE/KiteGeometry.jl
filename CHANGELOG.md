@@ -11,9 +11,12 @@ SPDX-License-Identifier: MIT
 
 - `place!(system, transforms; ignore_l0)` places any definition from where it stands, working on its own rows: tether lengths, rest lengths, pulleys, transforms, body points and wing frames, whether it was loaded, built in Julia, or a transform changed. `KiteGeometry.line_segment` is public, making one segment as the loader does for a definition built in Julia.
 - Columns from awesIO: a tether's `init_stretched_length`, `init_tether_force` and `init_stretch_frac`, which `place!` places it by; a body's `fixed`, true for a body held in the world; a point's `tube`, the tube it rides between its two bodies; and a wing's `body`, the body its KA frame moves with. `load_authoring` fills them from the authoring YAML.
+- `Rows` holds any elements named by a `Symbol`, not only a block's rows, a name lookup takes constant time without scanning, and `KiteGeometry.row_index(rows, name)` gives the position of a name.
 
 ### Changed
 
+- BREAKING: A row's `name` and a `Transform`'s `name` are constant: `point.name = :x` errors, and a row is renamed by replacing it, `system.points[2] = Point(; name="x", ...)`. `Rows` refuses an element whose name is not a `Symbol` or can change in place.
+- BREAKING: `Rows` refuses the write that would give two rows one name, rather than a later lookup of that name, so a reordering in place such as `reverse!(rows)` is refused; `Rows(reverse(rows))` builds the reordered rows. `Rows(vector)` holds a copy of `vector`, and `resize!` of rows is gone: rows are added by `push!`, `insert!` or `append!`.
 - BREAKING: `load_authoring` no longer takes `place`; it always returns the placed definition.
 - BREAKING: `place!(system, transforms)` is the whole placement rather than the transforms alone. A tether with no `init_*` column keeps its rest lengths instead of having them shared equally over its placed length, a tether's rest length is shared over its segments in proportion to their rest lengths rather than equally, and a body transform with no `rot_point` turns the body's centre of mass rather than its origin.
 - BREAKING: `Pose(system)` reads and writes the definition's rows rather than copying them; `copy` it for a snapshot.

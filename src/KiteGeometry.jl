@@ -30,7 +30,7 @@ export NameRef, AbstractModel, NoModel, register_model!, model_type, model_colum
 export load_structure, load_authoring, structure_document, connectivity_sha
 export from_yaml, to_yaml, from_json, to_json
 public definition, unit_stiffness, resolve_material, expand_tether!, line_segment,
-       MaterialTable
+       MaterialTable, row_index
 
 """
     NameRef
