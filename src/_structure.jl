@@ -37,7 +37,7 @@ The `metadata` block of a structure document.
 - `system_sha::String`: Lowercase hex SHA-256 of the system file's bytes as they stand on
   disk, so a structure is never read with a system other than the one it discretises.
 """
-struct Metadata
+mutable struct Metadata
     name::String
     description::String
     note::String
@@ -60,7 +60,7 @@ The `metadata` block of a system document.
 - `awesIO_version::String`
 - `schema::String`
 """
-struct SystemMetadata
+mutable struct SystemMetadata
     name::String
     description::String
     note::String
@@ -130,12 +130,15 @@ A row of the `points` block. Mass points.
 - `name::Symbol`: Unique name of the point. A writer whose geometry is index-keyed writes
   the index as a string, "1" upwards.
 - `fixed::Bool`: True where the point is held in the world, false where it is free or moves
-  with its `body`.
+  with its `body` or `tube`.
 - `body::Union{Nothing, NameRef}`: The rigid body the point is fixed in, moving with it and
-  passing its force and moment on to it; null for a point of its own.
+  passing its force and moment on to it; null for a point on no body.
 - `pos_ENU::MVector{3, Float64}` [m]: Position in the world.
 - `extra_mass::Union{Nothing, Float64}` [kg]: Optional. Mass the point carries beyond its
   segments and canopy faces.
+- `tube::Union{Nothing, NameRef}`: Optional. The tube the point rides, moving with the
+  tube's two bodies and passing its force on to them; null for a point that does not. A
+  point riding a tube is on no body and not held in the world.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct Point{M <: AbstractModel} <: Component
@@ -144,6 +147,7 @@ mutable struct Point{M <: AbstractModel} <: Component
     body::Union{Nothing, NameRef}
     pos_ENU::MVector{3, Float64}
     extra_mass::Union{Nothing, Float64}
+    tube::Union{Nothing, NameRef}
     model::M
 end
 
@@ -220,6 +224,13 @@ this file alone.
 - `end_point::NameRef`: The point the tether ends at.
 - `segments::Vector{NameRef}`: The tether's segments, in order from `start_point` to
   `end_point`.
+- `init_stretched_length::Union{Nothing, Float64}` [m]: Optional. Length the tether is
+  placed at, moving its end that is not held in the world along it, with what hangs from
+  that end.
+- `init_tether_force::Union{Nothing, Float64}` [N]: Optional. Tension the placed tether
+  carries, which sets its segments' rest length from its placed length.
+- `init_stretch_frac::Union{Nothing, Float64}` [-]: Optional. Its segments' rest length as a
+  fraction of the tether's placed length.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct Tether{M <: AbstractModel} <: Component
@@ -227,6 +238,9 @@ mutable struct Tether{M <: AbstractModel} <: Component
     start_point::NameRef
     end_point::NameRef
     segments::Vector{NameRef}
+    init_stretched_length::Union{Nothing, Float64}
+    init_tether_force::Union{Nothing, Float64}
+    init_stretch_frac::Union{Nothing, Float64}
     model::M
 end
 
@@ -264,6 +278,8 @@ most one canopy, meshed by the `canopy_faces` that name the wing.
 - `canopy_material::Union{Nothing, NameRef}`: Optional. The material of the system every
   face of the wing's canopy is made of, or null where the wing has no canopy. Left out where
   segments carry the canopy's stiffness and its faces only mesh the wing.
+- `body::Union{Nothing, NameRef}`: Optional. The rigid body the wing's KA frame moves with,
+  or null where the wing is on no body.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct Wing{M <: AbstractModel} <: Component
@@ -271,6 +287,7 @@ mutable struct Wing{M <: AbstractModel} <: Component
     pos_ENU::MVector{3, Float64}
     Q_KA2ENU::MVector{4, Float64}
     canopy_material::Union{Nothing, NameRef}
+    body::Union{Nothing, NameRef}
     model::M
 end
 
@@ -309,6 +326,7 @@ writer likes where it has no leading edge.
 - `extra_inertia_KA::Union{Nothing, MMatrix{3, 3, Float64, 9}}` [kg*m^2]: Optional. Inertia
   tensor of `extra_mass` about the body's origin, in its KA axes. Principal moments are the
   case where the KA axes are the principal axes and the tensor is diagonal.
+- `fixed::Bool`: Optional. True where the body is held in the world and nothing moves it.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct Body{M <: AbstractModel} <: Component
@@ -317,6 +335,7 @@ mutable struct Body{M <: AbstractModel} <: Component
     Q_KA2ENU::MVector{4, Float64}
     extra_mass::Union{Nothing, Float64}
     extra_inertia_KA::Union{Nothing, MMatrix{3, 3, Float64, 9}}
+    fixed::Bool
     model::M
 end
 
@@ -427,16 +446,32 @@ const OPTIONAL_UNITS = (
         conductive = "-",
         material = "-",
     ),
-    points = (extra_mass = "kg",),
+    points = (extra_mass = "kg", tube = "-"),
     segments = (rest_length = "m", diameter = "m", material = "-"),
     spanwise_stations = (;),
     pulleys = (;),
-    tethers = (;),
+    tethers = (init_stretched_length = "m", init_tether_force = "N", init_stretch_frac = "-"),
     winches = (gear_ratio = "-", drum_radius = "m"),
-    wings = (canopy_material = "-",),
+    wings = (canopy_material = "-", body = "-"),
     canopy_faces = (;),
-    bodies = (extra_mass = "kg", extra_inertia_KA = "kg*m^2"),
+    bodies = (extra_mass = "kg", extra_inertia_KA = "kg*m^2", fixed = "-"),
     tubes = (diameter = "m", pressure = "Pa", material = "-"),
+)
+
+"""The default of each optional column of each block that has one, by name."""
+const OPTIONAL_DEFAULTS = (
+    materials = (;),
+    system_tethers = (;),
+    points = (;),
+    segments = (;),
+    spanwise_stations = (;),
+    pulleys = (;),
+    tethers = (;),
+    winches = (;),
+    wings = (;),
+    canopy_faces = (;),
+    bodies = (fixed = false,),
+    tubes = (;),
 )
 
 """The blocks a structure document must carry."""

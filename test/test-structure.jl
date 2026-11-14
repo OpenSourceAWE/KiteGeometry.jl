@@ -663,8 +663,10 @@ end
 """The V3 beam structure with a system of one tether, `tether_name`, of `length`."""
 function narrowed_system(tether_name, length)
     system = load_structure(FIXTURE)
-    tether = KiteGeometry.with_fields(first(system.system_tethers);
-                                      name=Symbol(tether_name), length)
+    template = first(system.system_tethers)
+    fields = NamedTuple(field => getfield(template, field)
+                        for field in fieldnames(SystemTether))
+    tether = SystemTether(; merge(fields, (; name=Symbol(tether_name), length))...)
     empty!(system.system_tethers)
     push!(system.system_tethers, tether)
     return system

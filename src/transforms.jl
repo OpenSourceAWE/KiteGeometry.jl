@@ -83,19 +83,38 @@ end
 
 Base.copy(pose::Pose) = Pose(copy(pose.pos), copy(pose.body_pos), copy(pose.body_R))
 
+"""The `pos_ENU` [m] of each of `rows`, read from and written to the row."""
+struct Positions{R} <: AbstractVector{Vec3}
+    rows::R
+end
+Base.size(positions::Positions) = size(positions.rows)
+Base.getindex(positions::Positions, index::Int) = Vec3(positions.rows[index].pos_ENU)
+function Base.setindex!(positions::Positions, pos, index::Int)
+    positions.rows[index].pos_ENU .= pos
+    return positions
+end
+
+"""The rotation into the world of the frame of each of `rows`, read from and written to its
+`Q_KA2ENU`."""
+struct Rotations{R} <: AbstractVector{Mat3}
+    rows::R
+end
+Base.size(rotations::Rotations) = size(rotations.rows)
+Base.getindex(rotations::Rotations, index::Int) =
+    quaternion_to_rotation_matrix(rotations.rows[index].Q_KA2ENU)
+function Base.setindex!(rotations::Rotations, R, index::Int)
+    rotations.rows[index].Q_KA2ENU .= rotation_matrix_to_quaternion(R)
+    return rotations
+end
+
 """
     Pose(system::SystemDefinition)
 
-The pose `system` stands in, each body at the centre of its own mass.
+The pose `system` stands in, each body at the centre of its own mass, read from and written
+to its rows: moving the pose moves `system`, and `copy` takes a snapshot.
 """
-function Pose(system::SystemDefinition)
-    return Pose([Vec3(point.pos_ENU) for point in system.points],
-                [Vec3(body.pos_ENU) for body in system.bodies],
-                [quaternion_to_rotation_matrix(body.Q_KA2ENU) for body in system.bodies])
-end
-
-"""The `Pose` of `placement`, sharing its vectors."""
-Pose(placement::Placement) = Pose(placement.pos, placement.body_pos, placement.body_R)
+Pose(system::SystemDefinition) =
+    Pose(Positions(system.points), Positions(system.bodies), Rotations(system.bodies))
 
 # ==================== TANGENTIAL FRAME ==================== #
 
@@ -232,39 +251,18 @@ function place_transforms!(pose::Pose, design::Pose, transforms)
     return pose
 end
 
-"""
-    place!(system::SystemDefinition, transforms)
-
-Apply `transforms` ([`place_transforms!`](@ref)) to `system` where it stands, writing
-its points, its bodies and the wings sharing their names in place.
-"""
-function place!(system::SystemDefinition, transforms)
-    design = Pose(system)
-    pose = place_transforms!(copy(design), design, transforms)
-    carry_wings!(system, design, pose)
-    for (point, pos) in zip(system.points, pose.pos)
-        point.pos_ENU .= pos
-    end
-    for (body, pos, R) in zip(system.bodies, pose.body_pos, pose.body_R)
-        body.pos_ENU .= pos
-        body.Q_KA2ENU .= rotation_matrix_to_quaternion(R)
-    end
-    return system
-end
-
-"""Move the KA frame of each wing of `system` as the body sharing its name moved from
-`before` to `after`."""
-function carry_wings!(system, before::Pose, after::Pose)
-    bodies = name_indices(system.bodies)
-    for wing in system.wings
-        body = get(bodies, wing.name, nothing)
+"""Move the KA frame of each of `wings` on a body as that body moved from `before` to
+`after`."""
+function carry_wings!(wings, before::Pose, after::Pose)
+    for wing in wings
+        (; body) = wing
         isnothing(body) && continue
         R = after.body_R[body] * before.body_R[body]'
         wing.pos_ENU .= after.body_pos[body] + R * (wing.pos_ENU - before.body_pos[body])
         wing.Q_KA2ENU .= rotation_matrix_to_quaternion(
             R * quaternion_to_rotation_matrix(wing.Q_KA2ENU))
     end
-    return system
+    return wings
 end
 
 """

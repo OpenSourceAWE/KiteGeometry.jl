@@ -5,6 +5,7 @@
 const REFERENCES = Dict(
     (:system_tethers, :material) => :materials,
     (:points, :body) => :bodies,
+    (:points, :tube) => :tubes,
     (:segments, :points) => :points,
     (:segments, :material) => :materials,
     (:spanwise_stations, :wing) => :wings,
@@ -16,6 +17,7 @@ const REFERENCES = Dict(
     (:winches, :tethers) => :tethers,
     (:winches, :winch_point) => :points,
     (:wings, :canopy_material) => :materials,
+    (:wings, :body) => :bodies,
     (:canopy_faces, :wing) => :wings,
     (:canopy_faces, :points) => :points,
     (:tubes, :bodies) => :bodies,
@@ -55,7 +57,8 @@ end
 A system definition from its components, every reference resolved to the index of the
 component it names. Absent blocks are empty; `system_metadata` defaults to the name of
 `metadata`; `extras` and `system_extras` hold what the schemas do not name. Refuses a
-`metadata.n_points` that is not the number of points.
+`metadata.n_points` that is not the number of points, and a point riding a tube that is on
+a body or held in the world.
 """
 function SystemDefinition(; metadata::Metadata,
                           system_metadata=SystemMetadata(; name=metadata.name),
@@ -69,6 +72,11 @@ function SystemDefinition(; metadata::Metadata,
     blocks = NamedTuple{keys(ALL_BLOCKS)}(
         convert(Vector{ALL_BLOCKS[block]}, get(components, block, ALL_BLOCKS[block][]))
         for block in keys(ALL_BLOCKS))
+    for point in blocks.points
+        isnothing(point.tube) || isnothing(point.body) && !point.fixed ||
+            throw(ArgumentError("point $(point.name) rides a tube, so it is on no body " *
+                                "and not held in the world"))
+    end
     indices = NamedTuple{keys(ALL_BLOCKS)}(name_indices(blocks[block], block)
                                            for block in keys(ALL_BLOCKS))
     resolved = ([resolve(component, block, indices) for component in blocks[block]]
@@ -460,9 +468,9 @@ end
 
 The awesIO structure document of `structure`, as `SystemDefinition` reads it: references by
 name, model columns after the schema's, extra blocks after the schema's, empty optional
-blocks and unset optional columns left out, and of the tethers those its system lists. Its
-`awesIO_version` is `AWESIO_VERSION` and its `connectivity_sha` that of `structure`'s own
-tables, whatever `structure.metadata` holds.
+blocks and optional columns no row sets off their default left out, and of the tethers
+those its system lists. Its `awesIO_version` is `AWESIO_VERSION` and its `connectivity_sha`
+that of `structure`'s own tables, whatever `structure.metadata` holds.
 `description`, `note`, `system`, the path of the system file relative to this one, and
 `system_sha`, that file's [`system_sha`](@ref), default to those of `structure.metadata`.
 """
@@ -561,11 +569,12 @@ function system_tether_row(definition, tether)
 end
 
 """The `headers`/`units`/`data` table of the components `rows` of `block`: the required
-columns and the optional columns a row fills, then each column of a row's model that a row
-fills, after the `model` column unless every row reads the block's default model."""
+columns and the optional columns a row sets off their default, then each column of a row's
+model that a row fills, after the `model` column unless every row reads the block's default
+model."""
 function write_table(system, block, rows)
     filled = [field for field in keys(OPTIONAL_UNITS[block])
-              if any(row -> !isnothing(getfield(row, field)), rows)]
+              if any(row -> getfield(row, field) != optional_default(block, field), rows)]
     columns = (required_columns(block)..., filled...)
     registrations = [model_registration(block, typeof(row.model)) for row in rows]
     model_units = OrderedDict{String, String}()

@@ -8,6 +8,11 @@ function unregister_model!(block, name)
         delete!(KiteGeometry.DEFAULT_MODELS, block)
 end
 
+"""`system` written to YAML and read back."""
+function written_again(system)
+    return from_yaml(to_yaml(structure_document(system)), to_yaml(system_document(system)))
+end
+
 """SAM's pulley columns, each optional: a stand-in for the default pulley model SAM
 registers."""
 struct SamPulley <: AbstractModel
@@ -41,14 +46,13 @@ SPRING_UNITS = ("N*s", "s", "-", "-")
 """The columns SAM's default models add to awesIO's V3 files, block by block, with units."""
 const V3_COLUMNS = (
     points=(type="-", body_frame_damping="N*s/m", world_frame_damping="N*s/m", area="m^2",
-            drag_coeff="-", tube="-", wing_idx="-"),
+            drag_coeff="-", wing_idx="-"),
     spanwise_stations=(type="-", moment_frac="-", damping="N*m*s/rad", flap_points="-",
                        flap_axis="-"),
     pulleys=(type="-", efficiency="-"),
     wings=(aero_scale_chord="-", aero_z_offset="m", origin_idx="-", z_ref_points="-",
            y_ref_points="-", stations="-"),
     bodies=(type="-", wing="-"),
-    tethers=(init_stretched_length="m",),
     tubes=(shear_coeff="-", damping="s"),
 )
 

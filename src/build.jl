@@ -118,23 +118,42 @@ function columns(block, spec)
     return fields
 end
 
-"""`type` or `nothing`, as Julia source."""
-optional_type(type) = startswith(type, "Union{Nothing, ") ? type : "Union{Nothing, $type}"
+"""`type` admitting `nothing`, as Julia source."""
+nullable(type) = startswith(type, "Union{Nothing, ") ? type : "Union{Nothing, $type}"
 
-"""`(header, Julia type, description, unit)` of every optional column of a block's `spec`,
-its type admitting `nothing`."""
+"""Julia type of the optional `column`: its value's, admitting `nothing` unless the value
+has a `default`."""
+function optional_type(column)
+    type = column_type(column["value"])
+    return haskey(column["value"], "default") ? type : nullable(type)
+end
+
+"""`(header, Julia type, description, unit)` of every optional column of a block's
+`spec`."""
 function optional_columns(spec)
-    return [(name, optional_type(column_type(column["value"])),
-             "Optional. " * column["description"], column["unit"])
+    return [(name, optional_type(column), "Optional. " * column["description"],
+             column["unit"])
             for (name, column) in get(spec, "optionalColumns", ())]
 end
 
+"""Source of the named tuple of `entries`, each `name => value`."""
+function named_tuple_source(entries)
+    sources = ["$name = $(repr(value))" for (name, value) in entries]
+    isempty(sources) && return "(;)"
+    length(sources) == 1 && return "($(only(sources)),)"
+    return "($(join(sources, ", ")))"
+end
+
 """Source of the named tuple of the unit of each optional column of a block's `spec`."""
-function optional_units_source(spec)
-    entries = ["$name = $(repr(unit))" for (name, _, _, unit) in optional_columns(spec)]
-    isempty(entries) && return "(;)"
-    length(entries) == 1 && return "($(only(entries)),)"
-    return "($(join(entries, ", ")))"
+optional_units_source(spec) =
+    named_tuple_source(name => unit for (name, _, _, unit) in optional_columns(spec))
+
+"""Source of the named tuple of the default of each optional column of a block's `spec`
+that has one."""
+function optional_defaults_source(spec)
+    return named_tuple_source(name => column["value"]["default"]
+                              for (name, column) in get(spec, "optionalColumns", ())
+                              if haskey(column["value"], "default"))
 end
 
 """Source of the component type `name` holding `fields`, and the model of a row."""
@@ -176,7 +195,7 @@ not required admitting `nothing`."""
 function tether_structure_fields(tether)
     structure = first(tether["allOf"])["then"]["properties"]["structure"]
     return [let required = name in structure["required"], type = column_type(property)
-                (name, required ? type : optional_type(type),
+                (name, required ? type : nullable(type),
                  get(property, "description", ""), get(TETHER_UNITS, name, "-"))
             end
             for (name, property) in structure["properties"]]
@@ -198,11 +217,11 @@ function metadata_source(name, description, spec)
                get(spec["properties"][field], "description", ""), "-")
               for field in spec["required"]]
     body = join(("    $field::$type" for (field, type) in fields), "\n")
-    return docstring(name, description, fields) * "struct $name\n$body\nend\n"
+    return docstring(name, description, fields) * "mutable struct $name\n$body\nend\n"
 end
 
 """Source of `SystemDefinition`, one vector per table block and per block of its system, and
-of `BLOCKS`, `SYSTEM_BLOCKS`, `UNITS` and `OPTIONAL_UNITS`."""
+of `BLOCKS`, `SYSTEM_BLOCKS`, `UNITS`, `OPTIONAL_UNITS` and `OPTIONAL_DEFAULTS`."""
 function system_source(schema, blocks, definitions)
     fields = [("metadata", "Metadata", "the document's metadata", "-"),
               ("system_metadata", "SystemMetadata", "the metadata of its system", "-"),
@@ -224,6 +243,8 @@ function system_source(schema, blocks, definitions)
                   for (block, spec) in blocks))
     optional_units = join(("    $block = $(optional_units_source(spec)),\n"
                            for (block, spec) in blocks))
+    optional_defaults = join(("    $block = $(optional_defaults_source(spec)),\n"
+                              for (block, spec) in blocks))
     required = join((":$block" for block in schema["required"]), ", ")
     description = "A structure document and the system it names: their metadata, the " *
                   "system's materials and tethers, the rows of each table block, and " *
@@ -242,6 +263,10 @@ function system_source(schema, blocks, definitions)
            "    system_tethers = (\n" *
            "        $(join(tether_optional, ",\n        ")),\n    ),\n" *
            "$optional_units)\n\n" *
+           "\"\"\"The default of each optional column of each block that has one, " *
+           "by name.\"\"\"\n" *
+           "const OPTIONAL_DEFAULTS = (\n    materials = (;),\n" *
+           "    system_tethers = (;),\n$optional_defaults)\n\n" *
            "\"\"\"The blocks a structure document must carry.\"\"\"\n" *
            "const REQUIRED_BLOCKS = ($required)\n"
 end
