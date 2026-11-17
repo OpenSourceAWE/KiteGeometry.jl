@@ -23,6 +23,7 @@ SPDX-License-Identifier: MIT
 - BREAKING: `expand_tether!` takes a tether's `init_*` columns as the keyword `init` instead of a positional argument.
 - BREAKING: a point's `tube` column is read by the loader and is no model's field, so a tool's registered model must drop it. A `BODY_STATIC` point naming a `tube` rides both of its bodies rather than the body of the wing it names, and naming a `tube` and a `body` is refused.
 - An optional column with a default in the schema, as a body's `fixed`, holds that default rather than `nothing` where a document leaves it out, and is written only where a row differs from it. `Metadata` is mutable and compares by its fields.
+- BREAKING: KiteGeometry no longer has a `calc_heading(R_b_to_w, pos)` of its own; use KiteUtils' `calc_heading(attitude, elevation, azimuth)`. `using KiteUtils, KiteGeometry` no longer leaves `calc_heading` ambiguous.
 
 ## KiteGeometry v0.4.0 2026-11-07
 
