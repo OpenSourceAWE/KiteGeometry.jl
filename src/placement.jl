@@ -181,6 +181,10 @@ function tether_anchor_free(tether, boundary)
     return nothing, nothing
 end
 
+"""The spanwise stations of `system` that a wing owns."""
+wing_stations(system) = Iterators.filter(station -> !isnothing(station.wing),
+                                         system.spanwise_stations)
+
 """Body indices carrying each point of `system` when a tether moves it: the body it is fixed
 in, both bodies of the tube it rides, or the body of the wing whose station holds it; none
 for a point that stands free."""
@@ -190,7 +194,7 @@ function point_carriers(system)
         isnothing(point.tube) || return collect(Int, system.tubes[point.tube].bodies)
         return Int[]
     end
-    for station in system.spanwise_stations, index in station.points
+    for station in wing_stations(system), index in station.points
         body = system.wings[station.wing].body
         isempty(carriers[index]) && !isnothing(body) && push!(carriers[index], body)
     end

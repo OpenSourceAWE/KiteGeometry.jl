@@ -122,21 +122,22 @@ end
 """
     SpanwiseStation{M}
 
-A row of the `spanwise_stations` block. Chordwise sections of a wing. A station's points
-give the local chord, from which a reader derives the section's angle of attack and, where
-the points trace the profile, its airfoil shape. A station's local twist is the angle its
-chord has turned through about the wing's KA y axis from where the document places it,
-positive pitching the leading edge up. A station is not tied to the aerodynamic mesh. A
-wing's stations run from +y to -y of its KA frame.
+A row of the `spanwise_stations` block. Chordwise sections of a wing, or of none where a
+station's wing is null. A station's points give the local chord, from which a reader derives
+the section's angle of attack and, where the points trace the profile, its airfoil shape. A
+station's local twist is the angle its chord has turned through about the wing's KA y axis
+from where the document places it, positive pitching the leading edge up. A station is not
+tied to the aerodynamic mesh. A wing's stations run from +y to -y of its KA frame.
 
 - `name::Symbol`: Unique name of the station.
-- `wing::NameRef`: The wing the station is a section of.
-- `points::Vector{NameRef}`: The points the section is made of.
+- `wing::Union{Nothing, NameRef}`: The wing the station is a section of, or null where no
+  wing owns it.
+- `points::Vector{NameRef}`: The points the section is made of. The list may be empty.
 - `model::M`: the model the `model` column names, else `NoModel`
 """
 mutable struct SpanwiseStation{M <: AbstractModel} <: Component
     const name::Symbol
-    wing::NameRef
+    wing::Union{Nothing, NameRef}
     points::Vector{NameRef}
     model::M
 end

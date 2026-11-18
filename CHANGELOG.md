@@ -5,6 +5,12 @@ SPDX-License-Identifier: MIT
 
 # Changelog
 
+## Unreleased
+
+### Added
+
+- A spanwise station may belong to no wing: its `wing` is `nothing` in a definition and null in a structure document, as awesIO allows, and its `points` may be empty. An authoring `stations` table gives one with a `wing` column left null in a row no wing's `stations` lists. Placement and a wing's mass ignore such a station, so its points are not the wings' nodes.
+
 ## KiteGeometry v0.5.0 2026-11-13
 
 ### Added
