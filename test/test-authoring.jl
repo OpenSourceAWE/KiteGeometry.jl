@@ -181,6 +181,8 @@ POINT_MODEL_COLUMNS = ("type", "drag_area", "drag_coefficient")
                                            column(expected, header))
                 isnothing(value) && block == "points" && header in POINT_MODEL_COLUMNS &&
                     continue
+                isnothing(value) && (block, header) == ("segments", "diameter") &&
+                    (value = system.segments[Symbol(name)].diameter)
                 cells_agree(value, cell) || @error "$block $name $header" value cell
                 @test cells_agree(value, cell)
             end

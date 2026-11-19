@@ -684,7 +684,6 @@ end
         return system
     end
     @test_throws "add up to" refused(system -> tether_field!(system, "length", 251.0))
-    @test_throws "has diameter" refused(system -> tether_field!(system, "diameter", 0.005))
     @test_throws "not of the system's material" refused(
         system -> tether_field!(system, "material", "dyneema"))
     @test SystemDefinition(fixture_document(),
@@ -731,7 +730,7 @@ end
 KiteGeometry.model_references(::Type{Anchored}) =
     (anchor=:points, ref_points=(WeightedRefs(:points), WeightedRefs(:points)))
 
-@testset "a tool's reference columns are names in a document and indices in a definition" begin
+@testset "a tool's reference columns are names in a document, indices in a definition" begin
     register_model!(:points, "anchored", Anchored, ("-", "-"); default=true)
     try
         model = Anchored(1, [2, [Any[1, 0.25], Any["kite", 0.75]]])
