@@ -559,7 +559,7 @@ function written_segments(structure)
         design = structure.system_tethers[tether.name].diameter
         isnothing(segment.diameter) || segment.diameter == design || throw(ArgumentError(
             "tether $(tether.name) segment $(segment.name) has diameter " *
-            "$(segment.diameter), its system tether $(something(design, "none"))"))
+            "$(segment.diameter), the system's tether $(something(design, "none"))"))
         segments[index] = with_diameter(segment, nothing)
     end
     return segments

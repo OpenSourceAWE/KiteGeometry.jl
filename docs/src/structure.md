@@ -22,7 +22,7 @@ system_sha
 
 ## One system, several structures
 
-`load_structure` reads a structure with the system file its `metadata.system` names, relative to the structure, and refuses a `metadata.system_sha` that is not the hash of that file's bytes. Several structures may name one system, which holds the materials and tethers of them all. Writing that system takes every definition and refuses one name with two different values; writing each structure then takes the system's path and hash:
+`load_structure` reads a structure with the system file its `metadata.system` names, relative to the structure, and refuses a `metadata.system_sha` that is not the hash of that file's bytes followed by those of each file it pulls in with `!include`, depth first in document order; it reads those files in place of their tags. A tether's segments leave their diameter to the system's tether: a document leaves it empty and reading refuses one that gives it. Several structures may name one system, which holds the materials and tethers of them all. Writing that system takes every definition and refuses one name with two different values; writing each structure then takes the system's path and hash:
 
 ```julia
 system_text = to_yaml(system_document([beam, psm]; name="v3_kite", description, note))
@@ -125,13 +125,15 @@ NameRef
 
 ## Models
 
-Every component `T{M}` carries a `model::M`: the parameters a tool attaches to a row by naming a registered model in its `model` column, one extra column per field of `M` that `model_columns(M)` names, in the units the model was registered with. A table without a `model` column reads the model registered for its block with `default=true`; the writer leaves the `model` column out where every row reads that default, and names each row's model otherwise. A row whose `model` cell is unset or names no registered model, or whose table has no `model` column and whose block has no default, is a `NoModel` component. A model column a table leaves out is unset, refused where its field cannot be `nothing`, and the writer leaves out a model column no row fills. Reading refuses a filled cell in a column neither the schema nor the row's model names, an unregistered model's name included; `strict=false` drops those columns with a warning instead. A parametric model registers its `UnionAll`, read through the outer constructor `M(columns...)` the tool defines, and the writer names every instance of it after that registration. A component reaches its model's fields as its own, so `tube.EA` reads `tube.model.EA` and `tube.EA = 3e5` sets it.
+Every component `T{M}` carries a `model::M`: the parameters a tool attaches to a row by naming a registered model in its `model` column, one extra column per field of `M` that `model_columns(M)` names, in the units the model was registered with. A table without a `model` column reads the model registered for its block with `default=true`; the writer leaves the `model` column out where every row reads that default, and names each row's model otherwise. A row whose `model` cell is unset or names no registered model, or whose table has no `model` column and whose block has no default, is a `NoModel` component. A model column a table leaves out is unset, refused where its field cannot be `nothing`, and the writer leaves out a model column no row fills. Reading refuses a filled cell in a column neither the schema nor the row's model names, an unregistered model's name included; `strict=false` drops those columns with a warning instead. A parametric model registers its `UnionAll`, read through the outer constructor `M(columns...)` the tool defines, and the writer names every instance of it after that registration. A component reaches its model's fields as its own, so `tube.EA` reads `tube.model.EA` and `tube.EA = 3e5` sets it. A model column that refers to rows, such as the wing a point belongs to, is declared by a `model_references(M)` method naming the block it refers into, with `WeightedRefs` for reference points: a document gives it by name and a `SystemDefinition` holds it as indices, as it does the schema's own references.
 
 ```@docs
 AbstractModel
 NoModel
 register_model!
 model_columns
+model_references
+WeightedRefs
 model_type
 ```
 
