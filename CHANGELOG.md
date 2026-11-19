@@ -5,15 +5,12 @@ SPDX-License-Identifier: MIT
 
 # Changelog
 
-## KiteGeometry v0.5.0 2026-11-13
+## Unreleased
 
 ### Added
 
-- `place!(system, transforms; ignore_l0)` places any definition from where it stands, working on its own rows: tether lengths, rest lengths, pulleys, transforms, body points and wing frames, whether it was loaded, built in Julia, or a transform changed. `KiteGeometry.line_segment` is public, making one segment as the loader does for a definition built in Julia.
-- Columns from awesIO: a tether's `init_stretched_length`, `init_tether_force` and `init_stretch_frac`, which `place!` places it by; a body's `fixed`, true for a body held in the world; a point's `tube`, the tube it rides between its two bodies; and a wing's `body`, the body its KA frame moves with. `load_authoring` fills them from the authoring YAML.
-- `Rows` holds any elements named by a `Symbol`, not only a block's rows, a name lookup takes constant time without scanning, and `KiteGeometry.row_index(rows, name)` gives the position of a name.
 - `system_document` writes a system document from one definition or the union by name of several, refusing one name with two different values; `system_sha` gives a file's hash; `structure_document` takes `description`, `note`, `system` and `system_sha`; `to_yaml` and `to_json` take a document.
-- `SystemMetadata` and `SystemTether`, generated from the system schema. `load_authoring` gives each tether a winch holds a `SystemTether`: its ends, its length and the diameter and material its segments share.
+- `SystemMetadata` and `SystemTether`, generated from the system schema; `SystemMetadata` is mutable and compares by its fields. `load_authoring` gives each tether a winch holds a `SystemTether`: its ends, its length and the diameter and material its segments share.
 
 ### Changed
 
@@ -22,6 +19,17 @@ SPDX-License-Identifier: MIT
 - BREAKING: `SystemDefinition` has the fields `system_metadata`, `system_tethers` and `system_extras`, and its materials are the system's. `Metadata` has the fields `system` and `system_sha`.
 - `to_yaml` writes YAML 1.2 that 1.1 readers read the same: a unit of `-` is quoted, and every float has its point and its exponent's sign. `to_yaml(definition)` refuses a definition whose metadata names no system file.
 - BREAKING: a structure document lists only the tethers its system lists. `load_authoring` makes a system tether of each tether a winch holds, so another row of its `tethers` block is a bridle line: its segments are written and it stays in the definition's `tethers`, but it is not read back as a tether.
+
+## KiteGeometry v0.5.0 2026-11-13
+
+### Added
+
+- `place!(system, transforms; ignore_l0)` places any definition from where it stands, working on its own rows: tether lengths, rest lengths, pulleys, transforms, body points and wing frames, whether it was loaded, built in Julia, or a transform changed. `KiteGeometry.line_segment` is public, making one segment as the loader does for a definition built in Julia.
+- Columns from awesIO: a tether's `init_stretched_length`, `init_tether_force` and `init_stretch_frac`, which `place!` places it by; a body's `fixed`, true for a body held in the world; a point's `tube`, the tube it rides between its two bodies; and a wing's `body`, the body its KA frame moves with. `load_authoring` fills them from the authoring YAML.
+- `Rows` holds any elements named by a `Symbol`, not only a block's rows, a name lookup takes constant time without scanning, and `KiteGeometry.row_index(rows, name)` gives the position of a name.
+
+### Changed
+
 - BREAKING: A row's `name` and a `Transform`'s `name` are constant: `point.name = :x` errors, and a row is renamed by replacing it, `system.points[2] = Point(; name="x", ...)`. `Rows` refuses an element whose name is not a `Symbol` or can change in place.
 - BREAKING: `Rows` refuses the write that would give two rows one name, rather than a later lookup of that name, so a reordering in place such as `reverse!(rows)` is refused; `Rows(reverse(rows))` builds the reordered rows. `Rows(vector)` holds a copy of `vector`, and `resize!` of rows is gone: rows are added by `push!`, `insert!` or `append!`.
 - BREAKING: `load_authoring` no longer takes `place`; it always returns the placed definition.
@@ -29,7 +37,7 @@ SPDX-License-Identifier: MIT
 - BREAKING: `Pose(system)` reads and writes the definition's rows rather than copying them; `copy` it for a snapshot.
 - BREAKING: `expand_tether!` takes a tether's `init_*` columns as the keyword `init` instead of a positional argument.
 - BREAKING: a point's `tube` column is read by the loader and is no model's field, so a tool's registered model must drop it. A `BODY_STATIC` point naming a `tube` rides both of its bodies rather than the body of the wing it names, and naming a `tube` and a `body` is refused.
-- An optional column with a default in the schema, as a body's `fixed`, holds that default rather than `nothing` where a document leaves it out, and is written only where a row differs from it. `Metadata` and `SystemMetadata` are mutable and compare by their fields.
+- An optional column with a default in the schema, as a body's `fixed`, holds that default rather than `nothing` where a document leaves it out, and is written only where a row differs from it. `Metadata` is mutable and compares by its fields.
 
 ## KiteGeometry v0.4.0 2026-11-07
 
