@@ -91,9 +91,12 @@ function resolve(component::Component, block, indices)
                       indices) for field in fieldnames(T))...)
 end
 resolve(value, ::Nothing, indices) = value
-resolve(::Nothing, target::Symbol, indices) = nothing
+resolve(::Nothing, ::Union{Symbol, WeightedRefs, Tuple}, indices) = nothing
 function resolve(refs::Union{Tuple, Vector}, target::Symbol, indices)
     return resolve.(refs, target, (indices,))
+end
+function resolve(name::AbstractString, target::Symbol, indices)
+    return resolve(Symbol(name), target, indices)
 end
 function resolve(name::Symbol, target::Symbol, indices)
     haskey(indices[target], name) || throw(ArgumentError("no $target named $name"))
@@ -103,6 +106,27 @@ function resolve(index::Int, target::Symbol, indices)
     index in 1:length(indices[target]) ||
         throw(ArgumentError("no $target at index $index"))
     return index
+end
+function resolve(value, refs::WeightedRefs, indices)
+    return map_weighted(ref -> resolve(ref, refs.block, indices), value)
+end
+function resolve(value, references::Tuple, indices)
+    return [resolve(cell, reference, indices)
+            for (cell, reference) in zip_references(value, references)]
+end
+function resolve(model::M, ::Nothing, indices) where {M <: AbstractModel}
+    references = model_references(M)
+    isempty(references) && return model
+    return M((resolve(getfield(model, column), get(references, column, nothing), indices)
+              for column in model_columns(M))...)
+end
+
+"""The cells of the list `value` paired with the `references` that give their shapes,
+refusing a list of another length."""
+function zip_references(value, references)
+    length(value) == length(references) ||
+        throw(ArgumentError("$value must hold $(length(references)) references"))
+    return zip(value, references)
 end
 
 """
@@ -137,17 +161,18 @@ function SystemDefinition(document::AbstractDict, system_document::AbstractDict;
     metadata.connectivity_sha == sha || throw(ArgumentError(
         "connectivity_sha $(metadata.connectivity_sha) does not describe the document's " *
         "points, segments, bodies, tubes and canopy faces, whose is $sha"))
-    foreach(tether -> check_tether(tether, system), system.tethers)
+    foreach(tether -> read_tether!(tether, system), system.tethers)
     return system
 end
 
 """The relative difference allowed between floats a writer summed or printed."""
 const TETHER_TOLERANCE = 1e-9
 
-"""Refuses `tether` of `system` where the system does not list it, or where its segments
-disagree with the material, diameter and length the system gives it. A field left out states
-nothing."""
-function check_tether(tether, system)
+"""Gives the segments of `tether` of `system` the diameter of the system's tether, refusing
+a tether the system does not list, a segment giving a diameter or naming another material
+than the system's tether, and rest lengths not adding up to its length. A field left out
+states nothing."""
+function read_tether!(tether, system)
     name = tether.name
     haskey(system.system_tethers, name) ||
         throw(ArgumentError("tether $name is not in the system"))
@@ -157,10 +182,10 @@ function check_tether(tether, system)
         isnothing(design.material) || isnothing(segment.material) ||
             design.material == segment.material || throw(ArgumentError(
             "tether $name segment $(segment.name) is not of the system's material"))
-        isnothing(design.diameter) || isnothing(segment.diameter) ||
-            isapprox(segment.diameter, design.diameter; rtol=TETHER_TOLERANCE) ||
-            throw(ArgumentError("tether $name segment $(segment.name) has diameter " *
-                                "$(segment.diameter), the system says $(design.diameter)"))
+        isnothing(segment.diameter) || throw(ArgumentError(
+            "tether $name segment $(segment.name) gives a diameter, which the system's " *
+            "tether owns"))
+        segment.diameter = design.diameter
     end
     any(segment -> isnothing(segment.rest_length), segments) && return nothing
     total = sum(segment -> segment.rest_length, segments; init=0.0)
@@ -269,20 +294,44 @@ end
 """
     system_sha(path)
 
-Lowercase hex SHA-256 of the bytes of the file at `path`, which a structure naming that file
-as its system holds as `system_sha`.
+Lowercase hex SHA-256 of the bytes of the system file at `path` followed by those of each
+file it pulls in with `!include`, depth first in document order, which a structure naming
+that file as its system holds as `system_sha`.
 """
-system_sha(path) = bytes2hex(open(sha256, path))
+function system_sha(path)
+    files = String[]
+    read_yaml_file(path, files)
+    return bytes2hex(sha256(reduce(vcat, read.(files))))
+end
 
 """`text` parsed as YAML, its mappings keeping their order."""
 parse_yaml(text) = YAML.load(text; dicttype=OrderedDict{String, Any})
+
+"""The YAML file at `path` parsed as `parse_yaml` does, each `!include` tag replaced by the
+file it names relative to `path`, read the same way. Appends `path`, then each file read for
+it, depth first in document order, to `files`. Refuses an included file that is not YAML."""
+function read_yaml_file(path, files=String[])
+    push!(files, path)
+    include_file = (constructor, node) -> read_included(path, node.value, files)
+    return YAML.load(read(path, String), Dict{String, Function}("!include" => include_file);
+                     dicttype=OrderedDict{String, Any})
+end
+
+"""The file `target` that the YAML file at `path` includes, read by `read_yaml_file`."""
+function read_included(path, target, files)
+    included = joinpath(dirname(path), target)
+    lowercase(splitext(included)[2]) in (".yml", ".yaml") ||
+        throw(ArgumentError("$path includes $included, which is not YAML"))
+    return read_yaml_file(included, files)
+end
 
 """
     load_structure(path; strict=true)
 
 The `SystemDefinition` in the YAML structure document at `path` and the system file its
-`metadata.system` names relative to it, read as `from_yaml` reads them. Refuses a
-`metadata.system_sha` that is not the hash of that file.
+`metadata.system` names relative to it, with the files that pulls in by `!include`, read as
+`from_yaml` reads them. Refuses a `metadata.system_sha` that is not the
+[`system_sha`](@ref) of that file.
 """
 function load_structure(path; strict=true)
     document = parse_yaml(read(path, String))
@@ -294,7 +343,7 @@ function load_structure(path; strict=true)
     get(metadata, "system_sha", "") == sha || throw(ArgumentError(
         "structure $path holds system_sha $(get(metadata, "system_sha", "")), but the " *
         "hash of $system_path is $sha"))
-    return SystemDefinition(document, parse_yaml(read(system_path, String)); strict)
+    return SystemDefinition(document, read_yaml_file(system_path); strict)
 end
 
 """
@@ -487,7 +536,8 @@ function structure_document(structure::SystemDefinition;
                           "system" => system, "system_sha" => system_sha))
     document = OrderedDict{String, Any}("metadata" => metadata)
     for block in keys(BLOCKS)
-        rows = block == :tethers ? listed_tethers(structure) : getfield(structure, block)
+        rows = block == :tethers ? listed_tethers(structure) :
+               block == :segments ? written_segments(structure) : getfield(structure, block)
         block in REQUIRED_BLOCKS || !isempty(rows) || continue
         document[String(block)] = write_table(structure, block, rows)
     end
@@ -498,6 +548,27 @@ end
 function listed_tethers(structure)
     listed = structure.system_tethers
     return filter(tether -> haskey(listed, tether.name), structure.tethers)
+end
+
+"""The segments of `structure`, those of a tether its system lists without the diameter
+that tether owns, refusing one of another diameter, which the document would lose."""
+function written_segments(structure)
+    segments = collect(structure.segments)
+    for tether in listed_tethers(structure), index in tether.segments
+        segment = segments[index]
+        design = structure.system_tethers[tether.name].diameter
+        isnothing(segment.diameter) || segment.diameter == design || throw(ArgumentError(
+            "tether $(tether.name) segment $(segment.name) has diameter " *
+            "$(segment.diameter), its system tether $(something(design, "none"))"))
+        segments[index] = with_diameter(segment, nothing)
+    end
+    return segments
+end
+
+"""A fresh `segment` of diameter `diameter`."""
+function with_diameter(segment::T, diameter) where {T <: Segment}
+    return T((field == :diameter ? diameter : getfield(segment, field)
+              for field in fieldnames(T))...)
 end
 
 """
@@ -591,7 +662,7 @@ function write_table(system, block, rows)
     data = [Any[(document_value(getfield(row, column),
                                 get(REFERENCES, (block, column), nothing), system)
                  for column in columns)...,
-                (model_cell(row.model, registration, header)
+                (model_cell(row.model, registration, header, system)
                  for header in keys(model_units))...]
             for (row, registration) in zip(rows, registrations)]
     return OrderedDict{String, Any}(
@@ -606,12 +677,15 @@ function reads_default(registration, block)
     return !isnothing(registration) && registration.name == default_model(block)
 end
 
-"""The cell of `model`, registered as `registration`, in the model column `header`: the
-registered name for `model`, else the field of that name, `nothing` where it has none."""
-function model_cell(model, registration, header)
+"""The cell of `model` of a row of `system`, registered as `registration`, in the model
+column `header`: the registered name for `model`, else the field of that name, `nothing`
+where it has none."""
+function model_cell(model, registration, header, system)
     header == "model" && return isnothing(registration) ? nothing : registration.name
-    Symbol(header) in model_columns(typeof(model)) || return nothing
-    return document_value(getfield(model, Symbol(header)), nothing, nothing)
+    column = Symbol(header)
+    column in model_columns(typeof(model)) || return nothing
+    reference = get(model_references(typeof(model)), column, nothing)
+    return document_value(getfield(model, column), reference, system)
 end
 
 """`value` as a structure document writes it, a reference into `target` by name."""
@@ -620,7 +694,7 @@ document_value(value::StaticVector, ::Nothing, system) = collect(value)
 function document_value(value::StaticMatrix, ::Nothing, system)
     return [collect(row) for row in eachrow(value)]
 end
-document_value(::Nothing, target::Symbol, system) = nothing
+document_value(::Nothing, ::Union{Symbol, WeightedRefs, Tuple}, system) = nothing
 document_value(name::Symbol, ::Nothing, system) = String(name)
 function document_value(names::AbstractVector{NameRef}, ::Nothing, system)
     return document_value.(names, nothing, (system,))
@@ -628,7 +702,14 @@ end
 function document_value(index::Int, target::Symbol, system)
     return String(getfield(system, target)[index].name)
 end
-document_value(name::Symbol, target::Symbol, system) = String(name)
+document_value(name::Union{Symbol, AbstractString}, target::Symbol, system) = String(name)
 function document_value(refs::Union{Tuple, Vector}, target::Symbol, system)
     return [document_value(ref, target, system) for ref in refs]
+end
+function document_value(value, refs::WeightedRefs, system)
+    return map_weighted(ref -> document_value(ref, refs.block, system), value)
+end
+function document_value(value, references::Tuple, system)
+    return [document_value(cell, reference, system)
+            for (cell, reference) in zip_references(value, references)]
 end

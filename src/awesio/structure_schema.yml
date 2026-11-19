@@ -13,8 +13,8 @@ description: >
   free-form under its wing_sections, bridle_nodes, bridle_lines and
   bridle_connections blocks.
 
-  Every block is a headers/units/data table and every reference is by name. A
-  reader addresses columns by header, never by position, and ignores a column
+  Every block is a headers/units/data table and every reference is by name, a
+  tool column's too, never by row number. A reader addresses columns by header, never by position, and ignores a column
   it does not know. What a file holds is one of four kinds:
 
   The core is what a block requires, its leading columns: what drawing the
@@ -110,9 +110,10 @@ properties:
       system_sha:
         type: string
         description: >
-          Lowercase hex SHA-256 of the system file's bytes as they stand on disk,
-          so a structure is never read with a system other than the one it
-          discretises.
+          Lowercase hex SHA-256 of the system file's bytes as they stand on disk
+          followed by those of each file it pulls in with `!include`, depth first
+          in document order, so a structure is never read with a system other
+          than the one it discretises.
         pattern: '^[0-9a-f]{64}$'
     additionalProperties: false
 
@@ -214,10 +215,13 @@ properties:
           $ref: "#/definitions/length"
       diameter:
         description: >
-          Diameter of the line, for its mass, drag and cross-section.
+          Diameter of the line, for its mass, drag and cross-section; null on a
+          tether's segment, whose diameter is the system's tether's.
         unit: m
         value:
-          $ref: "#/definitions/length"
+          oneOf:
+            - $ref: "#/definitions/length"
+            - type: "null"
       material:
         description: >
           The material of the system the line is made of.
@@ -293,9 +297,10 @@ properties:
   tethers:
     description: >
       Ordered runs of segments between two points, each discretising the tether
-      of the system it shares a name with. A tether's segments repeat its
-      diameter and the `rest_length` of each adds up to its length, so a tether
-      can be drawn and reeled from this file alone.
+      of the system it shares a name with. The system's tether owns its
+      material, diameter and length: a segment names that material or none,
+      leaves its diameter null, and the segments' `rest_length`s add up to
+      that length.
     allOf:
       - $ref: "#/definitions/table"
       - properties:

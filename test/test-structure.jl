@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Bart van de Lint
 # SPDX-License-Identifier: MIT
 
-using KiteGeometry: AWESIO_VERSION, BLOCKS, REFERENCES, NameRef, connectivity_sha
+using KiteGeometry: AWESIO_VERSION, BLOCKS, REFERENCES, NameRef, connectivity_sha, sha256
 using JSON
 using OrderedCollections: OrderedDict
 using StaticArrays: MVector
@@ -690,6 +690,95 @@ end
     @test SystemDefinition(fixture_document(),
                            tether_field!(system_fixture(), "diameter", 0.004)) isa
           SystemDefinition
+end
+
+"""`small_system` with its line the tether `main` of the system, `diameter` thick, on
+segments of `segment_diameter`."""
+function tethered_system(; diameter=0.004, segment_diameter=diameter)
+    materials = [Material(; name="dyneema", law="linear_elastic",
+                          parameters=OrderedDict{String, Any}("density" => 970.0))]
+    design = SystemTether(; name="main", type="non_conductive_tether", version=1.0,
+                          joints=OrderedDict{String, Any}(), length=100.0, diameter,
+                          material="dyneema")
+    segment = Segment(; name="line", points=("anchor", "kite"), rest_length=100,
+                      diameter=segment_diameter, material="dyneema")
+    return small_system(; materials, system_tethers=[design], segments=[segment],
+                        tethers=[Tether(; name="main", start_point="anchor",
+                                        end_point="kite", segments=["line"])])
+end
+
+@testset "a tether's segments leave its diameter to the system's tether" begin
+    system = tethered_system()
+    document = structure_document(system)
+    @test !("diameter" in document["segments"]["headers"])
+    @test written_again(system).segments[:line].diameter == 0.004
+    @test_throws "has diameter 0.005" structure_document(tethered_system(;
+                                                             segment_diameter=0.005))
+    @test_throws "has diameter 0.004" structure_document(tethered_system(;
+        diameter=nothing, segment_diameter=0.004))
+    segments = document["segments"]
+    push!(segments["headers"], "diameter")
+    push!(segments["units"], "m")
+    push!(only(segments["data"]), 0.004)
+    @test_throws "gives a diameter" SystemDefinition(document, system_document(system))
+end
+
+"""A point model naming a point, and two groups of weighted points."""
+mutable struct Anchored <: AbstractModel
+    anchor::Any
+    ref_points::Any
+end
+KiteGeometry.model_references(::Type{Anchored}) =
+    (anchor=:points, ref_points=(WeightedRefs(:points), WeightedRefs(:points)))
+
+@testset "a tool's reference columns are names in a document and indices in a definition" begin
+    register_model!(:points, "anchored", Anchored, ("-", "-"); default=true)
+    try
+        model = Anchored(1, [2, [Any[1, 0.25], Any["kite", 0.75]]])
+        system = small_system()
+        system.points[2] = Point(; name="kite", pos_ENU=[0, 0, 100], model)
+        held = SystemDefinition(; metadata=system.metadata, points=system.points,
+                                segments=system.segments)
+        @test held.points[2].model.ref_points == [2, [Any[1, 0.25], Any[2, 0.75]]]
+        table = structure_document(held)["points"]
+        @test table["data"][2][end - 1:end] ==
+              ["anchor", ["kite", [["anchor", 0.25], ["kite", 0.75]]]]
+        read_back = written_again(held).points[2].model
+        @test (read_back.anchor, read_back.ref_points) == (1, [2, [[1, 0.25], [2, 0.75]]])
+        model.ref_points = [1]
+        @test_throws "must hold 2 references" SystemDefinition(;
+            metadata=system.metadata, segments=system.segments,
+            points=[system.points[1], Point(; name="kite", pos_ENU=[0, 0, 100], model)])
+    finally
+        unregister_model!(:points, "anchored")
+    end
+end
+
+"""A copy of the V3 system whose materials are in a file it pulls in with `!include`,
+given to `f` with the paths of both."""
+function with_included_materials(f)
+    mktempdir() do directory
+        system = system_fixture()
+        materials = joinpath(directory, "materials.yml")
+        write(materials, to_yaml(OrderedDict{String, Any}("rows" => system["materials"])))
+        system["materials"] = "INCLUDED"
+        path = joinpath(directory, "system.yml")
+        write(path, replace(to_yaml(system), "INCLUDED" => "!include materials.yml"))
+        return f(path, materials)
+    end
+end
+
+@testset "a system's hash covers the files it includes, which reading follows" begin
+    @test system_sha(SYSTEM_FIXTURE) == bytes2hex(sha256(read(SYSTEM_FIXTURE)))
+    with_included_materials() do path, materials
+        @test system_sha(path) == bytes2hex(sha256([read(path); read(materials)]))
+        @test KiteGeometry.read_yaml_file(path)["materials"] ==
+              Dict("rows" => system_fixture()["materials"])
+        write(materials, read(materials, String) * "\n")
+        @test system_sha(path) == bytes2hex(sha256([read(path); read(materials)]))
+        write(path, replace(read(path, String), "materials.yml" => "materials.csv"))
+        @test_throws "which is not YAML" system_sha(path)
+    end
 end
 
 @testset "a value no document can hold is refused by name when writing" begin

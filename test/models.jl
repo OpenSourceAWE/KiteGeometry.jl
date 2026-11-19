@@ -70,6 +70,16 @@ end
 const V3_MODELS = NamedTuple{keys(V3_COLUMNS)}(Tuple(
     v3_model(block, keys(units)) for (block, units) in pairs(V3_COLUMNS)))
 
+"""The reference points of a wing's frame, as SAM's wing model holds them."""
+const REF_POINT_PAIR = (WeightedRefs(:points), WeightedRefs(:points))
+
+KiteGeometry.model_references(::Type{V3_MODELS.points}) = (wing_idx=:wings,)
+KiteGeometry.model_references(::Type{V3_MODELS.spanwise_stations}) = (flap_points=:points,)
+KiteGeometry.model_references(::Type{V3_MODELS.bodies}) = (wing=:wings,)
+KiteGeometry.model_references(::Type{V3_MODELS.wings}) =
+    (origin_idx=WeightedRefs(:points), z_ref_points=REF_POINT_PAIR,
+     y_ref_points=REF_POINT_PAIR, stations=:spanwise_stations)
+
 """`f()` with `V3_MODELS` registered as the default models of their blocks, and `SamSpring`
 as the segment model `spring` the V3 files name on every segment."""
 function with_v3_columns(f)

@@ -33,6 +33,35 @@ its columns alone, `M(columns...)`.
 model_columns(M::Type{<:AbstractModel}) = fieldnames(M)
 
 """
+    WeightedRefs(block)
+
+Reference points into `block` as a model column holds them: one reference, a list of
+references, or a list of `[reference, weight]` pairs.
+"""
+struct WeightedRefs
+    block::Symbol
+end
+
+"""
+    model_references(M)
+
+The columns of the model type `M` that refer to rows, as a `NamedTuple` of `column =>
+reference`: a block's name for a reference or a list of them, a [`WeightedRefs`](@ref), or a
+tuple of these for a list holding one of each. A document gives them by name and a
+`SystemDefinition` holds them as indices, as it does the schema's references. None unless
+`M` adds a method.
+"""
+model_references(::Type{<:AbstractModel}) = (;)
+
+"""`f` applied to each reference of the reference points `value`, keeping its shape and
+weights."""
+function map_weighted(f, value)
+    value isa AbstractVector || return f(value)
+    first(value) isa AbstractVector || return f.(value)
+    return [Any[f(ref), weight] for (ref, weight) in value]
+end
+
+"""
     register_model!(block, name, M, units; default=false)
 
 Make a row of `block` whose `model` column reads `name` carry an `M`, built from the columns
