@@ -117,8 +117,9 @@ end
 function resolve(model::M, ::Nothing, indices) where {M <: AbstractModel}
     references = model_references(M)
     isempty(references) && return model
-    return M((resolve(getfield(model, column), get(references, column, nothing), indices)
-              for column in model_columns(M))...)
+    return Base.typename(M).wrapper(
+        (resolve(getfield(model, column), get(references, column, nothing), indices)
+         for column in model_columns(M))...)
 end
 
 """The cells of the list `value` paired with the `references` that give their shapes,
