@@ -5,6 +5,25 @@ SPDX-License-Identifier: MIT
 
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `system_document` writes a system document from one definition or the union by name of several, refusing one name with two different values; `system_sha` gives a file's hash; `structure_document` takes `description`, `note`, `system` and `system_sha`; `to_yaml` and `to_json` take a document.
+- `SystemMetadata` and `SystemTether`, generated from the system schema; `SystemMetadata` is mutable and compares by its fields. `load_authoring` gives each tether a winch holds a `SystemTether`: its ends, its length and the diameter and material its segments share.
+
+- `model_references(M)` declares the columns of a model that refer to rows, with `WeightedRefs` for reference points: a document gives them by name and a definition holds them as indices.
+
+### Changed
+
+- BREAKING: a tether's segments leave their diameter to the system's tether. `structure_document` leaves it out, refusing a segment of another diameter, and reading takes it from the system's tether and refuses a segment that gives one.
+- BREAKING: `system_sha` hashes a system file's bytes followed by those of each file it pulls in with `!include`, depth first in document order, and `load_structure` reads those files in place of their tags.
+- BREAKING: follows the awesIO schema in which the system file owns the design. A structure document has no `materials` block and its `metadata` requires `system` and `system_sha`. `load_structure` reads a structure with the system file it names and refuses a `system_sha` that is not that file's hash. `SystemDefinition(document, system_document)` refuses a tether the system does not list or whose segments disagree with its material or length.
+- BREAKING: `SystemDefinition(document, system_document)`, `from_yaml(text, system_text)`, `from_json(text, system_text)` and `KiteGeometry.definition(topology, system)` take the system beside the structure. A log saved with a definition also carries its system under the key `system`, and `KiteGeometry.definition` refuses a log without one.
+- BREAKING: `SystemDefinition` has the fields `system_metadata`, `system_tethers` and `system_extras`, and its materials are the system's. `Metadata` has the fields `system` and `system_sha`.
+- `to_yaml` writes YAML 1.2 that 1.1 readers read the same: a unit of `-` is quoted, and every float has its point and its exponent's sign. `to_yaml(definition)` refuses a definition whose metadata names no system file.
+- BREAKING: a structure document lists only the tethers its system lists. `load_authoring` makes a system tether of each tether a winch holds, so another row of its `tethers` block is a bridle line: its segments are written and it stays in the definition's `tethers`, but it is not read back as a tether.
+
 ## KiteGeometry v0.5.0 2026-11-13
 
 ### Added

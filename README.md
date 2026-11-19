@@ -9,7 +9,7 @@
 
 One system definition for airborne wind energy systems — topology, CAD geometry
 and material — shared by the OpenSourceAWE packages, generated from the
-[awesIO](https://github.com/awegroup/awesIO) structure schema.
+[awesIO](https://github.com/awegroup/awesIO) structure and system schemas.
 
 Every package here describes the same thing and each describes it differently:
 SymbolicAWEModels has a `SystemStructure` and a YAML loader, KiteModels a scalar

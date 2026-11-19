@@ -6,6 +6,8 @@ using KiteUtils: Settings, set_data_path
 using LinearAlgebra: norm, normalize
 using OrderedCollections: OrderedDict
 
+include("models.jl")
+
 """The line of the rider kite's tether and bridle."""
 tether_line() = (; youngs_modulus=5.5e10, density=970.0, diameter=0.002)
 
@@ -244,7 +246,7 @@ end
     rider, _ = load_rider_kite()
     @test "fixed" in structure_document(held)["bodies"]["headers"]
     @test !("fixed" in structure_document(rider)["bodies"]["headers"])
-    @test !any(body -> body.fixed, from_yaml(to_yaml(rider)).bodies)
+    @test !any(body -> body.fixed, written_again(rider).bodies)
 end
 
 @testset "a point riding a tube on a body or held in the world is refused" begin

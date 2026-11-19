@@ -27,10 +27,12 @@ jobs:
           repository=$(sed -n 's/^repository = "\(.*\)"$/\1/p' gen/awesio.toml)
           commit=$(sed -n 's/^commit = "\(.*\)"$/\1/p' gen/awesio.toml)
           upstream="https://raw.githubusercontent.com/$repository/$commit"
-          curl -fsSL "$upstream/src/awesio/schemas/structure_schema.yml" |
-            cmp - src/awesio/structure_schema.yml
-          for example in v3_beam_structure.yml v3_psm_structure.yml; do
-            curl -fsSL "$upstream/examples/structure/$example" | cmp - "test/data/$example"
+          for schema in structure_schema.yml system_schema.yml; do
+            curl -fsSL "$upstream/src/awesio/schemas/$schema" | cmp - "src/awesio/$schema"
+          done
+          for example in structure/v3_beam_structure.yml structure/v3_psm_structure.yml \
+                         system_config/v3_system.yml; do
+            curl -fsSL "$upstream/examples/$example" | cmp - "test/data/$example"
           done
       - uses: julia-actions/setup-julia@v3
         with:

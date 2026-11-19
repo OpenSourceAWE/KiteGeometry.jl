@@ -9,7 +9,8 @@ SPDX-FileCopyrightText = "2026 Bart van de Lint"
 SPDX-License-Identifier = "MIT"
 
 [[annotations]]
-path = ["src/awesio/structure_schema.yml", "test/data/v3_*_structure.yml"]
+path = ["src/awesio/*_schema.yml", "test/data/structure/v3_*_structure.yml",
+        "test/data/system_config/v3_system.yml"]
 SPDX-FileCopyrightText = "2025 Airborne Wind Energy Research Group"
 SPDX-License-Identifier = "MIT"
 
