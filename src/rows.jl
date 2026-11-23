@@ -109,7 +109,7 @@ function row_name(row)
 end
 
 """The block a row of type `T` belongs to, else `T` itself."""
-block_name(::Type{T}) where {T} = something(findfirst(==(T), BLOCKS), T)
+block_name(::Type{T}) where {T} = something(findfirst(==(T), ALL_BLOCKS), T)
 
 """The error for two rows of `block` named `name`."""
 duplicate_name(block, name) = ArgumentError("two $block are named $name")

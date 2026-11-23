@@ -921,6 +921,9 @@ function load_authoring(authored::AbstractDict; set::Settings, name::AbstractStr
                                     point_transforms, body_transforms)
     design_pose!(draft, set, point_wings, authored_wings)
     place!(draft, transforms; ignore_l0)
+    for tether in winch_tethers(draft)
+        push!(draft.system_tethers, design_tether(draft, tether))
+    end
     draft.metadata.connectivity_sha = connectivity_sha(draft)
     return draft, Rows{Transform}(transforms)
 end
@@ -1151,3 +1154,35 @@ function wing_inertia(points, members, authored)
     return com, Mat3(inertia / total)
 end
 
+"""The tethers of `system` a winch holds, the rest being lines of the bridle."""
+function winch_tethers(system)
+    held = Set(row_number(tether, system.tethers, :tethers)
+               for winch in system.winches for tether in winch.tethers)
+    return [tether for (index, tether) in enumerate(system.tethers) if index in held]
+end
+
+"""The system's tether of `tether` of `system`: its ends as its joints, the sum of its
+segments' rest lengths as its length, and the diameter and material they share, `nothing`
+where they differ."""
+function design_tether(system, tether)
+    rows = [system.segments[segment] for segment in tether.segments]
+    joints = OrderedDict{String, Any}(
+        "upper_tether_joint" => tether_joint(tether.start_point, system),
+        "lower_tether_joint" => tether_joint(tether.end_point, system))
+    return SystemTether(; name=tether.name, type="non_conductive_tether", version=1.0,
+                        joints,
+                        length=sum(row -> row.rest_length, rows; init=0.0),
+                        diameter=shared_value(row -> row.diameter, rows),
+                        material=shared_value(row -> row.material, rows))
+end
+
+"""The joint of a system tether at `point` of `system`."""
+function tether_joint(point, system)
+    return OrderedDict{String, Any}("id" => document_value(point, :points, system))
+end
+
+"""`field` of `rows` where they all hold one value, else `nothing`."""
+function shared_value(field, rows)
+    values = unique(field.(rows))
+    return length(values) == 1 ? only(values) : nothing
+end
