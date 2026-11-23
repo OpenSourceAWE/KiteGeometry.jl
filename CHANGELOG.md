@@ -10,6 +10,11 @@ SPDX-License-Identifier: MIT
 ### Added
 
 - Public, for a tool that models a definition: `KiteGeometry.Component`, the supertype of every row type; `KiteGeometry.WingFrame`, `KiteGeometry.wing_frame` and `KiteGeometry.ref_position`, a wing frame from its reference points; `KiteGeometry.connected_body_groups`, the bodies tubes join; `KiteGeometry.tube_law_parameters`, the parameters a tube's material takes from its law; and `KiteGeometry.parse_table`, the rows of a table in the authoring YAML's format.
+- `complete_wings!(system, set)` gives a definition's wings their mass and puts each wing's body in its design pose, as `load_authoring` does, so a definition built in Julia completes to the same wing. A wing's frame points are the points of its stations and those fixed in its body; its dynamics type, frame reference points and mesh centre and inertia are read from its model's `dynamics_type`, `origin_idx`, `z_ref_points`, `y_ref_points`, `com` and `unit_inertia` columns.
+
+### Changed
+
+- BREAKING: `load_authoring` no longer reads a wing's `dynamics_type`, `origin_idx`, `z_ref_points`, `y_ref_points`, `com` and `unit_inertia` itself: the wing's registered model must hold them, else they are refused as unread columns. A wing's deprecated `type` column now fills its model's `dynamics_type`.
 
 ## KiteGeometry v0.5.0 2026-11-13
 
