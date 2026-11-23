@@ -537,4 +537,40 @@ end
     @test_throws ArgumentError SystemDefinition(document)
 end
 
+"""A point model naming a point, and two groups of weighted points."""
+mutable struct Anchored <: AbstractModel
+    anchor::Any
+    ref_points::Any
+end
+KiteGeometry.model_references(::Type{Anchored}) =
+    (anchor=:points, ref_points=(WeightedRefs(:points), WeightedRefs(:points)))
+
+@testset "a tool's reference columns are names in a document, indices in a definition" begin
+    register_model!(:points, "anchored", Anchored, ("-", "-"); default=true)
+    try
+        model = Anchored(1, [2, [Any[1, 0.25], Any["kite", 0.75]]])
+        system = small_system()
+        system.points[1] = Point(; name="anchor", fixed=true, pos_ENU=[0, 0, 0],
+                                 model=Anchored(nothing, nothing))
+        system.points[2] = Point(; name="kite", pos_ENU=[0, 0, 100], model)
+        held = SystemDefinition(; metadata=system.metadata, points=system.points,
+                                segments=system.segments)
+        @test held.points[2].model.ref_points == [2, [Any[1, 0.25], Any[2, 0.75]]]
+        table = structure_document(held)["points"]
+        @test table["data"][1][end - 1:end] == [nothing, nothing]
+        @test table["data"][2][end - 1:end] ==
+              ["anchor", ["kite", [["anchor", 0.25], ["kite", 0.75]]]]
+        read_back = from_yaml(to_yaml(held)).points
+        @test (read_back[1].anchor, read_back[1].ref_points) == (nothing, nothing)
+        @test (read_back[2].anchor, read_back[2].ref_points) ==
+              (1, [2, [[1, 0.25], [2, 0.75]]])
+        model.ref_points = [1]
+        @test_throws "must hold 2 references" SystemDefinition(;
+            metadata=system.metadata, segments=system.segments,
+            points=[system.points[1], Point(; name="kite", pos_ENU=[0, 0, 100], model)])
+    finally
+        unregister_model!(:points, "anchored")
+    end
+end
+
 unregister_model!(:pulleys, "sam_pulley")
