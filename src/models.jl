@@ -108,11 +108,11 @@ function model_registration(block, M)
     throw(ArgumentError("$M is no model registered for $block"))
 end
 
-function Base.getproperty(component::Component, name::Symbol)
+@inline function Base.getproperty(component::Component, name::Symbol)
     hasfield(typeof(component), name) && return getfield(component, name)
     return getproperty(getfield(component, :model), name)
 end
-function Base.setproperty!(component::Component, name::Symbol, value)
+@inline function Base.setproperty!(component::Component, name::Symbol, value)
     hasfield(typeof(component), name) || return setproperty!(component.model, name, value)
     return setfield!(component, name, to_field(fieldtype(typeof(component), name), value))
 end
