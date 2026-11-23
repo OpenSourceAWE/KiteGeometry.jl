@@ -348,14 +348,15 @@ properties:
                   Unique name of the tether.
               - const: start_point
                 description: >
-                  The point the tether starts at.
+                  The point the tether starts at; null where it starts at its
+                  first segment's first point.
               - const: end_point
                 description: >
-                  The point the tether ends at.
+                  The point the tether ends at; null where it ends at its last
+                  segment's second point.
               - const: segments
                 description: >
-                  The tether's segments, in order from `start_point` to
-                  `end_point`.
+                  The tether's segments, in order from its start to its end.
             minItems: 4
           units:
             items:
@@ -369,8 +370,8 @@ properties:
               type: array
               items:
                 - $ref: "#/definitions/component_name"
-                - $ref: "#/definitions/component_name"
-                - $ref: "#/definitions/component_name"
+                - $ref: "#/definitions/optional_name"
+                - $ref: "#/definitions/optional_name"
                 - $ref: "#/definitions/name_list"
               minItems: 4
     optionalColumns:

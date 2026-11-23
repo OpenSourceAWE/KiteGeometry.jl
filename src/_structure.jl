@@ -164,10 +164,11 @@ the segments; a tether is the grouping a winch reels, and the length it is reele
 its segments' `rest_length`.
 
 - `name::Symbol`: Unique name of the tether.
-- `start_point::NameRef`: The point the tether starts at.
-- `end_point::NameRef`: The point the tether ends at.
-- `segments::Vector{NameRef}`: The tether's segments, in order from `start_point` to
-  `end_point`.
+- `start_point::Union{Nothing, NameRef}`: The point the tether starts at; null where it
+  starts at its first segment's first point.
+- `end_point::Union{Nothing, NameRef}`: The point the tether ends at; null where it ends at
+  its last segment's second point.
+- `segments::Vector{NameRef}`: The tether's segments, in order from its start to its end.
 - `init_stretched_length::Union{Nothing, Float64}` [m]: Optional. Length the tether is
   placed at, moving its end that is not held in the world along it, with what hangs from
   that end.
@@ -179,8 +180,8 @@ its segments' `rest_length`.
 """
 mutable struct Tether{M <: AbstractModel} <: Component
     const name::Symbol
-    start_point::NameRef
-    end_point::NameRef
+    start_point::Union{Nothing, NameRef}
+    end_point::Union{Nothing, NameRef}
     segments::Vector{NameRef}
     init_stretched_length::Union{Nothing, Float64}
     init_tether_force::Union{Nothing, Float64}

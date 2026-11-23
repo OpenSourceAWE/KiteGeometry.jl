@@ -235,7 +235,7 @@ end
 @testset "what a tool builds a definition with is public" begin
     @test all(name -> Base.ispublic(KiteGeometry, name),
               (:unit_stiffness, :resolve_material, :expand_tether!, :MaterialTable,
-               :parse_table, :tube_law_parameters, :Component))
+               :parse_table, :tube_law_parameters, :Component, :tether_ends))
 end
 
 """Whether each point of `system` the authoring `points` table names is at its `pos_cad`

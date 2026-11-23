@@ -411,7 +411,8 @@ function material(row)
              for field in MATERIAL_COLUMNS[3:end])...)
 end
 
-"""The constants of SymbolicAWEModels' Breukels (2011) inflated tube."""
+"""The constants C1…C19 of the Breukels (2011) correlations for an inflated tube, fitted for
+its radius in m and its pressure in bar."""
 const BREUKELS2011 = OrderedDict{String, Any}(
     "C1" => 6582.82, "C2" => -272.43, "C3" => 40852.38, "C4" => 14.31,
     "C5" => 271865251.42, "C6" => 215.93, "C7" => 14021.79, "C8" => -589.05,
@@ -662,12 +663,10 @@ end
     read_tethers!(points, segments, point_transforms, data, set, materials)
 
 The tethers of the `tethers` block, with the `init_*` columns they start at. A tether row
-naming its
-`segment_idxs` runs over those segments, between the points they chain unless it names
-them; one naming `n_segments` adds that many segments and the points between them, on the
-straight line between its ends, to `points` and `segments`, its material resolved against
-`set` and named among `materials`, each carrying the segments' default model read from the
-row's columns.
+naming its `segment_idxs` runs over those segments, with the ends it names; one naming
+`n_segments` adds that many segments and the points between them, on the straight line
+between its ends, to `points` and `segments`, its material resolved against `set` and named
+among `materials`, each carrying the segments' default model read from the row's columns.
 """
 function read_tethers!(points, segments, point_transforms, data, set, materials)
     tethers = Tether[]
@@ -680,13 +679,9 @@ function read_tethers!(points, segments, point_transforms, data, set, materials)
         init = read_tether_init(row, name)
         segment_refs = yaml_field(row, :segment_idxs)
         if !isnothing(segment_refs)
-            refs = yaml_to_ref.(segment_refs)
-            first_segment = find_row(segments, first(refs), "segments", "tether $name")
-            last_segment = find_row(segments, last(refs), "segments", "tether $name")
-            start_point = something(yaml_ref(row, :start_point), first_segment.points[1])
-            end_point = something(yaml_ref(row, :end_point), last_segment.points[2])
-            push!(tethers, Tether(; name, start_point, end_point, segments=refs, init...,
-                                  model))
+            push!(tethers, Tether(; name, start_point=yaml_ref(row, :start_point),
+                                  end_point=yaml_ref(row, :end_point),
+                                  segments=yaml_to_ref.(segment_refs), init..., model))
             continue
         end
         start_point, end_point = yaml_to_ref(row.start_point), yaml_to_ref(row.end_point)
@@ -816,8 +811,9 @@ end
 """
     tube_law_parameters(law) -> OrderedDict{String, Any}
 
-A fresh copy of the parameters of a tube material's rigidity `law`: SymbolicAWEModels'
-constants for `breukels2011`, none for another.
+A fresh copy of the parameters of a tube material's rigidity `law`: the constants C1…C19
+of the Breukels (2011) correlations, [`BREUKELS2011`](@ref), for `breukels2011`, none for
+another.
 """
 tube_law_parameters(law) =
     String(law) == "breukels2011" ? copy(BREUKELS2011) : OrderedDict{String, Any}()
@@ -917,6 +913,9 @@ function load_authoring(authored::AbstractDict; set::Settings, name::AbstractStr
                              winches=read_winches(data, set), wings,
                              canopy_faces=read_canopy_faces(data),
                              bodies=[wing_bodies; bodies], tubes, extras)
+    for tether in draft.tethers
+        tether.start_point, tether.end_point = tether_ends(draft, tether)
+    end
     transforms = resolve_transforms(authored_transforms, draft, authored_wings,
                                     point_transforms, body_transforms)
     design_pose!(draft, set, point_wings, authored_wings)
