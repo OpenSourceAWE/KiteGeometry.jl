@@ -11,6 +11,10 @@ SPDX-License-Identifier: MIT
 
 - Public, for a tool that models a definition: `KiteGeometry.Component`, the supertype of every row type; `KiteGeometry.WingFrame`, `KiteGeometry.wing_frame` and `KiteGeometry.ref_position`, a wing frame from its reference points; `KiteGeometry.connected_body_groups`, the bodies tubes join; `KiteGeometry.tube_law_parameters`, the parameters a tube's material takes from its law; and `KiteGeometry.parse_table`, the rows of a table in the authoring YAML's format.
 
+### Changed
+
+- BREAKING: A component built by its keyword constructor, such as `Point(; name, pos_ENU)`, carries its block's registered default model where every column of that model can be unset, as a loaded row without a `model` column does, rather than `NoModel()`; a `model` passed explicitly still wins.
+
 ## KiteGeometry v0.5.0 2026-11-13
 
 ### Added
