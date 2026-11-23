@@ -692,15 +692,16 @@ end
 end
 
 """`small_system` with its line the tether `main` of the system, `diameter` thick, on
-segments of `segment_diameter`."""
-function tethered_system(; diameter=0.004, segment_diameter=diameter)
+segments of `segment_diameter` carrying `segment_model`."""
+function tethered_system(; diameter=0.004, segment_diameter=diameter,
+                         segment_model=NoModel())
     materials = [Material(; name="dyneema", law="linear_elastic",
                           parameters=OrderedDict{String, Any}("density" => 970.0))]
     design = SystemTether(; name="main", type="non_conductive_tether", version=1.0,
                           joints=OrderedDict{String, Any}(), length=100.0, diameter,
                           material="dyneema")
     segment = Segment(; name="line", points=("anchor", "kite"), rest_length=100,
-                      diameter=segment_diameter, material="dyneema")
+                      diameter=segment_diameter, material="dyneema", model=segment_model)
     return small_system(; materials, system_tethers=[design], segments=[segment],
                         tethers=[Tether(; name="main", start_point="anchor",
                                         end_point="kite", segments=["line"])])
@@ -722,6 +723,26 @@ end
     @test_throws "gives a diameter" SystemDefinition(document, system_document(system))
 end
 
+"""A segment model reading an unset diameter as 0, as a tool computing with it may."""
+struct ZeroDiameter <: AbstractModel end
+function Base.getproperty(segment::Segment{ZeroDiameter}, name::Symbol)
+    name == :diameter && return something(getfield(segment, :diameter), 0.0)
+    return invoke(getproperty, Tuple{KiteGeometry.Component, Symbol}, segment, name)
+end
+
+@testset "a tether's segments are read by the cells they hold, not by their model" begin
+    register_model!(:segments, "zero_diameter", ZeroDiameter, ())
+    try
+        system = tethered_system(; segment_model=ZeroDiameter())
+        @test written_again(system).segments[:line].diameter == 0.004
+        @test written_again(tethered_system(; segment_diameter=nothing,
+                                            segment_model=ZeroDiameter())).segments[
+            :line].diameter == 0.004
+    finally
+        unregister_model!(:segments, "zero_diameter")
+    end
+end
+
 """A point model naming a point, and two groups of weighted points."""
 mutable struct Anchored <: AbstractModel
     anchor::Any
@@ -735,15 +756,20 @@ KiteGeometry.model_references(::Type{Anchored}) =
     try
         model = Anchored(1, [2, [Any[1, 0.25], Any["kite", 0.75]]])
         system = small_system()
+        system.points[1] = Point(; name="anchor", fixed=true, pos_ENU=[0, 0, 0],
+                                 model=Anchored(nothing, nothing))
         system.points[2] = Point(; name="kite", pos_ENU=[0, 0, 100], model)
         held = SystemDefinition(; metadata=system.metadata, points=system.points,
                                 segments=system.segments)
         @test held.points[2].model.ref_points == [2, [Any[1, 0.25], Any[2, 0.75]]]
         table = structure_document(held)["points"]
+        @test table["data"][1][end - 1:end] == [nothing, nothing]
         @test table["data"][2][end - 1:end] ==
               ["anchor", ["kite", [["anchor", 0.25], ["kite", 0.75]]]]
-        read_back = written_again(held).points[2].model
-        @test (read_back.anchor, read_back.ref_points) == (1, [2, [[1, 0.25], [2, 0.75]]])
+        read_back = written_again(held).points
+        @test (read_back[1].anchor, read_back[1].ref_points) == (nothing, nothing)
+        @test (read_back[2].anchor, read_back[2].ref_points) ==
+              (1, [2, [[1, 0.25], [2, 0.75]]])
         model.ref_points = [1]
         @test_throws "must hold 2 references" SystemDefinition(;
             metadata=system.metadata, segments=system.segments,

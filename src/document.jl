@@ -85,13 +85,15 @@ function SystemDefinition(; metadata::Metadata,
 end
 
 """`component` of `block` with every reference in it an index into `indices`' blocks."""
-function resolve(component::Component, block, indices)
+function resolve(component::Component, block::Symbol, indices)
     T = typeof(component)
     return T((resolve(getfield(component, field), get(REFERENCES, (block, field), nothing),
                       indices) for field in fieldnames(T))...)
 end
 resolve(value, ::Nothing, indices) = value
-resolve(::Nothing, ::Union{Symbol, WeightedRefs, Tuple}, indices) = nothing
+resolve(::Nothing, ::Symbol, indices) = nothing
+resolve(::Nothing, ::WeightedRefs, indices) = nothing
+resolve(::Nothing, ::Tuple, indices) = nothing
 function resolve(refs::Union{Tuple, Vector}, target::Symbol, indices)
     return resolve.(refs, target, (indices,))
 end
@@ -172,7 +174,7 @@ const TETHER_TOLERANCE = 1e-9
 """Gives the segments of `tether` of `system` the diameter of the system's tether, refusing
 a tether the system does not list, a segment giving a diameter or naming another material
 than the system's tether, and rest lengths not adding up to its length. A field left out
-states nothing."""
+states nothing. Reads each segment's own fields, whatever its model reads them as."""
 function read_tether!(tether, system)
     name = tether.name
     haskey(system.system_tethers, name) ||
@@ -180,16 +182,18 @@ function read_tether!(tether, system)
     design = system.system_tethers[name]
     segments = [system.segments[segment] for segment in tether.segments]
     for segment in segments
-        isnothing(design.material) || isnothing(segment.material) ||
-            design.material == segment.material || throw(ArgumentError(
+        material = getfield(segment, :material)
+        isnothing(design.material) || isnothing(material) ||
+            design.material == material || throw(ArgumentError(
             "tether $name segment $(segment.name) is not of the system's material"))
-        isnothing(segment.diameter) || throw(ArgumentError(
+        isnothing(getfield(segment, :diameter)) || throw(ArgumentError(
             "tether $name segment $(segment.name) gives a diameter, which the system's " *
             "tether owns"))
-        segment.diameter = design.diameter
+        setfield!(segment, :diameter, design.diameter)
     end
-    any(segment -> isnothing(segment.rest_length), segments) && return nothing
-    total = sum(segment -> segment.rest_length, segments; init=0.0)
+    rest_lengths = [getfield(segment, :rest_length) for segment in segments]
+    any(isnothing, rest_lengths) && return nothing
+    total = sum(rest_lengths; init=0.0)
     isapprox(total, design.length; rtol=TETHER_TOLERANCE) || throw(ArgumentError(
         "tether $name segments add up to $total m, the system says $(design.length) m"))
     return nothing
@@ -552,15 +556,17 @@ function listed_tethers(structure)
 end
 
 """The segments of `structure`, those of a tether its system lists without the diameter
-that tether owns, refusing one of another diameter, which the document would lose."""
+that tether owns, refusing one of another diameter, which the document would lose. Reads
+each segment's own diameter field."""
 function written_segments(structure)
     segments = collect(structure.segments)
     for tether in listed_tethers(structure), index in tether.segments
         segment = segments[index]
         design = structure.system_tethers[tether.name].diameter
-        isnothing(segment.diameter) || segment.diameter == design || throw(ArgumentError(
-            "tether $(tether.name) segment $(segment.name) has diameter " *
-            "$(segment.diameter), the system's tether $(something(design, "none"))"))
+        diameter = getfield(segment, :diameter)
+        isnothing(diameter) || diameter == design || throw(ArgumentError(
+            "tether $(tether.name) segment $(segment.name) has diameter $diameter, " *
+            "the system's tether $(something(design, "none"))"))
         segments[index] = with_diameter(segment, nothing)
     end
     return segments
@@ -695,7 +701,9 @@ document_value(value::StaticVector, ::Nothing, system) = collect(value)
 function document_value(value::StaticMatrix, ::Nothing, system)
     return [collect(row) for row in eachrow(value)]
 end
-document_value(::Nothing, ::Union{Symbol, WeightedRefs, Tuple}, system) = nothing
+document_value(::Nothing, ::Symbol, system) = nothing
+document_value(::Nothing, ::WeightedRefs, system) = nothing
+document_value(::Nothing, ::Tuple, system) = nothing
 document_value(name::Symbol, ::Nothing, system) = String(name)
 function document_value(names::AbstractVector{NameRef}, ::Nothing, system)
     return document_value.(names, nothing, (system,))
