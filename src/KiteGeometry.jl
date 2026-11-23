@@ -34,6 +34,8 @@ export load_structure, load_authoring, structure_document, system_document,
 export from_yaml, to_yaml, from_json, to_json
 public definition, unit_stiffness, resolve_material, expand_tether!, line_segment,
        MaterialTable, row_index
+public Component, parse_table, tube_law_parameters
+public ref_position, WingFrame, wing_frame, connected_body_groups
 
 """
     NameRef

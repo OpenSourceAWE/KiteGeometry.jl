@@ -35,10 +35,14 @@ write("structure/v3_beam_structure.yml",
 
 ## Frames
 
-Positions are in the ENU world frame. Each wing gives the origin and rotation of its KA frame, the frame its aerodynamic mesh is drawn in, and `pos_KA` puts a world position into it.
+Positions are in the ENU world frame. Each wing gives the origin and rotation of its KA frame, the frame its aerodynamic mesh is drawn in, and `pos_KA` puts a world position into it. A `KiteGeometry.WingFrame` names the points that fix such a frame, `KiteGeometry.wing_frame` gives its rotation and origin from any positions of those points, and `KiteGeometry.ref_position` the weighted position of a set of reference points. Bodies joined by tubes move together; `KiteGeometry.connected_body_groups` says which bodies form a group.
 
 ```@docs
 pos_KA
+KiteGeometry.WingFrame
+KiteGeometry.wing_frame
+KiteGeometry.ref_position
+KiteGeometry.connected_body_groups
 ```
 
 ## YAML and JSON
@@ -66,7 +70,7 @@ KiteGeometry.definition
 
 SymbolicAWEModels authors a system in its wing's KA frame: points at `pos_cad`, tethers by their segment count and stretched length, `variables` shared between rows, and `transforms` that turn the whole to an elevation, azimuth and heading. `load_authoring` converts that dialect into a `SystemDefinition` placed by its transforms, and returns those transforms beside it, so `structure_document` writes the full-form document with no transforms in it. Each segment's stiffness and density become a `linear` material of the system and a tube's `breukels2011` law SymbolicAWEModels' Breukels constants; each tether a winch holds becomes a tether of the system, of the length of its rest lengths and the diameter and material its segments share, and any other row of `tethers` is a bridle line, whose segments alone reach the structure document. The columns the schema left to tools, such as a point's `type` and drag or a segment's damping and what it does in compression, are read only by the models SymbolicAWEModels registers, as the row authors them; a tether that gives a segment count reads its segments' model from its own row. A `canopy_faces` table with the schema's own columns states each wing's canopy: a face's wing, and its corners by name or index. A filled cell that neither the loader nor the row's model reads is refused, as `load_structure` refuses one, naming the block and its columns, and so is a block it does not read that holds rows; a row's `idx`, where it has one, must be its position. A column a dict row leaves out is an unset cell, which a model field holds only where it admits `nothing`.
 
-`KiteGeometry.resolve_material` completes a segment's diameter, stiffness and density from what its row gives and the settings, as the loader does, and `KiteGeometry.unit_stiffness` gives the stiffness of a `linear` material at a diameter, or of a placed segment from its material. `KiteGeometry.expand_tether!` adds a tether's segments and inner points to rows a tool holds, as the loader does for a row that gives a segment count, its stiffness a number, a law's name or a callable force law, collected in a `KiteGeometry.MaterialTable`. `KiteGeometry.line_segment` makes one segment the same way, for a structure built row by row.
+`KiteGeometry.resolve_material` completes a segment's diameter, stiffness and density from what its row gives and the settings, as the loader does, and `KiteGeometry.unit_stiffness` gives the stiffness of a `linear` material at a diameter, or of a placed segment from its material. `KiteGeometry.expand_tether!` adds a tether's segments and inner points to rows a tool holds, as the loader does for a row that gives a segment count, its stiffness a number, a law's name or a callable force law, collected in a `KiteGeometry.MaterialTable`. `KiteGeometry.line_segment` makes one segment the same way, for a structure built row by row. `KiteGeometry.tube_law_parameters` gives the parameters a tube's material takes from its law, and `KiteGeometry.parse_table` reads the rows of a table in the authoring YAML's format, such as a block the loader leaves to the tool.
 
 ```@docs
 load_authoring
@@ -75,6 +79,8 @@ KiteGeometry.unit_stiffness
 KiteGeometry.expand_tether!
 KiteGeometry.line_segment
 KiteGeometry.MaterialTable
+KiteGeometry.tube_law_parameters
+KiteGeometry.parse_table
 ```
 
 ## Transforms
@@ -108,7 +114,10 @@ place!
 
 ## Components
 
+Every row type is a `KiteGeometry.Component`.
+
 ```@docs
+KiteGeometry.Component
 Material
 Point
 Segment

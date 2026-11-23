@@ -11,8 +11,8 @@ SPDX-License-Identifier: MIT
 
 - `system_document` writes a system document from one definition or the union by name of several, refusing one name with two different values; `system_sha` gives a file's hash; `structure_document` takes `description`, `note`, `system` and `system_sha`; `to_yaml` and `to_json` take a document.
 - `SystemMetadata` and `SystemTether`, generated from the system schema; `SystemMetadata` is mutable and compares by its fields. `load_authoring` gives each tether a winch holds a `SystemTether`: its ends, its length and the diameter and material its segments share.
-
 - `model_references(M)` declares the columns of a model that refer to rows, with `WeightedRefs` for reference points: a document gives them by name and a definition holds them as indices.
+- Public, for a tool that models a definition: `KiteGeometry.Component`, the supertype of every row type; `KiteGeometry.WingFrame`, `KiteGeometry.wing_frame` and `KiteGeometry.ref_position`, a wing frame from its reference points; `KiteGeometry.connected_body_groups`, the bodies tubes join; `KiteGeometry.tube_law_parameters`, the parameters a tube's material takes from its law; and `KiteGeometry.parse_table`, the rows of a table in the authoring YAML's format.
 
 ### Changed
 

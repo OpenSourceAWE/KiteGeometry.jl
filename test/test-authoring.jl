@@ -244,7 +244,8 @@ end
 
 @testset "what a tool builds a definition with is public" begin
     @test all(name -> Base.ispublic(KiteGeometry, name),
-              (:unit_stiffness, :resolve_material, :expand_tether!, :MaterialTable))
+              (:unit_stiffness, :resolve_material, :expand_tether!, :MaterialTable,
+               :parse_table, :tube_law_parameters, :Component))
 end
 
 """Whether each point of `system` the authoring `points` table names is at its `pos_cad`
@@ -451,11 +452,13 @@ end
     @test points[3].pos_ENU ≈ [0.0, 0.0, 10.0]
 end
 
-@testset "a breukels2011 tube's material is its own copy of SAM's constants" begin
+@testset "a tube's material holds its own copy of its law's parameters" begin
     system = load_edited(add_timoshenko_tube!)
     parameters = system.materials[only(system.tubes).material].parameters
-    @test parameters == KiteGeometry.BREUKELS2011
-    @test parameters !== KiteGeometry.BREUKELS2011
+    @test parameters == KiteGeometry.tube_law_parameters(:breukels2011) ==
+          KiteGeometry.BREUKELS2011
+    @test parameters !== KiteGeometry.tube_law_parameters("breukels2011")
+    @test isempty(KiteGeometry.tube_law_parameters("timoshenko"))
 end
 
 @testset "SAM's columns read into the models it registers and are written back" begin

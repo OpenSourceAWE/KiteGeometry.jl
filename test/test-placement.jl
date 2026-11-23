@@ -3,7 +3,7 @@
 
 using KiteGeometry: expand_tether!, MaterialTable
 using KiteUtils: Settings, set_data_path
-using LinearAlgebra: norm, normalize
+using LinearAlgebra: I, norm, normalize
 using OrderedCollections: OrderedDict
 
 include("models.jl")
@@ -259,4 +259,17 @@ end
         @test_throws "rides a tube" SystemDefinition(;
             metadata=Metadata(; name="rider", n_points=1), points=[point], bodies, tubes)
     end
+end
+
+@testset "a wing frame and the body groups tubes join are public" begin
+    @test all(name -> Base.ispublic(KiteGeometry, name),
+              (:ref_position, :WingFrame, :wing_frame, :connected_body_groups))
+    pos = [[0.0, 0, 0], [0, 0, 2], [0, -1, 1], [0, 1, 1]]
+    @test KiteGeometry.ref_position(pos, [1 => 0.5, 2 => 0.5]) == [0, 0, 1]
+    frame = KiteGeometry.WingFrame([3 => 0.5, 4 => 0.5], ([1 => 1.0], [2 => 1.0]),
+                                   ([3 => 1.0], [4 => 1.0]))
+    R, origin = KiteGeometry.wing_frame(pos, frame)
+    @test R ≈ I && origin == [0, 0, 1]
+    groups = KiteGeometry.connected_body_groups(4, [(; bodies=(1, 3)), (; bodies=(3, 4))])
+    @test groups[1] == groups[3] == groups[4] != groups[2]
 end

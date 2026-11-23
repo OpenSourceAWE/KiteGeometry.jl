@@ -813,8 +813,17 @@ function read_bodies(data)
     return bodies, transforms
 end
 
+"""
+    tube_law_parameters(law) -> OrderedDict{String, Any}
+
+A fresh copy of the parameters of a tube material's rigidity `law`: SymbolicAWEModels'
+constants for `breukels2011`, none for another.
+"""
+tube_law_parameters(law) =
+    String(law) == "breukels2011" ? copy(BREUKELS2011) : OrderedDict{String, Any}()
+
 """The tubes of the `tubes` block, each made of the material of its `law` among
-`materials`: SymbolicAWEModels' constants for `breukels2011`, no parameters for another."""
+`materials`, with that law's [`tube_law_parameters`](@ref)."""
 function read_tubes(data, materials)
     rows = read_rows(data, :tubes, (:name, :bodies, :diameter, :pressure, :law))
     return map(enumerate(rows)) do (i, (row, model))
@@ -823,10 +832,9 @@ function read_tubes(data, materials)
         (isnothing(bodies) || length(bodies) != 2) && error(
             "tube $name: `bodies` must name the two bodies it joins")
         law = String(row.law)
-        parameters = law == "breukels2011" ? copy(BREUKELS2011) : OrderedDict{String, Any}()
         Tube(; name, bodies=yaml_to_ref.(bodies), diameter=yaml_float(row, :diameter),
              pressure=yaml_float(row, :pressure),
-             material=material!(materials, law, law, parameters), model)
+             material=material!(materials, law, law, tube_law_parameters(law)), model)
     end
 end
 
