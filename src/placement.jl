@@ -8,10 +8,10 @@ const Mat3 = SMatrix{3, 3, Float64, 9}
 const RefPoints = Vector{Pair{Int, Float64}}
 
 """
-    WingFrame
+    WingFrame(origin, z_ref_points, y_ref_points)
 
 The points that fix a wing body's frame: its origin, and the two pairs giving its z and its
-y axis.
+y axis, each a vector of `index => weight` pairs as [`ref_position`](@ref) reads them.
 """
 struct WingFrame
     origin::RefPoints
@@ -80,12 +80,21 @@ end
 
 # ==================== WING FRAMES ==================== #
 
-"""Weighted position of the reference points `refs` among the positions `pos`."""
+"""
+    ref_position(pos, refs)
+
+Weighted position of the reference points `refs`, pairs of a point index and its weight,
+among the positions `pos`.
+"""
 ref_position(pos, refs) = sum(weight * pos[index] for (index, weight) in refs)
 
-"""Rotation into the world and origin of the wing frame `frame` on the positions `pos`: z
+"""
+    wing_frame(pos, frame::WingFrame) -> (R, origin)
+
+Rotation into the world and origin of the wing frame `frame` on the positions `pos`: z
 from the first z reference to the second, x across the y references and z, y completing
-the right-handed frame."""
+the right-handed frame.
+"""
 function wing_frame(pos, frame::WingFrame)
     z_axis = normalize(ref_position(pos, frame.z_ref_points[2]) -
                        ref_position(pos, frame.z_ref_points[1]))
@@ -208,14 +217,24 @@ function beam_body_neighbors(tubes)
     return neighbors
 end
 
-"""Root of each body's group of bodies joined by tubes, by union-find."""
+"""
+    connected_body_groups(n_bodies, tubes) -> Vector{Int}
+
+For each of `n_bodies` bodies, the root body of its group of bodies joined by `tubes`; two
+bodies share a root exactly when tubes connect them.
+"""
 function connected_body_groups(n_bodies, tubes)
     root = collect(1:n_bodies)
-    find(x) = root[x] == x ? x : (root[x] = find(root[x]))
     for tube in tubes
-        root[find(tube.bodies[1])] = find(tube.bodies[2])
+        root[group_root!(root, tube.bodies[1])] = group_root!(root, tube.bodies[2])
     end
-    return [find(body) for body in 1:n_bodies]
+    return [group_root!(root, body) for body in 1:n_bodies]
+end
+
+"""The root of `body` in the union-find parents `root`, pointing `body` straight at it."""
+function group_root!(root, body)
+    root[body] == body && return body
+    return root[body] = group_root!(root, root[body])
 end
 
 """The bodies that translate with `seeds`: the seeds and every body reached from them over
