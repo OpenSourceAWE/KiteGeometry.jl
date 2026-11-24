@@ -234,7 +234,8 @@ end
 
 @testset "what a tool builds a definition with is public" begin
     @test all(name -> Base.ispublic(KiteGeometry, name),
-              (:unit_stiffness, :resolve_material, :expand_tether!, :MaterialTable))
+              (:unit_stiffness, :resolve_material, :expand_tether!, :MaterialTable,
+               :parse_table, :tube_law_parameters, :Component, :tether_ends))
 end
 
 """Whether each point of `system` the authoring `points` table names is at its `pos_cad`
@@ -380,8 +381,7 @@ end
 @testset "a tether of a callable stiffness expands to segments reading that force law" begin
     set_data_path(joinpath(@__DIR__, "data", "2plate_kite"))
     force_law(strain) = 1.0e5 * strain
-    tether_end(name, pos) = Point(; name, extra_mass=0.0, pos_ENU=pos,
-                                  model=KiteGeometry.added_row_model(:points))
+    tether_end(name, pos) = Point(; name, extra_mass=0.0, pos_ENU=pos)
     points = [tether_end(:ground, [0.0, 0.0, 0.0]), tether_end(:kite, [0.0, 0.0, 30.0])]
     segments = Segment[]
     point_transforms = Union{Nothing, NameRef}[nothing, nothing]
@@ -389,7 +389,7 @@ end
     tether = KiteGeometry.expand_tether!(points, segments, point_transforms, :main, :ground,
                                          :kite, 3, Settings("system.yaml"), materials;
                                          init=(; init_stretched_length=33.0),
-                                         model=KiteGeometry.added_row_model(:tethers),
+                                         model=KiteGeometry.default_row_model(:tethers),
                                          segment_model=SamSpring(5.0, nothing, nothing,
                                                                  nothing),
                                          unit_stiffness=force_law)
@@ -408,11 +408,13 @@ end
     @test points[3].pos_ENU ≈ [0.0, 0.0, 10.0]
 end
 
-@testset "a breukels2011 tube's material is its own copy of SAM's constants" begin
+@testset "a tube's material holds its own copy of its law's parameters" begin
     system = load_edited(add_timoshenko_tube!)
     parameters = system.materials[only(system.tubes).material].parameters
-    @test parameters == KiteGeometry.BREUKELS2011
-    @test parameters !== KiteGeometry.BREUKELS2011
+    @test parameters == KiteGeometry.tube_law_parameters(:breukels2011) ==
+          KiteGeometry.BREUKELS2011
+    @test parameters !== KiteGeometry.tube_law_parameters("breukels2011")
+    @test isempty(KiteGeometry.tube_law_parameters("timoshenko"))
 end
 
 @testset "SAM's columns read into the models it registers and are written back" begin
@@ -459,6 +461,18 @@ end
     @test_throws "points already reads the default model sam_point" register_model!(
         :points, "other_point", SamPoint, POINT_UNITS; default=true)
     @test !haskey(KiteGeometry.MODELS, (:points, "other_point"))
+end
+
+@testset "a keyword-built component carries the model a loaded row without one gets" begin
+    point = Point(; name=:a, pos_ENU=[0, 0, 1], fixed=true)
+    @test point.model == KiteGeometry.authoring_model(:points, (; name="a"))
+    @test point isa Point{SamPoint}
+    @test Point(; name=:a, pos_ENU=[0, 0, 1], model=NoModel()) isa Point{NoModel}
+    station = SpanwiseStation(; name=:s, wing=:w, points=[:le, :te])
+    @test station.model == NoModel()
+    without_sam_models(:points) do
+        @test Point(; name=:a, pos_ENU=[0, 0, 1]).model == NoModel()
+    end
 end
 
 @testset "a transform with both a base_pos and a base_transform is refused" begin

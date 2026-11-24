@@ -41,9 +41,10 @@ end
                      tethers, winches, wings, canopy_faces, bodies, tubes, extras)
 
 A system definition from its components, every reference resolved to the index of the
-component it names. Absent blocks are empty; `extras` holds the blocks the schema does not
-name. Refuses a `metadata.n_points` that is not the number of points, and a point riding a
-tube that is on a body or held in the world.
+component it names, and each tether's unset ends those of its segment chain,
+[`tether_ends`](@ref). Absent blocks are empty; `extras` holds the blocks the schema does
+not name. Refuses a `metadata.n_points` that is not the number of points, and a point
+riding a tube that is on a body or held in the world.
 """
 function SystemDefinition(; metadata::Metadata, extras=OrderedDict{String, Any}(),
                           components...)
@@ -64,19 +65,40 @@ function SystemDefinition(; metadata::Metadata, extras=OrderedDict{String, Any}(
                                        for block in keys(BLOCKS))
     resolved = ([resolve(component, block, indices) for component in blocks[block]]
                 for block in keys(BLOCKS))
-    return SystemDefinition(metadata, resolved..., extras)
+    system = SystemDefinition(metadata, resolved..., extras)
+    for tether in system.tethers
+        tether.start_point, tether.end_point = tether_ends(system, tether)
+    end
+    return system
+end
+
+"""
+    tether_ends(system::SystemDefinition, tether) -> (start_point, end_point)
+
+The two points `tether` of `system` runs between: its own `start_point` and `end_point`
+where set, else its first segment's first point and its last segment's second point.
+"""
+function tether_ends(system::SystemDefinition, tether)
+    (; segments) = system
+    return (@something(tether.start_point, segments[first(tether.segments)].points[1]),
+            @something(tether.end_point, segments[last(tether.segments)].points[2]))
 end
 
 """`component` of `block` with every reference in it an index into `indices`' blocks."""
-function resolve(component::Component, block, indices)
+function resolve(component::Component, block::Symbol, indices)
     T = typeof(component)
     return T((resolve(getfield(component, field), get(REFERENCES, (block, field), nothing),
                       indices) for field in fieldnames(T))...)
 end
 resolve(value, ::Nothing, indices) = value
-resolve(::Nothing, target::Symbol, indices) = nothing
+resolve(::Nothing, ::Symbol, indices) = nothing
+resolve(::Nothing, ::WeightedRefs, indices) = nothing
+resolve(::Nothing, ::Tuple, indices) = nothing
 function resolve(refs::Union{Tuple, Vector}, target::Symbol, indices)
     return resolve.(refs, target, (indices,))
+end
+function resolve(name::AbstractString, target::Symbol, indices)
+    return resolve(Symbol(name), target, indices)
 end
 function resolve(name::Symbol, target::Symbol, indices)
     haskey(indices[target], name) || throw(ArgumentError("no $target named $name"))
@@ -86,6 +108,28 @@ function resolve(index::Int, target::Symbol, indices)
     index in 1:length(indices[target]) ||
         throw(ArgumentError("no $target at index $index"))
     return index
+end
+function resolve(value, refs::WeightedRefs, indices)
+    return map_weighted(ref -> resolve(ref, refs.block, indices), value)
+end
+function resolve(value, references::Tuple, indices)
+    return [resolve(cell, reference, indices)
+            for (cell, reference) in zip_references(value, references)]
+end
+function resolve(model::M, ::Nothing, indices) where {M <: AbstractModel}
+    references = model_references(M)
+    isempty(references) && return model
+    return Base.typename(M).wrapper(
+        (resolve(getfield(model, column), get(references, column, nothing), indices)
+         for column in model_columns(M))...)
+end
+
+"""The cells of the list `value` paired with the `references` that give their shapes,
+refusing a list of another length."""
+function zip_references(value, references)
+    length(value) == length(references) ||
+        throw(ArgumentError("$value must hold $(length(references)) references"))
+    return zip(value, references)
 end
 
 """
@@ -369,7 +413,7 @@ function write_table(system, block, rows)
     data = [Any[(document_value(getfield(row, column),
                                 get(REFERENCES, (block, column), nothing), system)
                  for column in columns)...,
-                (model_cell(row.model, registration, header)
+                (model_cell(row.model, registration, header, system)
                  for header in keys(model_units))...]
             for (row, registration) in zip(rows, registrations)]
     return OrderedDict{String, Any}(
@@ -384,12 +428,15 @@ function reads_default(registration, block)
     return !isnothing(registration) && registration.name == default_model(block)
 end
 
-"""The cell of `model`, registered as `registration`, in the model column `header`: the
-registered name for `model`, else the field of that name, `nothing` where it has none."""
-function model_cell(model, registration, header)
+"""The cell of `model` of a row of `system`, registered as `registration`, in the model
+column `header`: the registered name for `model`, else the field of that name, `nothing`
+where it has none."""
+function model_cell(model, registration, header, system)
     header == "model" && return isnothing(registration) ? nothing : registration.name
-    Symbol(header) in model_columns(typeof(model)) || return nothing
-    return document_value(getfield(model, Symbol(header)), nothing, nothing)
+    column = Symbol(header)
+    column in model_columns(typeof(model)) || return nothing
+    reference = get(model_references(typeof(model)), column, nothing)
+    return document_value(getfield(model, column), reference, system)
 end
 
 """`value` as a structure document writes it, a reference into `target` by name."""
@@ -398,7 +445,9 @@ document_value(value::StaticVector, ::Nothing, system) = collect(value)
 function document_value(value::StaticMatrix, ::Nothing, system)
     return [collect(row) for row in eachrow(value)]
 end
-document_value(::Nothing, target::Symbol, system) = nothing
+document_value(::Nothing, ::Symbol, system) = nothing
+document_value(::Nothing, ::WeightedRefs, system) = nothing
+document_value(::Nothing, ::Tuple, system) = nothing
 document_value(name::Symbol, ::Nothing, system) = String(name)
 function document_value(names::AbstractVector{NameRef}, ::Nothing, system)
     return document_value.(names, nothing, (system,))
@@ -406,7 +455,14 @@ end
 function document_value(index::Int, target::Symbol, system)
     return String(getfield(system, target)[index].name)
 end
-document_value(name::Symbol, target::Symbol, system) = String(name)
+document_value(name::Union{Symbol, AbstractString}, target::Symbol, system) = String(name)
 function document_value(refs::Union{Tuple, Vector}, target::Symbol, system)
     return [document_value(ref, target, system) for ref in refs]
+end
+function document_value(value, refs::WeightedRefs, system)
+    return map_weighted(ref -> document_value(ref, refs.block, system), value)
+end
+function document_value(value, references::Tuple, system)
+    return [document_value(cell, reference, system)
+            for (cell, reference) in zip_references(value, references)]
 end

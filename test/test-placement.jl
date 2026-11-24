@@ -3,7 +3,7 @@
 
 using KiteGeometry: expand_tether!, MaterialTable
 using KiteUtils: Settings, set_data_path
-using LinearAlgebra: norm, normalize
+using LinearAlgebra: I, norm, normalize
 using OrderedCollections: OrderedDict
 
 """The line of the rider kite's tether and bridle."""
@@ -187,6 +187,51 @@ end
     @test rest_lengths(system) ≈ [3.0, 7.0] atol=1e-12
 end
 
+@testset "a tether named by its segments alone starts and ends where they chain" begin
+    system, _ = load_authoring(authored_uneven_tether(); set=placement_settings(),
+                               name="uneven")
+    tether = only(system.tethers)
+    @test (tether.start_point, tether.end_point) == (1, 3)
+end
+
+"""The tether of [`authored_uneven_tether`](@ref) built row by row from its segments alone,
+naming neither end, to be placed at a stretched length of 12 m."""
+function segment_only_tether()
+    set, line = placement_settings(), tether_line()
+    materials = MaterialTable(Material[], Dict{String, Any}())
+    points = [Point(; name=:ground, fixed=true, pos_ENU=[0.0, 0.0, 0.0], extra_mass=0.0),
+              Point(; name=:joint, pos_ENU=[0.0, 0.0, 3.0], extra_mass=0.0),
+              Point(; name=:kcu, pos_ENU=[0.0, 0.0, 10.0], extra_mass=0.0)]
+    segments = [KiteGeometry.line_segment(name, ends, set, materials; model=NoModel(),
+                                          line...)
+                for (name, ends) in ((:low, (:ground, :joint)), (:high, (:joint, :kcu)))]
+    tether = Tether(; name=:main, segments=[:low, :high], init_stretched_length=12.0)
+    return SystemDefinition(; metadata=Metadata(; name="segments", n_points=3),
+                            materials=materials.rows, points, segments, tethers=[tether])
+end
+
+@testset "a tether without ends places, writes and reads back, its ends the chain's" begin
+    system = segment_only_tether()
+    tether = only(system.tethers)
+    @test (tether.start_point, tether.end_point) == (1, 3)
+    place!(system)
+    @test placed_length(system, tether) ≈ 12.0 atol=1e-9
+    document = structure_document(system)
+    @test only(document["tethers"]["data"])[2:3] == ["ground", "kcu"]
+    read_back = SystemDefinition(document)
+    @test only(read_back.tethers) == tether
+    @test structure_document(read_back) == document
+end
+
+@testset "a tether's ends are its own where set, else its segment chain's" begin
+    system = segment_only_tether()
+    tether = only(system.tethers)
+    tether.start_point, tether.end_point = 3, 2
+    @test KiteGeometry.tether_ends(system, tether) == (3, 2)
+    tether.start_point, tether.end_point = nothing, nothing
+    @test KiteGeometry.tether_ends(system, tether) == (1, 3)
+end
+
 """The authoring document of a body whose centre of mass is off its origin, turned by a
 transform naming no `rot_point`."""
 function authored_offset_body()
@@ -257,4 +302,17 @@ end
         @test_throws "rides a tube" SystemDefinition(;
             metadata=Metadata(; name="rider", n_points=1), points=[point], bodies, tubes)
     end
+end
+
+@testset "a wing frame and the body groups tubes join are public" begin
+    @test all(name -> Base.ispublic(KiteGeometry, name),
+              (:ref_position, :WingFrame, :wing_frame, :connected_body_groups))
+    pos = [[0.0, 0, 0], [0, 0, 2], [0, -1, 1], [0, 1, 1]]
+    @test KiteGeometry.ref_position(pos, [1 => 0.5, 2 => 0.5]) == [0, 0, 1]
+    frame = KiteGeometry.WingFrame([3 => 0.5, 4 => 0.5], ([1 => 1.0], [2 => 1.0]),
+                                   ([3 => 1.0], [4 => 1.0]))
+    R, origin = KiteGeometry.wing_frame(pos, frame)
+    @test R ≈ I && origin == [0, 0, 1]
+    groups = KiteGeometry.connected_body_groups(4, [(; bodies=(1, 3)), (; bodies=(3, 4))])
+    @test groups[1] == groups[3] == groups[4] != groups[2]
 end

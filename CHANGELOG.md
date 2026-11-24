@@ -9,6 +9,23 @@ SPDX-License-Identifier: MIT
 
 ### Added
 
+- Public, for a tool that models a definition: `KiteGeometry.Component`, the supertype of every row type; `KiteGeometry.WingFrame`, `KiteGeometry.wing_frame` and `KiteGeometry.ref_position`, a wing frame from its reference points; `KiteGeometry.connected_body_groups`, the bodies tubes join; `KiteGeometry.tube_law_parameters`, the parameters a tube's material takes from its law; and `KiteGeometry.parse_table`, the rows of a table in the authoring YAML's format.
+- `model_references(M)` declares the columns of a model that refer to rows, with `WeightedRefs` for reference points: a document gives them by name and a definition holds them as indices.
+- A `Tether` built in Julia may leave its `start_point` and `end_point` unset, `Tether(; name, segments)`: a `SystemDefinition` sets them to its first segment's first point and its last segment's second point, which the public `KiteGeometry.tether_ends(system, tether)` gives.
+
+### Fixed
+
+- Reading or writing a row's property, a field of the row or of its model, is inlined at the call site, so a constant name compiles to a field access.
+
+### Changed
+
+- BREAKING: A component built by its keyword constructor, such as `Point(; name, pos_ENU)`, carries its block's registered default model where every column of that model can be unset, as a loaded row without a `model` column does, rather than `NoModel()`; a `model` passed explicitly still wins.
+- BREAKING: KiteGeometry no longer has a `calc_heading(R_b_to_w, pos)` of its own; use KiteUtils' `calc_heading(attitude, elevation, azimuth)`. `using KiteUtils, KiteGeometry` no longer leaves `calc_heading` ambiguous.
+
+## KiteGeometry v0.5.0 2026-11-13
+
+### Added
+
 - `place!(system, transforms; ignore_l0)` places any definition from where it stands, working on its own rows: tether lengths, rest lengths, pulleys, transforms, body points and wing frames, whether it was loaded, built in Julia, or a transform changed. `KiteGeometry.line_segment` is public, making one segment as the loader does for a definition built in Julia.
 - Columns from awesIO: a tether's `init_stretched_length`, `init_tether_force` and `init_stretch_frac`, which `place!` places it by; a body's `fixed`, true for a body held in the world; a point's `tube`, the tube it rides between its two bodies; and a wing's `body`, the body its KA frame moves with. `load_authoring` fills them from the authoring YAML.
 - `Rows` holds any elements named by a `Symbol`, not only a block's rows, a name lookup takes constant time without scanning, and `KiteGeometry.row_index(rows, name)` gives the position of a name.
@@ -23,7 +40,6 @@ SPDX-License-Identifier: MIT
 - BREAKING: `expand_tether!` takes a tether's `init_*` columns as the keyword `init` instead of a positional argument.
 - BREAKING: a point's `tube` column is read by the loader and is no model's field, so a tool's registered model must drop it. A `BODY_STATIC` point naming a `tube` rides both of its bodies rather than the body of the wing it names, and naming a `tube` and a `body` is refused.
 - An optional column with a default in the schema, as a body's `fixed`, holds that default rather than `nothing` where a document leaves it out, and is written only where a row differs from it. `Metadata` is mutable and compares by its fields.
-- BREAKING: KiteGeometry no longer has a `calc_heading(R_b_to_w, pos)` of its own; use KiteUtils' `calc_heading(attitude, elevation, azimuth)`. `using KiteUtils, KiteGeometry` no longer leaves `calc_heading` ambiguous.
 
 ## KiteGeometry v0.4.0 2026-11-07
 
