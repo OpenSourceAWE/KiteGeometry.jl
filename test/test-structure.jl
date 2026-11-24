@@ -313,6 +313,25 @@ end
     @test written["tubes"]["data"][1][end - 1] == 3e5
 end
 
+allocated_mass_read(point) = @allocated point.extra_mass
+allocated_mass_write(point, mass) = @allocated point.extra_mass = mass
+allocated_stiffness_read(tube) = @allocated tube.EA
+allocated_stiffness_write(tube, stiffness) = @allocated tube.EA = stiffness
+
+@testset "a row's property is read and written as its field, allocating nothing" begin
+    point = Point(; name="free", pos_ENU=[0, 0, 0], extra_mass=1.5)
+    tube = Tube(; name="le", bodies=("a", "b"), diameter=0.1, pressure=3e4,
+                model=LinkedBeam(2e5, 40.0))
+    for _ in 1:2
+        allocated_mass_read(point), allocated_mass_write(point, 2.5)
+        allocated_stiffness_read(tube), allocated_stiffness_write(tube, 3e5)
+    end
+    @test allocated_mass_read(point) == 0
+    @test allocated_mass_write(point, 2.5) == 0
+    @test allocated_stiffness_read(tube) == 0
+    @test allocated_stiffness_write(tube, 3e5) == 0
+end
+
 @testset "rows and models are equal, and hash alike, where every field is" begin
     one, other = load_structure(FIXTURE), load_structure(FIXTURE)
     @test one.points == other.points

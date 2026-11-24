@@ -11,6 +11,15 @@ SPDX-License-Identifier: MIT
 
 - Public, for a tool that models a definition: `KiteGeometry.Component`, the supertype of every row type; `KiteGeometry.WingFrame`, `KiteGeometry.wing_frame` and `KiteGeometry.ref_position`, a wing frame from its reference points; `KiteGeometry.connected_body_groups`, the bodies tubes join; `KiteGeometry.tube_law_parameters`, the parameters a tube's material takes from its law; and `KiteGeometry.parse_table`, the rows of a table in the authoring YAML's format.
 - `model_references(M)` declares the columns of a model that refer to rows, with `WeightedRefs` for reference points: a document gives them by name and a definition holds them as indices.
+- A `Tether` built in Julia may leave its `start_point` and `end_point` unset, `Tether(; name, segments)`: a `SystemDefinition` sets them to its first segment's first point and its last segment's second point, which the public `KiteGeometry.tether_ends(system, tether)` gives.
+
+### Fixed
+
+- Reading or writing a row's property, a field of the row or of its model, is inlined at the call site, so a constant name compiles to a field access.
+
+### Changed
+
+- BREAKING: A component built by its keyword constructor, such as `Point(; name, pos_ENU)`, carries its block's registered default model where every column of that model can be unset, as a loaded row without a `model` column does, rather than `NoModel()`; a `model` passed explicitly still wins.
 
 ## KiteGeometry v0.5.0 2026-11-13
 
