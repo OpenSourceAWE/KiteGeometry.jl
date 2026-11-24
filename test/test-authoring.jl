@@ -789,6 +789,20 @@ end
     end
 end
 
+@testset "a wing's centre and unit inertia each count where its model gives only one" begin
+    unit_inertia = [0.5, 0.2, 0.6, 0.0, 0.01, 0.0]
+    set = kite_settings()
+    set.mass = 0.0
+    body = only(keyword_kite("RIGID_DYNAMICS", set; point_mass=0.0, extra_mass=2.0,
+                             unit_inertia).bodies)
+    R = KiteGeometry.quaternion_to_rotation_matrix(body.Q_KA2ENU)
+    expected = R' * (2.0 * sam_unit_inertia(unit_inertia)) * R
+    @test isapprox(body.extra_inertia_KA, expected; rtol=0, atol=1e-12)
+    com = [0.1, 0.0, 2.4]
+    body = only(keyword_kite("RIGID_DYNAMICS", set; extra_mass=2.0, com).bodies)
+    @test isapprox(body.pos_ENU, com; rtol=0, atol=1e-12)
+end
+
 @testset "a wing spec takes point indices and two reference points per axis" begin
     spec = WingSpec(; origin=9, z_ref_points=[9, [Any[1, 0.5], Any[5, 0.5]]],
                     y_ref_points=[5, [1 => 1.0]])
