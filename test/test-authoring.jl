@@ -816,4 +816,23 @@ end
     @test system.bodies[:wing].pos_ENU == zeros(3)
 end
 
+@testset "a wing with no frame points keeps its pose and weighs its unit inertia" begin
+    R = KiteGeometry.quaternion_to_rotation_matrix([cos(0.3), 0.0, 0.0, sin(0.3)])
+    Q_KA2ENU = KiteGeometry.rotation_matrix_to_quaternion(R)
+    model = SamWing(nothing, nothing, nothing, nothing, nothing, "RIGID_DYNAMICS", nothing,
+                    nothing, nothing, nothing, [0.5, 0.2, 0.5, 0.1, 0.0, 0.0], nothing)
+    system = SystemDefinition(; metadata=Metadata(; name="hanging", n_points=1),
+                              points=[Point(; name=:hook, pos_ENU=[0.0, 0.0, 6.0])],
+                              wings=[Wing(; name=:wing, pos_ENU=zeros(3), body=:wing,
+                                          model)],
+                              bodies=[Body(; name=:wing, pos_ENU=[1.0, 2.0, 3.0], Q_KA2ENU,
+                                           extra_mass=2.0)])
+    complete_wings!(system, kite_settings())
+    body = system.bodies[:wing]
+    @test body.pos_ENU == [1.0, 2.0, 3.0]
+    @test body.Q_KA2ENU == Q_KA2ENU
+    unit_inertia = [0.5 0.1 0.0; 0.1 0.2 0.0; 0.0 0.0 0.5]
+    @test isapprox(body.extra_inertia_KA, R' * (2.0 * unit_inertia) * R; rtol=0, atol=1e-12)
+end
+
 foreach(model -> unregister_model!(model[1], model[2]), SAM_MODELS)

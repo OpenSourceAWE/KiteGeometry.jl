@@ -88,6 +88,8 @@ Give each wing of `system` the kite's mass `set.mass` where it carries none
 points stand ([`KiteGeometry.wing_body_pose`](@ref)). A wing's frame points are its
 stations' points and the points fixed in its body; what frames and weighs it is what its
 model gives ([`wing_spec`](@ref)), and a wing whose model gives nothing is left as it is.
+A wing with no frame points keeps its body's pose and gets the inertia its unit inertia
+gives its body's mass.
 A particle wing's body carries no mass of its own, warning where it had some. Call it
 before `place!`.
 """
@@ -104,7 +106,12 @@ function complete_wings!(system::SystemDefinition, set::Settings)
                   "a particle wing carries its mass on its points and section bodies."
             body.extra_mass = 0.0
         end
-        isempty(members) && continue
+        if isempty(members)
+            R = quaternion_to_rotation_matrix(body.Q_KA2ENU)
+            isnothing(spec.unit_inertia) ||
+                (body.extra_inertia_KA = body_inertia(R, own_mass(body), spec.unit_inertia))
+            continue
+        end
         origin, R, com_offset, inertia = wing_body_pose(system.points, spec, members,
                                                         own_mass(body))
         body.pos_ENU .= origin + R * com_offset
@@ -181,9 +188,13 @@ function wing_body_pose(points, spec, members, mass)
     end
     com, inertia = wing_inertia(points, members, spec)
     R, origin = isnothing(spec.frame) ? (Mat3(I), com) : wing_frame(pos, spec.frame)
-    own_inertia = isnothing(inertia) ? nothing : R' * (mass * inertia) * R
+    own_inertia = isnothing(inertia) ? nothing : body_inertia(R, mass, inertia)
     return origin, R, R' * (com - origin), own_inertia
 end
+
+"""The inertia [kg*m²] in the axes of a body turned by `R` of mass `mass` [kg] with
+per-unit-mass inertia `unit_inertia` [m²] in world axes."""
+body_inertia(R, mass, unit_inertia) = R' * (mass * unit_inertia) * R
 
 """
     wing_inertia(points, members, spec) -> (com, inertia)
