@@ -41,9 +41,10 @@ end
                      tethers, winches, wings, canopy_faces, bodies, tubes, extras)
 
 A system definition from its components, every reference resolved to the index of the
-component it names. Absent blocks are empty; `extras` holds the blocks the schema does not
-name. Refuses a `metadata.n_points` that is not the number of points, and a point riding a
-tube that is on a body or held in the world.
+component it names, and each tether's unset ends those of its segment chain,
+[`tether_ends`](@ref). Absent blocks are empty; `extras` holds the blocks the schema does
+not name. Refuses a `metadata.n_points` that is not the number of points, and a point
+riding a tube that is on a body or held in the world.
 """
 function SystemDefinition(; metadata::Metadata, extras=OrderedDict{String, Any}(),
                           components...)
@@ -64,7 +65,23 @@ function SystemDefinition(; metadata::Metadata, extras=OrderedDict{String, Any}(
                                        for block in keys(BLOCKS))
     resolved = ([resolve(component, block, indices) for component in blocks[block]]
                 for block in keys(BLOCKS))
-    return SystemDefinition(metadata, resolved..., extras)
+    system = SystemDefinition(metadata, resolved..., extras)
+    for tether in system.tethers
+        tether.start_point, tether.end_point = tether_ends(system, tether)
+    end
+    return system
+end
+
+"""
+    tether_ends(system::SystemDefinition, tether) -> (start_point, end_point)
+
+The two points `tether` of `system` runs between: its own `start_point` and `end_point`
+where set, else its first segment's first point and its last segment's second point.
+"""
+function tether_ends(system::SystemDefinition, tether)
+    (; segments) = system
+    return (@something(tether.start_point, segments[first(tether.segments)].points[1]),
+            @something(tether.end_point, segments[last(tether.segments)].points[2]))
 end
 
 """`component` of `block` with every reference in it an index into `indices`' blocks."""

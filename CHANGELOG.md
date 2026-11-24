@@ -11,10 +11,16 @@ SPDX-License-Identifier: MIT
 
 - Public, for a tool that models a definition: `KiteGeometry.Component`, the supertype of every row type; `KiteGeometry.WingFrame`, `KiteGeometry.wing_frame` and `KiteGeometry.ref_position`, a wing frame from its reference points; `KiteGeometry.connected_body_groups`, the bodies tubes join; `KiteGeometry.tube_law_parameters`, the parameters a tube's material takes from its law; and `KiteGeometry.parse_table`, the rows of a table in the authoring YAML's format.
 - `complete_wings!(system, set)` gives a definition's wings their mass and puts each wing's body in its design pose, as `load_authoring` does, so a definition built in Julia completes to the same wing. A wing's frame points are the points of its stations and those fixed in its body; its dynamics type, frame reference points and mesh centre and inertia are read from its model's `dynamics_type`, `origin_idx`, `z_ref_points`, `y_ref_points`, `com` and `unit_inertia` columns.
+- A `Tether` built in Julia may leave its `start_point` and `end_point` unset, `Tether(; name, segments)`: a `SystemDefinition` sets them to its first segment's first point and its last segment's second point, which the public `KiteGeometry.tether_ends(system, tether)` gives.
+
+### Fixed
+
+- Reading or writing a row's property, a field of the row or of its model, is inlined at the call site, so a constant name compiles to a field access.
 
 ### Changed
 
 - BREAKING: `load_authoring` no longer reads a wing's `dynamics_type`, `origin_idx`, `z_ref_points`, `y_ref_points`, `com` and `unit_inertia` itself: the wing's registered model must hold them, else they are refused as unread columns. A wing's deprecated `type` column now fills its model's `dynamics_type`.
+- BREAKING: A component built by its keyword constructor, such as `Point(; name, pos_ENU)`, carries its block's registered default model where every column of that model can be unset, as a loaded row without a `model` column does, rather than `NoModel()`; a `model` passed explicitly still wins.
 
 ## KiteGeometry v0.5.0 2026-11-13
 
