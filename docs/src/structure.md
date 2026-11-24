@@ -91,7 +91,7 @@ system.tethers[:main].init_stretched_length = 120.0
 place!(system, transforms)                        # the main tether is now 120 m long
 ```
 
-A definition built in Julia completes its wings with `complete_wings!` before it is placed, as `load_authoring` does: each wing gets the kite's mass where it carries none, and its body is put at the centre of its own mass, turned into the frame its reference points give. A wing's frame points are the points of its stations and the points fixed in its body. What frames and weighs it is read from its model, in the columns the authoring YAML names: `dynamics_type`, `origin_idx`, `z_ref_points`, `y_ref_points`, `com` and `unit_inertia`.
+A definition built in Julia completes its wings with `complete_wings!` before it is placed, as `load_authoring` does: each wing gets the kite's mass where it carries none, and its body is put at the centre of its own mass, turned into the frame its reference points give. A wing's frame points are the points of its stations and the points fixed in its body. What frames and weighs it is read from its model, in the columns the authoring YAML names: `dynamics_type`, `origin_idx`, `z_ref_points`, `y_ref_points`, `com` and `unit_inertia`. Its reference points may be point names or indices, so a model may declare them with `model_references`.
 
 ```@docs
 complete_wings!

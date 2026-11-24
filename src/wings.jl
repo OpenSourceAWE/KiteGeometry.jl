@@ -33,7 +33,7 @@ end
 
 The [`WingSpec`](@ref) the model of wing `wing` of `system` gives in its columns
 `dynamics_type`, rigid where unset, `origin_idx`, `z_ref_points`, `y_ref_points`, `com` and
-`unit_inertia`, written as `load_authoring` reads them. Refuses an unknown dynamics type and
+`unit_inertia`, written as `load_authoring` reads them, with points as names or indices. Refuses an unknown dynamics type and
 a particle wing without an origin.
 """
 function wing_spec(system, wing)

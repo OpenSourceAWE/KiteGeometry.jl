@@ -54,6 +54,10 @@ struct SamWing <: AbstractModel
     com::Union{Nothing, Vector{Float64}}
     unit_inertia::Any
 end
+KiteGeometry.model_references(::Type{SamWing}) =
+    (origin_idx=WeightedRefs(:points),
+     z_ref_points=(WeightedRefs(:points), WeightedRefs(:points)),
+     y_ref_points=(WeightedRefs(:points), WeightedRefs(:points)))
 
 """SAM's Timoshenko beam, a tube model chosen by name."""
 struct Timoshenko <: AbstractModel
@@ -635,12 +639,14 @@ end
     end
 end
 
-@testset "a wing keeps the columns that frame its body in its model" begin
-    wing = only(load_kite("particle_structural_geometry.yaml").wings)
+@testset "a wing keeps the columns that frame its body in its model, as point indices" begin
+    system = load_kite("particle_structural_geometry.yaml")
+    wing = only(system.wings)
+    point_name(index) = system.points[index].name
     @test wing.dynamics_type == "PARTICLE_DYNAMICS"
-    @test wing.origin_idx == "kcu"
-    @test wing.z_ref_points == ["kcu", "le_center"]
-    @test wing.y_ref_points == ["le_right", "le_left"]
+    @test point_name(wing.origin_idx) == :kcu
+    @test point_name.(wing.z_ref_points) == [:kcu, :le_center]
+    @test point_name.(wing.y_ref_points) == [:le_right, :le_left]
     no_origin = ErrorException("particle wing main_wing needs an `origin_idx`")
     @test_throws no_origin load_edited("particle_structural_geometry.yaml") do data
         only(data["wings"]["data"])["origin_idx"] = nothing
