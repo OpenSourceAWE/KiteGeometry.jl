@@ -285,11 +285,11 @@ function parse_dynamics_type(text)
 end
 
 """Reference points as a row writes them — one reference, a list averaged equally, or
-`[reference, weight]` pairs — as weights per reference."""
+`[reference, weight]` pairs or `reference => weight` — as weights per reference."""
 function yaml_ref_points(value)
     value isa AbstractVector || return [yaml_to_ref(value) => 1.0]
-    first(value) isa AbstractVector || return [yaml_to_ref(entry) => 1 / length(value)
-                                               for entry in value]
+    first(value) isa Union{AbstractVector, Pair} ||
+        return [yaml_to_ref(entry) => 1 / length(value) for entry in value]
     weights = [Float64(weight) for (_, weight) in value]
     total = sum(weights)
     total > 0 || error("reference point weights sum to $total")
@@ -297,24 +297,6 @@ function yaml_ref_points(value)
         @warn "Reference point weights sum to $total, normalizing to 1.0"
     return [yaml_to_ref(ref) => weight / total
             for ((ref, _), weight) in zip(value, weights)]
-end
-
-"""The pair of reference points in `field` of the row of wing `name`, or `nothing`."""
-function yaml_ref_point_pair(row, field, name)
-    value = yaml_field(row, field)
-    isnothing(value) && return nothing
-    length(value) == 2 || error("wing $name: $field must hold two reference points")
-    return (yaml_ref_points(value[1]), yaml_ref_points(value[2]))
-end
-
-"""The 3×3 per-unit-mass inertia [m²] a wing row gives as a matrix or as
-`[Ixx, Iyy, Izz, Ixy, Ixz, Iyz]`, or `nothing`."""
-function yaml_unit_inertia(row)
-    value = yaml_field(row, :unit_inertia)
-    isnothing(value) && return nothing
-    first(value) isa AbstractVector && return to_field(Mat3, value)
-    Ixx, Iyy, Izz, Ixy, Ixz, Iyz = value
-    return Mat3(Ixx, Ixy, Ixz, Ixy, Iyy, Iyz, Ixz, Iyz, Izz)
 end
 
 """
@@ -555,62 +537,29 @@ function read_pulleys(data)
                   for (i, (row, model)) in enumerate(rows)]
 end
 
-"""Reference points as a row writes them: a weight per point reference."""
-const AuthoredRefPoints = Vector{Pair{NameRef, Float64}}
-
 """
-    AuthoringWing
+    read_wings(data) -> (wings, bodies, authored)
 
-What a row of the `wings` block says of its wing besides its name: whether it is a
-particle wing, its stations and transform, and what places and weighs its body.
+The wings of the `wings` block, the body each rides, at its `pos_cad` and carrying its
+`extra_mass`, and the stations and transform each row names. What frames a wing's body is
+its model's ([`wing_spec`](@ref)).
 """
-struct AuthoringWing
-    particle::Bool
-    stations::Vector{NameRef}
-    transform::Union{Nothing, NameRef}
-    origin::Union{Nothing, AuthoredRefPoints}
-    z_ref_points::Union{Nothing, NTuple{2, AuthoredRefPoints}}
-    y_ref_points::Union{Nothing, NTuple{2, AuthoredRefPoints}}
-    pos_cad::Union{Nothing, Vec3}
-    extra_mass::Float64
-    com::Union{Nothing, Vec3}
-    unit_inertia::Union{Nothing, Mat3}
-end
-
-"""The wings of the `wings` block, each with what it says of its body."""
 function read_wings(data)
-    wings = Wing[]
-    authored = AuthoringWing[]
-    columns = (:name, :dynamics_type, :type, :mass, :stations, :transform_idx, :origin_idx,
-               :z_ref_points, :y_ref_points, :pos_cad, :extra_mass, :com, :unit_inertia)
+    wings, bodies = Wing[], Body[]
+    authored = @NamedTuple{stations::Vector{NameRef}, transform::Union{Nothing, NameRef}}[]
+    columns = (:name, :mass, :stations, :transform_idx, :pos_cad, :extra_mass)
     for (i, (row, model)) in enumerate(read_rows(data, :wings, columns))
         name = yaml_row_name(row, i)
-        dynamics = yaml_field(row, :dynamics_type)
-        if isnothing(dynamics)
-            dynamics = yaml_field(row, :type)
-            isnothing(dynamics) && error("wing $name is missing its `dynamics_type`")
-            @warn "Wing YAML field `type` is deprecated; rename to `dynamics_type`."
-        end
-        dynamics in ("PARTICLE_DYNAMICS", "RIGID_DYNAMICS") || error(
-            "wing $name: dynamics_type $dynamics is not PARTICLE_DYNAMICS or " *
-            "RIGID_DYNAMICS")
         isnothing(yaml_field(row, :mass)) || error(
             "wing $name: the `mass` column was renamed to `extra_mass`")
-        origin = yaml_field(row, :origin_idx)
-        dynamics == "PARTICLE_DYNAMICS" && isnothing(origin) &&
-            error("particle wing $name needs an `origin_idx`")
         push!(wings, Wing(; name, pos_ENU=zero(Vec3), body=name, model))
-        push!(authored, AuthoringWing(
-            dynamics == "PARTICLE_DYNAMICS",
-            yaml_to_ref.(something(yaml_field(row, :stations), [])),
-            yaml_ref(row, :transform_idx),
-            isnothing(origin) ? nothing : yaml_ref_points(origin),
-            yaml_ref_point_pair(row, :z_ref_points, name),
-            yaml_ref_point_pair(row, :y_ref_points, name),
-            yaml_vec3(row, :pos_cad), something(yaml_float(row, :extra_mass), 0.0),
-            yaml_vec3(row, :com), yaml_unit_inertia(row)))
+        push!(bodies, Body(; name, pos_ENU=something(yaml_vec3(row, :pos_cad), zero(Vec3)),
+                           extra_mass=something(yaml_float(row, :extra_mass), 0.0),
+                           extra_inertia_KA=zero(Mat3)))
+        push!(authored, (; stations=yaml_to_ref.(something(yaml_field(row, :stations), [])),
+                         transform=yaml_ref(row, :transform_idx)))
     end
-    return wings, authored
+    return wings, bodies, authored
 end
 
 """The spanwise stations of the `stations` block, each on the wing it names or the wing
@@ -844,9 +793,10 @@ end
     load_authoring(authored::AbstractDict; set::Settings, name, ignore_l0=false)
 
 The `SystemDefinition` SymbolicAWEModels' authoring YAML at `path` describes, or the parsed
-authoring document `authored`, and its `Transform`s, as `Rows`. The definition is placed:
-design positions moved by its tethers' stretched lengths and then by the transforms, each
-wing's KA frame the authored frame moved with its body. Each transform holds the points and
+authoring document `authored`, and its `Transform`s, as `Rows`. Its wings are completed
+([`complete_wings!`](@ref)) and it is placed: design positions moved by its tethers'
+stretched lengths and then by the transforms, each wing's KA frame the authored frame moved
+with its body. Each transform holds the points and
 bodies it moves: those naming it, a tether's inner points that of its ends, and a wing's
 body its wing's, else the first transform.
 `set` gives what a row leaves out: segment material, and every winch's gear ratio and drum
@@ -881,16 +831,12 @@ function load_authoring(authored::AbstractDict; set::Settings, name::AbstractStr
                   "YAML")
     end
     materials = MaterialTable(Material[], variables)
-    wings, authored_wings = read_wings(data)
+    wings, wing_bodies, authored_wings = read_wings(data)
     points, point_wings, point_transforms = read_points(data, wings)
     segments = read_segments(data, set, materials)
     tethers = read_tethers!(points, segments, point_transforms, data, set, materials)
     bodies, plain_body_transforms = read_bodies(data)
     tubes = read_tubes(data, materials)
-    wing_bodies = [Body(; name=wing.body, pos_ENU=something(authored.pos_cad, zero(Vec3)),
-                        extra_mass=authored.particle ? 0.0 : authored.extra_mass,
-                        extra_inertia_KA=zero(Mat3))
-                   for (wing, authored) in zip(wings, authored_wings)]
     metadata = Metadata(; name, n_points=length(points))
     authored_transforms = read_transforms(data)
     first_transform = isempty(authored_transforms) ? nothing : 1
@@ -904,9 +850,10 @@ function load_authoring(authored::AbstractDict; set::Settings, name::AbstractStr
                              winches=read_winches(data, set), wings,
                              canopy_faces=read_canopy_faces(data),
                              bodies=[wing_bodies; bodies], tubes, extras)
-    transforms = resolve_transforms(authored_transforms, draft, authored_wings,
-                                    point_transforms, body_transforms)
-    design_pose!(draft, set, point_wings, authored_wings)
+    check_point_wings(draft, point_wings)
+    transforms = resolve_transforms(authored_transforms, draft, point_transforms,
+                                    body_transforms)
+    complete_wings!(draft, set)
     place!(draft, transforms; ignore_l0)
     draft.metadata.connectivity_sha = connectivity_sha(draft)
     return draft, Rows{Transform}(transforms)
@@ -918,15 +865,14 @@ function optional_index(ref, names, block)
 end
 
 """
-    resolve_transforms(authored, draft, authored_wings, point_transforms, body_transforms)
+    resolve_transforms(authored, draft, point_transforms, body_transforms)
 
 The `Transform` of each authored transform row on `draft`, its references indices. Its
 members are the points and bodies whose transform in `point_transforms` and
 `body_transforms` names it. A transform naming a wing turns that wing's origin and heads
 its body; one naming a `rot_point` turns that point and heads its first member body.
 """
-function resolve_transforms(authored, draft, authored_wings, point_transforms,
-                            body_transforms)
+function resolve_transforms(authored, draft, point_transforms, body_transforms)
     names = name_indices(authored, :transforms)
     point_names, wing_names = indices_of(draft, :points), indices_of(draft, :wings)
     return map(enumerate(authored)) do (i, row)
@@ -937,7 +883,7 @@ function resolve_transforms(authored, draft, authored_wings, point_transforms,
             optional_rot_point(row.rot_point, point_names),
             isempty(bodies) ? nothing : first(bodies)
         else
-            wing_origin(authored_wings[wing], point_names), draft.wings[wing].body
+            wing_origin(draft, wing), draft.wings[wing].body
         end
         Transform(; row.name, row.elevation, row.azimuth, row.heading, row.elevation_vel,
                   row.azimuth_vel, row.turn_rate, row.base_pos,
@@ -958,58 +904,12 @@ function transform_members(refs, names, i)
             if !isnothing(ref) && resolve_index(ref, names, :transforms) == i]
 end
 
-"""The reference points of the origin of the body of the wing `authored`, `nothing` where
-that origin is the centre of its mass."""
-function wing_origin(authored, point_names)
-    authored.particle || !isnothing(authored_frame(authored, point_names)) ||
-        return nothing
-    return resolve_ref_points(authored.origin, point_names)
-end
-
 """Index of each component of `block` of `system` by name."""
 indices_of(system, block) = name_indices(getfield(system, block))
 
 """`ref` resolved into the indices `names`, 0 for `nothing`."""
 resolve_index(::Nothing, names, block) = 0
 resolve_index(ref, names, block) = resolve(ref, block, NamedTuple{(block,)}((names,)))
-
-"""`refs` resolved into point indices."""
-resolve_ref_points(refs, names) = RefPoints([resolve_index(ref, names, :points) => weight
-                                             for (ref, weight) in refs])
-
-"""The frame `authored` gives its wing body in point indices, or `nothing` where its row
-leaves out its origin or either pair of reference points."""
-function authored_frame(authored, point_names)
-    any(isnothing, (authored.origin, authored.z_ref_points, authored.y_ref_points)) &&
-        return nothing
-    return WingFrame(resolve_ref_points(authored.origin, point_names),
-                     resolve_ref_points.(authored.z_ref_points, (point_names,)),
-                     resolve_ref_points.(authored.y_ref_points, (point_names,)))
-end
-
-"""
-    wing_body_pose(draft, authored, members, point_names)
-        -> (origin, R, com_offset, inertia)
-
-The design pose of a wing's body: its origin [m], its rotation into the world, the centre of
-its own mass in its frame [m], and its own inertia about that centre in its axes [kg*m²],
-`nothing` for none. A particle wing's body sits at its origin, framed by its reference
-points where it has them; a rigid wing's is framed by its reference points,
-else at the centre of its own mass ([`wing_inertia`](@ref)) in the world's axes.
-"""
-function wing_body_pose(draft, authored, members, point_names)
-    pos = [point.pos_ENU for point in draft.points]
-    frame = authored_frame(authored, point_names)
-    if authored.particle
-        R = isnothing(frame) ? Mat3(I) : first(wing_frame(pos, frame))
-        origin = ref_position(pos, resolve_ref_points(authored.origin, point_names))
-        return origin, R, zero(Vec3), nothing
-    end
-    com, inertia = wing_inertia(draft.points, members, authored)
-    R, origin = isnothing(frame) ? (Mat3(I), com) : wing_frame(pos, frame)
-    own_inertia = isnothing(inertia) ? nothing : R' * (authored.extra_mass * inertia) * R
-    return origin, R, R' * (com - origin), own_inertia
-end
 
 """The index of the wing `ref` names for `point`, 0 for none, refusing one that does not
 exist."""
@@ -1022,13 +922,14 @@ function point_wing_index(point, ref, wing_names)
 end
 
 """
-    point_wing_indices(draft, point_wings, wing_names) -> Vector{Int}
+    check_point_wings(draft, point_wings)
 
-The index of the wing each point of `draft` names in `point_wings`, none for a point a
-tether adds ([`point_wing_index`](@ref)). Refuses a station's point that names another wing
-than the station's, or none.
+Refuses a point of `draft` naming in `point_wings` a wing that does not exist
+([`KiteGeometry.point_wing_index`](@ref)), and a station's point naming another wing than
+the station's, or none; a point a tether adds names none.
 """
-function point_wing_indices(draft, point_wings, wing_names)
+function check_point_wings(draft, point_wings)
+    wing_names = indices_of(draft, :wings)
     point_wing = [point_wing_index(point, get(point_wings, index, nothing), wing_names)
                   for (index, point) in enumerate(draft.points)]
     for station in draft.spanwise_stations, index in station.points
@@ -1037,104 +938,5 @@ function point_wing_indices(draft, point_wings, wing_names)
         error("point $(draft.points[index].name) is a point of station $(station.name) " *
               "of wing $(draft.wings[station.wing].name), but names $named")
     end
-    return point_wing
-end
-
-"""
-    design_pose!(draft, set, point_wings, authored_wings)
-
-Put the body of each wing of `draft` in its design pose, at the centre of its own mass:
-given its mass ([`wing_mass!`](@ref)) and posed by [`wing_body_pose`](@ref).
-"""
-function design_pose!(draft, set, point_wings, authored_wings)
-    point_names, wing_names = indices_of(draft, :points), indices_of(draft, :wings)
-    point_wing = point_wing_indices(draft, point_wings, wing_names)
-    wing_node = falses(length(draft.points))
-    foreach(station -> wing_node[Int.(station.points)] .= true, draft.spanwise_stations)
-    for (wing, authored) in enumerate(authored_wings)
-        members = [index for (index, point) in enumerate(draft.points)
-                   if (wing_node[index] || !isnothing(point.body)) &&
-                      point_wing[index] == wing]
-        wing_mass!(draft, wing, authored, members, set)
-        isempty(members) && continue
-        origin, R, com_offset, inertia = wing_body_pose(draft, authored, members,
-                                                        point_names)
-        body = draft.bodies[draft.wings[wing].body]
-        body.pos_ENU .= origin + R * com_offset
-        body.Q_KA2ENU .= rotation_matrix_to_quaternion(R)
-        isnothing(inertia) || (body.extra_inertia_KA = inertia)
-    end
     return nothing
 end
-
-"""
-    wing_mass!(draft, wing, authored, members, set)
-
-Spread `set.mass` equally over the frame points `members` of `wing` where the wing carries
-no mass of its own: for a rigid wing, neither its `extra_mass` nor its members'; for a
-particle wing, neither its members nor the bodies they and its stations ride
-([`particle_wing_parts`](@ref)). A particle wing's own `extra_mass` is ignored, warning.
-"""
-function wing_mass!(draft, wing, authored, members, set)
-    name = draft.wings[wing].name
-    masses = [draft.points[index].extra_mass for index in members]
-    if authored.particle
-        authored.extra_mass > 0 && @warn "Wing $name (PARTICLE_DYNAMICS): extra_mass " *
-            "$(authored.extra_mass) is ignored; a particle wing carries its mass on its " *
-            "points and section bodies."
-        point_idxs, body_idxs = particle_wing_parts(draft, wing, members)
-        own_mass = sum(draft.points[index].extra_mass for index in point_idxs; init=0.0) +
-                   sum(draft.bodies[index].extra_mass for index in body_idxs; init=0.0)
-        own_mass > 0 && return nothing
-        if set.mass <= 0
-            @warn "Wing $name (PARTICLE_DYNAMICS) has zero mass."
-            return nothing
-        end
-    else
-        iszero(authored.extra_mass) && set.mass > 0 && all(iszero, masses) || return nothing
-    end
-    foreach(index -> draft.points[index].extra_mass = set.mass / length(members), members)
-    return nothing
-end
-
-"""
-    particle_wing_parts(draft, wing, members) -> (point_idxs, body_idxs)
-
-The points of particle `wing` — its stations' points, else its frame points `members` —
-and the other bodies sharing a tube-connected group with the bodies those points ride.
-"""
-function particle_wing_parts(draft, wing, members)
-    point_idxs = Set{Int}()
-    for station in draft.spanwise_stations
-        station.wing == wing && union!(point_idxs, station.points)
-    end
-    isempty(point_idxs) && union!(point_idxs, members)
-    root = connected_body_groups(length(draft.bodies), draft.tubes)
-    wing_bodies = Set(wing.body for wing in draft.wings)
-    seeds = Set(root[body] for body in (draft.points[index].body for index in point_idxs)
-                if !isnothing(body) && !(body in wing_bodies))
-    body_idxs = [index for index in eachindex(draft.bodies)
-                 if !(index in wing_bodies) && root[index] in seeds]
-    return point_idxs, body_idxs
-end
-
-"""
-    wing_inertia(points, members, authored) -> (com, inertia)
-
-Centre [m] and per-unit-mass inertia [m²] about it, in world axes, of a rigid wing's own
-mass: the `com` and `unit_inertia` its row gives, else those of its frame points `members`
-as point masses, `inertia` `nothing` where they carry no mass and `com` their centroid.
-"""
-function wing_inertia(points, members, authored)
-    isnothing(authored.com) || isnothing(authored.unit_inertia) ||
-        return authored.com, authored.unit_inertia
-    masses = [points[index].extra_mass for index in members]
-    positions = [points[index].pos_ENU for index in members]
-    total = sum(masses)
-    total > 0 || return sum(positions) / length(positions), nothing
-    com = sum(masses .* positions) / total
-    inertia = sum(mass * (dot(r, r) * I - r * r')
-                  for (mass, r) in zip(masses, (position - com for position in positions)))
-    return com, Mat3(inertia / total)
-end
-
