@@ -200,17 +200,16 @@ body_inertia(R, mass, unit_inertia) = R' * (mass * unit_inertia) * R
     wing_inertia(points, members, spec) -> (com, inertia)
 
 Centre [m] and per-unit-mass inertia [m²] about it, in world axes, of a rigid wing's own
-mass: the `com` and `unit_inertia` of its `spec`, else those of its frame points `members`
-as point masses, `inertia` `nothing` where they carry no mass and `com` their centroid.
+mass: each the one its `spec` gives, else that of its frame points `members` as point
+masses, the centre their centroid and `inertia` `nothing` where they carry no mass.
 """
 function wing_inertia(points, members, spec)
-    isnothing(spec.com) || isnothing(spec.unit_inertia) ||
-        return spec.com, spec.unit_inertia
     masses = [own_mass(points[index]) for index in members]
     positions = [points[index].pos_ENU for index in members]
     total = sum(masses)
-    total > 0 || return sum(positions) / length(positions), nothing
-    com = sum(masses .* positions) / total
+    com = something(spec.com, total > 0 ? sum(masses .* positions) / total :
+                                          sum(positions) / length(positions))
+    isnothing(spec.unit_inertia) && total > 0 || return com, spec.unit_inertia
     inertia = sum(mass * (dot(r, r) * I - r * r')
                   for (mass, r) in zip(masses, (position - com for position in positions)))
     return com, Mat3(inertia / total)
