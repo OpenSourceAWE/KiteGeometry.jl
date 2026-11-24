@@ -27,7 +27,7 @@ export SystemDefinition, Rows, Metadata, Material, Point, Segment, SpanwiseStati
 export Transform, Pose, place!, place_transforms!, reposition!,
        transform_velocities, calc_heading
 export NameRef, AbstractModel, NoModel, register_model!, model_type, model_columns,
-       model_references, WeightedRefs
+       model_references, WeightedRefs, WingSpec, wing_spec
 export load_structure, load_authoring, complete_wings!,
        structure_document, connectivity_sha
 export from_yaml, to_yaml, from_json, to_json

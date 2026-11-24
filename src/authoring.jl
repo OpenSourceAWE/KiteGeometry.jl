@@ -542,33 +542,19 @@ end
 
 The wings of the `wings` block, the body each rides, at its `pos_cad` and carrying its
 `extra_mass`, and the stations and transform each row names. What frames a wing's body is
-read by the wing's model ([`KiteGeometry.wing_spec`](@ref)); the deprecated `type` column
-stands in for its `dynamics_type`, warning. A particle wing's own `extra_mass` is ignored,
-warning.
+its model's ([`wing_spec`](@ref)).
 """
 function read_wings(data)
     wings, bodies = Wing[], Body[]
     authored = @NamedTuple{stations::Vector{NameRef}, transform::Union{Nothing, NameRef}}[]
-    columns = (:name, :type, :mass, :stations, :transform_idx, :pos_cad, :extra_mass)
+    columns = (:name, :mass, :stations, :transform_idx, :pos_cad, :extra_mass)
     for (i, (row, model)) in enumerate(read_rows(data, :wings, columns))
         name = yaml_row_name(row, i)
-        if isnothing(yaml_field(row, :dynamics_type))
-            isnothing(yaml_field(row, :type)) &&
-                error("wing $name is missing its `dynamics_type`")
-            @warn "Wing YAML field `type` is deprecated; rename to `dynamics_type`."
-            row = merge(row, (; dynamics_type=row.type))
-            model = authoring_model(:wings, row)
-        end
         isnothing(yaml_field(row, :mass)) || error(
             "wing $name: the `mass` column was renamed to `extra_mass`")
-        extra_mass = something(yaml_float(row, :extra_mass), 0.0)
-        particle = row.dynamics_type == "PARTICLE_DYNAMICS"
-        particle && extra_mass > 0 && @warn "Wing $name (PARTICLE_DYNAMICS): extra_mass " *
-            "$extra_mass is ignored; a particle wing carries its mass on its points and " *
-            "section bodies."
         push!(wings, Wing(; name, pos_ENU=zero(Vec3), body=name, model))
         push!(bodies, Body(; name, pos_ENU=something(yaml_vec3(row, :pos_cad), zero(Vec3)),
-                           extra_mass=particle ? 0.0 : extra_mass,
+                           extra_mass=something(yaml_float(row, :extra_mass), 0.0),
                            extra_inertia_KA=zero(Mat3)))
         push!(authored, (; stations=yaml_to_ref.(something(yaml_field(row, :stations), [])),
                          transform=yaml_ref(row, :transform_idx)))
@@ -924,10 +910,6 @@ indices_of(system, block) = name_indices(getfield(system, block))
 """`ref` resolved into the indices `names`, 0 for `nothing`."""
 resolve_index(::Nothing, names, block) = 0
 resolve_index(ref, names, block) = resolve(ref, block, NamedTuple{(block,)}((names,)))
-
-"""`refs` resolved into point indices."""
-resolve_ref_points(refs, names) = RefPoints([resolve_index(ref, names, :points) => weight
-                                             for (ref, weight) in refs])
 
 """The index of the wing `ref` names for `point`, 0 for none, refusing one that does not
 exist."""

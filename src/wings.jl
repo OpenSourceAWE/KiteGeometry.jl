@@ -1,15 +1,15 @@
 # SPDX-FileCopyrightText: 2026 Bart van de Lint
 # SPDX-License-Identifier: MIT
 
-"""The dynamics types a wing's model names in its `dynamics_type` column."""
-const WING_DYNAMICS = ("PARTICLE_DYNAMICS", "RIGID_DYNAMICS")
-
 """
-    WingSpec
+    WingSpec(; particle=false, origin=nothing, z_ref_points=nothing, y_ref_points=nothing,
+             com=nothing, unit_inertia=nothing)
 
-What the model of a wing row says frames and weighs its body: whether it is a particle
-wing, its origin and its frame as point indices, and the centre [m] and per-unit-mass
-inertia [m²] of its mesh in the world, each `nothing` where the model leaves it out.
+What frames and weighs a wing's body: whether it is a particle wing, the reference points
+of its origin and the two pairs of its z and y axes, and the centre [m] and per-unit-mass
+inertia [m²] of its mesh in the world, each `nothing` where left out. Reference points are
+point indices: one, a list averaged equally, or `[index, weight]` pairs or
+`index => weight`. Refuses a particle wing without an origin.
 """
 struct WingSpec
     particle::Bool
@@ -19,67 +19,49 @@ struct WingSpec
     unit_inertia::Union{Nothing, Mat3}
 end
 
-"""The cell `column` of the model of `component`, `nothing` where the model has no such
-column or leaves it unset."""
-function model_cell(component, column)
-    model = component.model
-    hasproperty(model, column) || return nothing
-    value = getproperty(model, column)
-    return yaml_unset(value) ? nothing : value
-end
-
-"""
-    wing_spec(system, wing) -> WingSpec
-
-The [`WingSpec`](@ref) the model of wing `wing` of `system` gives in its columns
-`dynamics_type`, rigid where unset, `origin_idx`, `z_ref_points`, `y_ref_points`, `com` and
-`unit_inertia`, written as `load_authoring` reads them, with points as names or indices. Refuses an unknown dynamics type and
-a particle wing without an origin.
-"""
-function wing_spec(system, wing)
-    row = system.wings[wing]
-    dynamics = something(model_cell(row, :dynamics_type), "RIGID_DYNAMICS")
-    dynamics in WING_DYNAMICS || error(
-        "wing $(row.name): dynamics_type $dynamics is not $(join(WING_DYNAMICS, " or "))")
-    particle = dynamics == "PARTICLE_DYNAMICS"
-    origin_cell = model_cell(row, :origin_idx)
-    particle && isnothing(origin_cell) &&
-        error("particle wing $(row.name) needs an `origin_idx`")
-    point_names = indices_of(system, :points)
-    origin = isnothing(origin_cell) ? nothing :
-             resolve_ref_points(yaml_ref_points(origin_cell), point_names)
-    z_ref_points, y_ref_points = (ref_point_pair(row, field, point_names)
-                                  for field in (:z_ref_points, :y_ref_points))
+function WingSpec(; particle=false, origin=nothing, z_ref_points=nothing,
+                  y_ref_points=nothing, com=nothing, unit_inertia=nothing)
+    particle && isnothing(origin) && throw(ArgumentError("a particle wing needs an origin"))
+    origin, z_ref_points, y_ref_points = (point_weights(origin),
+                                          ref_point_pair(z_ref_points),
+                                          ref_point_pair(y_ref_points))
     frame = any(isnothing, (origin, z_ref_points, y_ref_points)) ? nothing :
             WingFrame(origin, z_ref_points, y_ref_points)
-    com = model_cell(row, :com)
-    unit_inertia = model_cell(row, :unit_inertia)
-    return WingSpec(particle, origin, frame, isnothing(com) ? nothing : Vec3(com...),
-                    isnothing(unit_inertia) ? nothing : unit_inertia_matrix(unit_inertia))
+    return WingSpec(particle, origin, frame, isnothing(com) ? nothing : Vec3(com),
+                    isnothing(unit_inertia) ? nothing : Mat3(unit_inertia))
 end
 
-"""The pair of reference points the model of the wing `row` gives in `field`, as point
-indices among `point_names`, or `nothing`."""
-function ref_point_pair(row, field, point_names)
-    value = model_cell(row, field)
+"""
+    wing_spec(model) -> Union{WingSpec, Nothing}
+
+The [`WingSpec`](@ref) of a wing whose row carries `model`, with its reference columns as
+point indices ([`model_references`](@ref)). A tool's wing model adds a method; without
+one a wing has nothing to complete.
+"""
+wing_spec(::AbstractModel) = nothing
+
+"""The reference points `value` as point indices and weights, `nothing` for `nothing`."""
+function point_weights(value)
     isnothing(value) && return nothing
-    length(value) == 2 || error("wing $(row.name): $field must hold two reference points")
-    return Tuple(resolve_ref_points(yaml_ref_points(refs), point_names) for refs in value)
+    weights = yaml_ref_points(value)
+    all(((ref, _),) -> ref isa Int, weights) ||
+        throw(ArgumentError("reference points $value are not point indices"))
+    return RefPoints(weights)
 end
 
-"""The 3×3 per-unit-mass inertia [m²] given as a matrix, its rows, or
-`[Ixx, Iyy, Izz, Ixy, Ixz, Iyz]`."""
-function unit_inertia_matrix(value)
-    value isa AbstractMatrix && return Mat3(value)
-    first(value) isa AbstractVector && return to_field(Mat3, value)
-    Ixx, Iyy, Izz, Ixy, Ixz, Iyz = value
-    return Mat3(Ixx, Ixy, Ixz, Ixy, Iyy, Iyz, Ixz, Iyz, Izz)
+"""The two reference points of the list `value`, `nothing` for `nothing`."""
+function ref_point_pair(value)
+    isnothing(value) && return nothing
+    length(value) == 2 ||
+        throw(ArgumentError("$value must hold two reference points, not $(length(value))"))
+    return Tuple(point_weights(refs) for refs in value)
 end
 
 """The reference points of the origin of the body of wing `wing` of `system`, `nothing`
-where that origin is the centre of its mass."""
+where that origin is the centre of its mass or the wing has nothing to complete."""
 function wing_origin(system, wing)
-    spec = wing_spec(system, wing)
+    spec = wing_spec(system.wings[wing].model)
+    isnothing(spec) && return nothing
     return spec.particle || !isnothing(spec.frame) ? spec.origin : nothing
 end
 
@@ -104,17 +86,25 @@ own_mass(component) = something(component.extra_mass, 0.0)
 Give each wing of `system` the kite's mass `set.mass` where it carries none
 ([`KiteGeometry.wing_mass!`](@ref)), and put its body in its design pose from where its
 points stand ([`KiteGeometry.wing_body_pose`](@ref)). A wing's frame points are its
-stations' points and the points fixed in its body; what frames and weighs it is read from
-its model ([`KiteGeometry.wing_spec`](@ref)). Call it before `place!`.
+stations' points and the points fixed in its body; what frames and weighs it is what its
+model gives ([`wing_spec`](@ref)), and a wing whose model gives nothing is left as it is.
+A particle wing's body carries no mass of its own, warning where it had some. Call it
+before `place!`.
 """
 function complete_wings!(system::SystemDefinition, set::Settings)
-    for wing in eachindex(system.wings)
-        spec = wing_spec(system, wing)
+    for (wing, row) in enumerate(system.wings)
+        spec = wing_spec(row.model)
+        isnothing(spec) && continue
         members = frame_points(system, wing)
         wing_mass!(system, wing, spec, members, set)
-        body_index = system.wings[wing].body
-        (isempty(members) || isnothing(body_index)) && continue
-        body = system.bodies[body_index]
+        isnothing(row.body) && continue
+        body = system.bodies[row.body]
+        if spec.particle && own_mass(body) > 0
+            @warn "Particle wing $(row.name): extra_mass $(body.extra_mass) is ignored; " *
+                  "a particle wing carries its mass on its points and section bodies."
+            body.extra_mass = 0.0
+        end
+        isempty(members) && continue
         origin, R, com_offset, inertia = wing_body_pose(system.points, spec, members,
                                                         own_mass(body))
         body.pos_ENU .= origin + R * com_offset
@@ -139,7 +129,7 @@ function wing_mass!(system, wing, spec, members, set)
                sum(own_mass(system.bodies[index]) for index in body_idxs; init=0.0)
         mass > 0 && return nothing
         if set.mass <= 0
-            @warn "Wing $(system.wings[wing].name) (PARTICLE_DYNAMICS) has zero mass."
+            @warn "Particle wing $(system.wings[wing].name) has zero mass."
             return nothing
         end
     else
