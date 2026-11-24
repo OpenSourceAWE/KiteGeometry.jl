@@ -12,6 +12,10 @@ SPDX-License-Identifier: MIT
 - Public, for a tool that models a definition: `KiteGeometry.Component`, the supertype of every row type; `KiteGeometry.WingFrame`, `KiteGeometry.wing_frame` and `KiteGeometry.ref_position`, a wing frame from its reference points; `KiteGeometry.connected_body_groups`, the bodies tubes join; `KiteGeometry.tube_law_parameters`, the parameters a tube's material takes from its law; and `KiteGeometry.parse_table`, the rows of a table in the authoring YAML's format.
 - A `Tether` built in Julia may leave its `start_point` and `end_point` unset, `Tether(; name, segments)`: a `SystemDefinition` sets them to its first segment's first point and its last segment's second point, which the public `KiteGeometry.tether_ends(system, tether)` gives.
 
+### Fixed
+
+- Reading or writing a row's property, a field of the row or of its model, is inlined at the call site, so a constant name compiles to a field access.
+
 ## KiteGeometry v0.5.0 2026-11-13
 
 ### Added
