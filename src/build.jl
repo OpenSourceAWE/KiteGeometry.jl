@@ -35,6 +35,12 @@ COLUMN_TYPES = Dict(
 )
 JSON_TYPES = Dict("string" => "String", "integer" => "Int", "boolean" => "Bool",
                   "object" => "OrderedDict{String, Any}")
+"""The required columns a row built in Julia may leave unset, each with what
+`SystemDefinition` fills it with."""
+DERIVED_COLUMNS = Dict(
+    ("tethers", "start_point") => "its first segment's first point",
+    ("tethers", "end_point") => "its last segment's second point",
+)
 
 """Julia type name of the rows of `block`: `bodies` gives `Body`, `canopy_faces`
 `CanopyFace`."""
@@ -88,7 +94,8 @@ function column_type(item)
     return "Union{Nothing, $(column_type(only(references)))}"
 end
 
-"""`(header, Julia type, description, unit)` of every required column of `block`."""
+"""`(header, Julia type, description, unit)` of every required column of `block`, those of
+`DERIVED_COLUMNS` admitting `nothing`."""
 function columns(block, spec)
     parts = filter(part -> haskey(part, "properties"), spec["allOf"])
     length(parts) == 1 || error("block $block has no single allOf entry with properties")
@@ -102,7 +109,14 @@ function columns(block, spec)
     for (header, unit, item) in zip(headers, units, items)
         name = header["const"]
         type = name == "name" ? "Symbol" : column_type(item)
-        push!(fields, (name, type, header["description"], unit["const"]))
+        description = header["description"]
+        derived = get(DERIVED_COLUMNS, (block, name), nothing)
+        if !isnothing(derived)
+            type = "Union{Nothing, $type}"
+            description = rstrip(description, ['.', ' ', '\n']) *
+                          "; where unset, $derived."
+        end
+        push!(fields, (name, type, description, unit["const"]))
     end
     return fields
 end

@@ -81,7 +81,7 @@ calc_heading
 
 ## Placing
 
-`place!` puts a definition where its transforms and its tethers say, from wherever it stands, whether a YAML load built it, it was built row by row in Julia, or a transform changed since it was last placed. It works on the definition's own rows and runs one sequence: every unset rest length to the length it has there, each tether with an `init_stretched_length` to that length and the rest length its `init_tether_force` or `init_stretch_frac` makes it, pulley rest lengths shared in proportion to their segments' lengths, the transforms, each body's points carried with it, and each wing's KA frame with the body it names. A body whose `fixed` is true stays where it is, and a point with a `tube` rides both of that tube's bodies. A tether without `init_*` columns keeps its rest lengths, and a placed definition placed again stays where it is. A tether that leaves its `start_point` or `end_point` unset runs from its first segment's first point to its last segment's second point, which `KiteGeometry.tether_ends` gives.
+`place!` puts a definition where its transforms and its tethers say, from wherever it stands, whether a YAML load built it, it was built row by row in Julia, or a transform changed since it was last placed. It works on the definition's own rows and runs one sequence: every unset rest length to the length it has there, each tether with an `init_stretched_length` to that length and the rest length its `init_tether_force` or `init_stretch_frac` makes it, pulley rest lengths shared in proportion to their segments' lengths, the transforms, each body's points carried with it, and each wing's KA frame with the body it names. A body whose `fixed` is true stays where it is, and a point with a `tube` rides both of that tube's bodies. A tether without `init_*` columns keeps its rest lengths, and a placed definition placed again stays where it is.
 
 ```julia
 system, transforms = load_authoring("kite.yaml"; set)
@@ -93,12 +93,11 @@ place!(system, transforms)                        # the main tether is now 120 m
 
 ```@docs
 place!
-KiteGeometry.tether_ends
 ```
 
 ## Components
 
-Every row type is a `KiteGeometry.Component`.
+Every row type is a `KiteGeometry.Component`. A `Tether` built in Julia may leave its `start_point` and `end_point` unset: a `SystemDefinition` sets them to the ends of its segment chain, its first segment's first point and its last segment's second point, which `KiteGeometry.tether_ends` gives. A document always names both.
 
 ```@docs
 KiteGeometry.Component
@@ -108,6 +107,7 @@ Segment
 SpanwiseStation
 Pulley
 Tether
+KiteGeometry.tether_ends
 Winch
 Wing
 CanopyFace

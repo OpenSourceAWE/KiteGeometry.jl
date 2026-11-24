@@ -34,7 +34,7 @@ default, else `nothing`."""
 optional_default(block, field) = get(OPTIONAL_DEFAULTS[block], field, nothing)
 
 """The required columns of `T` its constructor fills in: a free point of its own, a tether's
-ends taken from its segments, and the identity rotation of a wing's or a body's frame."""
+ends left to its segment chain, and the identity rotation of a wing's or a body's frame."""
 default_values(::Type{<:Component}) = (;)
 default_values(::Type{<:Point}) = (; fixed=false, body=nothing)
 default_values(::Type{<:Tether}) = (; start_point=nothing, end_point=nothing)

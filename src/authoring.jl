@@ -913,9 +913,6 @@ function load_authoring(authored::AbstractDict; set::Settings, name::AbstractStr
                              winches=read_winches(data, set), wings,
                              canopy_faces=read_canopy_faces(data),
                              bodies=[wing_bodies; bodies], tubes, extras)
-    for tether in draft.tethers
-        tether.start_point, tether.end_point = tether_ends(draft, tether)
-    end
     transforms = resolve_transforms(authored_transforms, draft, authored_wings,
                                     point_transforms, body_transforms)
     design_pose!(draft, set, point_wings, authored_wings)

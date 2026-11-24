@@ -176,33 +176,17 @@ end
 
 # ==================== TETHER LENGTHS ==================== #
 
-"""
-    tether_ends(system::SystemDefinition, tether) -> (start_point, end_point)
-
-The two points `tether` of `system` runs between: its own `start_point` and `end_point`
-where set, else its first segment's first point and its last segment's second point.
-"""
-function tether_ends(system::SystemDefinition, tether)
-    first_segment = system.segments[first(tether.segments)]
-    last_segment = system.segments[last(tether.segments)]
-    return (something(tether.start_point, first_segment.points[1]),
-            something(tether.end_point, last_segment.points[2]))
+"""Point indices along `tether`, from its start through each segment's far end."""
+function tether_ordered_point_idxs(tether, segments)
+    return [tether.start_point; [segments[index].points[2] for index in tether.segments]]
 end
 
-"""Point indices along `tether` of `system`, from its start through each segment's far
-end."""
-function tether_ordered_point_idxs(system, tether)
-    return [first(tether_ends(system, tether));
-            [system.segments[index].points[2] for index in tether.segments]]
-end
-
-"""`(anchor, free)` endpoints of `tether` of `system`: the one in `boundary` and the other,
-or `(nothing, nothing)` where neither or both are."""
-function tether_anchor_free(system, tether, boundary)
-    start_point, end_point = tether_ends(system, tether)
-    on_start, on_end = start_point in boundary, end_point in boundary
-    on_start && !on_end && return start_point, end_point
-    on_end && !on_start && return end_point, start_point
+"""`(anchor, free)` endpoints of `tether`: the one in `boundary` and the other, or
+`(nothing, nothing)` where neither or both are."""
+function tether_anchor_free(tether, boundary)
+    on_start, on_end = tether.start_point in boundary, tether.end_point in boundary
+    on_start && !on_end && return tether.start_point, tether.end_point
+    on_end && !on_start && return tether.end_point, tether.start_point
     return nothing, nothing
 end
 
@@ -287,18 +271,18 @@ function rigid_point_siblings(carriers, root)
     return siblings
 end
 
-"""The points of `system` reached from `from` through segments outside `tether` and through
+"""The points reached from `from` through segments outside `tether` and through
 `rigid_siblings`, stopping at `boundary`: what moves with the tether's free end. Refuses a
 structure that reaches back to `anchor`."""
-function tether_downstream_idxs(system, tether, boundary, from, anchor, rigid_siblings)
+function tether_downstream_idxs(tether, segments, boundary, from, anchor, rigid_siblings)
     own_segments = Set(tether.segments)
-    visited = Set(tether_ordered_point_idxs(system, tether))
+    visited = Set(tether_ordered_point_idxs(tether, segments))
     downstream = Set{Int}()
     queue = [from]
     while !isempty(queue)
         current = pop!(queue)
         neighbors = Int[]
-        for (index, segment) in enumerate(system.segments)
+        for (index, segment) in enumerate(segments)
             index in own_segments && continue
             point_a, point_b = segment.points
             point_a == current && push!(neighbors, point_b)
@@ -362,8 +346,8 @@ function apply_cluster_init_stretched_len!(system, pose, cluster, downstream, bo
     (; pos) = pose
     snaps = map(cluster) do index
         tether = system.tethers[index]
-        anchor, free = tether_anchor_free(system, tether, boundary)
-        ordered = tether_ordered_point_idxs(system, tether)
+        anchor, free = tether_anchor_free(tether, boundary)
+        ordered = tether_ordered_point_idxs(tether, system.segments)
         seg_lens = [segment_length(system.segments[segment], pos)
                     for segment in tether.segments]
         if ordered[1] != anchor
@@ -424,14 +408,14 @@ function apply_tether_init_stretched_lens!(system, pose)
     end
     anchored = filter(specified) do index
         tether = system.tethers[index]
-        both = all(in(boundary), tether_ends(system, tether))
+        both = tether.start_point in boundary && tether.end_point in boundary
         both && @warn "Tether $(tether.name): both endpoints are fixed; skipping its " *
                       "length placement."
         return !both
     end
     for index in anchored
         tether = system.tethers[index]
-        isnothing(first(tether_anchor_free(system, tether, boundary))) && error(
+        isnothing(first(tether_anchor_free(tether, boundary))) && error(
             "tether $(tether.name) has neither endpoint on a fixed or winch point, so " *
             "it cannot be placed at its stretched length")
     end
@@ -439,12 +423,12 @@ function apply_tether_init_stretched_lens!(system, pose)
         carriers, connected_body_groups(length(system.bodies), system.tubes))
     downstream = Dict(map(anchored) do index
         tether = system.tethers[index]
-        anchor, free = tether_anchor_free(system, tether, boundary)
-        index => tether_downstream_idxs(system, tether, boundary, free, anchor,
+        anchor, free = tether_anchor_free(tether, boundary)
+        index => tether_downstream_idxs(tether, system.segments, boundary, free, anchor,
                                         rigid_siblings)
     end)
     reach = Dict(index => union(
-        setdiff(Set(tether_ordered_point_idxs(system, system.tethers[index])),
+        setdiff(Set(tether_ordered_point_idxs(system.tethers[index], system.segments)),
                 boundary), downstream[index]) for index in anchored)
     body_neighbors = beam_body_neighbors(system.tubes)
     for cluster in tether_clusters(anchored, reach)

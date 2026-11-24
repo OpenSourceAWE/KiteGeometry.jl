@@ -213,21 +213,23 @@ end
 @testset "a tether without ends places, writes and reads back, its ends the chain's" begin
     system = segment_only_tether()
     tether = only(system.tethers)
-    @test isnothing(tether.start_point) && isnothing(tether.end_point)
-    @test KiteGeometry.tether_ends(system, tether) == (1, 3)
+    @test (tether.start_point, tether.end_point) == (1, 3)
     place!(system)
     @test placed_length(system, tether) ≈ 12.0 atol=1e-9
     document = structure_document(system)
+    @test only(document["tethers"]["data"])[2:3] == ["ground", "kcu"]
     read_back = SystemDefinition(document)
     @test only(read_back.tethers) == tether
     @test structure_document(read_back) == document
 end
 
-@testset "a tether's own ends are its ends" begin
+@testset "a tether's ends are its own where set, else its segment chain's" begin
     system = segment_only_tether()
     tether = only(system.tethers)
     tether.start_point, tether.end_point = 3, 2
     @test KiteGeometry.tether_ends(system, tether) == (3, 2)
+    tether.start_point, tether.end_point = nothing, nothing
+    @test KiteGeometry.tether_ends(system, tether) == (1, 3)
 end
 
 """The authoring document of a body whose centre of mass is off its origin, turned by a
