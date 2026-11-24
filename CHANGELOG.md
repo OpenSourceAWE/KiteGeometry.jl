@@ -11,6 +11,7 @@ SPDX-License-Identifier: MIT
 
 - Public, for a tool that models a definition: `KiteGeometry.Component`, the supertype of every row type; `KiteGeometry.WingFrame`, `KiteGeometry.wing_frame` and `KiteGeometry.ref_position`, a wing frame from its reference points; `KiteGeometry.connected_body_groups`, the bodies tubes join; `KiteGeometry.tube_law_parameters`, the parameters a tube's material takes from its law; and `KiteGeometry.parse_table`, the rows of a table in the authoring YAML's format.
 - `complete_wings!(system, set)` gives a definition's wings their mass and puts each wing's body in its design pose, as `load_authoring` does, so a definition built in Julia completes to the same wing. A wing's frame points are the points of its stations and those fixed in its body; its dynamics type, frame reference points and mesh centre and inertia are read from its model's `dynamics_type`, `origin_idx`, `z_ref_points`, `y_ref_points`, `com` and `unit_inertia` columns.
+- `model_references(M)` declares the columns of a model that refer to rows, with `WeightedRefs` for reference points: a document gives them by name and a definition holds them as indices.
 - A `Tether` built in Julia may leave its `start_point` and `end_point` unset, `Tether(; name, segments)`: a `SystemDefinition` sets them to its first segment's first point and its last segment's second point, which the public `KiteGeometry.tether_ends(system, tether)` gives.
 
 ### Fixed

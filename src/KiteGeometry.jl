@@ -26,8 +26,10 @@ export SystemDefinition, Rows, Metadata, Material, Point, Segment, SpanwiseStati
        Tether, Winch, Wing, CanopyFace, Body, Tube, pos_KA
 export Transform, Pose, place!, place_transforms!, reposition!,
        transform_velocities, calc_heading
-export NameRef, AbstractModel, NoModel, register_model!, model_type, model_columns
-export load_structure, load_authoring, complete_wings!, structure_document, connectivity_sha
+export NameRef, AbstractModel, NoModel, register_model!, model_type, model_columns,
+       model_references, WeightedRefs
+export load_structure, load_authoring, complete_wings!,
+       structure_document, connectivity_sha
 export from_yaml, to_yaml, from_json, to_json
 public definition, unit_stiffness, resolve_material, expand_tether!, line_segment,
        MaterialTable, row_index
