@@ -5,12 +5,12 @@ SPDX-License-Identifier: MIT
 
 # Changelog
 
-## Unreleased
+## KiteGeometry v0.6.0 2026-11-24
 
 ### Added
 
 - Public, for a tool that models a definition: `KiteGeometry.Component`, the supertype of every row type; `KiteGeometry.WingFrame`, `KiteGeometry.wing_frame` and `KiteGeometry.ref_position`, a wing frame from its reference points; `KiteGeometry.connected_body_groups`, the bodies tubes join; `KiteGeometry.tube_law_parameters`, the parameters a tube's material takes from its law; and `KiteGeometry.parse_table`, the rows of a table in the authoring YAML's format.
-- `complete_wings!(system, set)` gives a definition's wings their mass and puts each wing's body in its design pose, as `load_authoring` does, so a definition built in Julia completes to the same wing. A wing's frame points are the points of its stations and those fixed in its body; whether it is a particle wing, its frame reference points and its mesh centre and inertia are the `WingSpec` its model gives through a `wing_spec(model)` method, and a wing whose model adds none is left as it is. A wing with no frame points keeps its body's pose and gets the inertia its unit inertia gives its body's mass.
+- `complete_wings!(system, set)` gives a definition's wings their mass and puts each wing's body in its design pose, as `load_authoring` does, so a definition built in Julia completes to the same wing. What frames and weighs a wing is the `WingSpec` its model gives through a `wing_spec(model)` method: whether it is a particle wing, its frame reference points, and its mesh centre and inertia. A wing whose model adds no such method is left as it is. A wing's frame points are the points of its stations and those fixed in its body; a wing with none keeps its body's pose and gets the inertia its unit inertia gives its body's mass.
 - `model_references(M)` declares the columns of a model that refer to rows, with `WeightedRefs` for reference points: a document gives them by name and a definition holds them as indices.
 - A `Tether` built in Julia may leave its `start_point` and `end_point` unset, `Tether(; name, segments)`: a `SystemDefinition` sets them to its first segment's first point and its last segment's second point, which the public `KiteGeometry.tether_ends(system, tether)` gives.
 
@@ -20,7 +20,7 @@ SPDX-License-Identifier: MIT
 
 ### Changed
 
-- BREAKING: `load_authoring` no longer reads a wing's `dynamics_type` or deprecated `type`, `origin_idx`, `z_ref_points`, `y_ref_points`, `com` and `unit_inertia` itself: the wing's registered model holds them and gives its `WingSpec` through `wing_spec`, else they are refused as unread columns and the wing is not completed.
+- BREAKING: `load_authoring` no longer reads a wing's `dynamics_type` or deprecated `type`, `origin_idx`, `z_ref_points`, `y_ref_points`, `com` and `unit_inertia` itself, but completes its wings with `complete_wings!`. These columns must be fields of the wing's registered model, or they are refused as unread, and the wing is completed only where that model gives a `WingSpec`.
 - BREAKING: A component built by its keyword constructor, such as `Point(; name, pos_ENU)`, carries its block's registered default model where every column of that model can be unset, as a loaded row without a `model` column does, rather than `NoModel()`; a `model` passed explicitly still wins.
 
 ## KiteGeometry v0.5.0 2026-11-13
