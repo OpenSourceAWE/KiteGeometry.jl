@@ -16,6 +16,10 @@ SPDX-License-Identifier: MIT
 
 - Reading or writing a row's property, a field of the row or of its model, is inlined at the call site, so a constant name compiles to a field access.
 
+### Changed
+
+- BREAKING: A component built by its keyword constructor, such as `Point(; name, pos_ENU)`, carries its block's registered default model where every column of that model can be unset, as a loaded row without a `model` column does, rather than `NoModel()`; a `model` passed explicitly still wins.
+
 ## KiteGeometry v0.5.0 2026-11-13
 
 ### Added

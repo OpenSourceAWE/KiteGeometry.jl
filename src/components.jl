@@ -20,13 +20,27 @@ end
     defaults(T)
 
 The keyword arguments a `T(; kwargs...)` constructor fills in when they are not given: every
-optional column its schema default or unset, `default_values(T)`, and no model.
+optional column its schema default or unset, `default_values(T)`, and the model
+[`default_row_model`](@ref) gives its block.
 """
 function defaults(T::Type{<:Component})
     block = findfirst(==(Base.typename(T).wrapper), BLOCKS)
     optional = NamedTuple(field => optional_default(block, field)
                           for field in keys(OPTIONAL_UNITS[block]))
-    return (; optional..., default_values(T)..., model=NoModel())
+    return (; optional..., default_values(T)..., model=default_row_model(block))
+end
+
+"""
+    default_row_model(block)
+
+The model of a row of `block` that names none and fills none of its columns: the block's
+default model with every column unset, `NoModel` where there is none or it needs a column
+filled.
+"""
+function default_row_model(block)
+    M = model_type(block, default_model(block))
+    all(field -> Nothing <: fieldtype(M, field), model_columns(M)) || return NoModel()
+    return authoring_model(block, (;))
 end
 
 """The value the optional column `field` of `block` has where it is left out: the schema's
