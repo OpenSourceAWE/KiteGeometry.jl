@@ -5,6 +5,12 @@ SPDX-License-Identifier: MIT
 
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- An empty list of reference points, such as a wing's `origin=[]`, is refused with an `ArgumentError` naming it, rather than a `BoundsError`.
+
 ## KiteGeometry v0.6.0 2026-11-24
 
 ### Added

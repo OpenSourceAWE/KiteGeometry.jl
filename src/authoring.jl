@@ -288,6 +288,7 @@ end
 `[reference, weight]` pairs or `reference => weight` — as weights per reference."""
 function yaml_ref_points(value)
     value isa AbstractVector || return [yaml_to_ref(value) => 1.0]
+    isempty(value) && throw(ArgumentError("reference points $value name no point"))
     first(value) isa Union{AbstractVector, Pair} ||
         return [yaml_to_ref(entry) => 1 / length(value) for entry in value]
     weights = [Float64(weight) for (_, weight) in value]
