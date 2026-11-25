@@ -5,7 +5,7 @@ SPDX-License-Identifier: MIT
 
 # Changelog
 
-## Unreleased
+## KiteGeometry v0.6.3 2026-11-25
 
 ### Added
 
@@ -13,7 +13,7 @@ SPDX-License-Identifier: MIT
 
 ### Fixed
 
-- BREAKING: a particle wing's mass counts the bodies tube-connected to a body its stations' models name (`model_references` targeting `:bodies`), not only to the bodies its points ride. `complete_wings!` no longer gives such a wing the kite's mass where those bodies carry some.
+- A particle wing's mass counts the bodies tube-connected to a body its stations' models name (`model_references` targeting `:bodies`), not only to the bodies its points ride. `complete_wings!` no longer gives such a wing the kite's mass where those bodies carry some.
 
 ## KiteGeometry v0.6.2 2026-11-25
 
