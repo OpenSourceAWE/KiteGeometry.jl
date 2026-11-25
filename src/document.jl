@@ -416,12 +416,25 @@ function write_table(system, block, rows)
                 (model_cell(row.model, registration, header, system)
                  for header in keys(model_units))...]
             for (row, registration) in zip(rows, registrations)]
+    headers = [String.(columns)..., keys(model_units)...]
+    for (row, cells) in zip(rows, data), (header, cell) in zip(headers, cells)
+        writable(cell) || throw(ArgumentError(
+            "$block row $(row.name), column $header: YAML and JSON cannot write " *
+            "$(repr(cell)) back"))
+    end
     return OrderedDict{String, Any}(
-        "headers" => [String.(columns)..., keys(model_units)...],
+        "headers" => headers,
         "units" => [UNITS[block]..., (OPTIONAL_UNITS[block][field] for field in filled)...,
                     values(model_units)...],
         "data" => data)
 end
+
+"""Whether a document cell holds only numbers, strings, `nothing` and vectors and tables of
+them, which YAML and JSON write and read back."""
+writable(::Union{Real, AbstractString, Nothing}) = true
+writable(cells::AbstractVector) = all(writable, cells)
+writable(table::AbstractDict) = all(writable, values(table))
+writable(value) = false
 
 """Whether a row registered as `registration` reads the default model of `block`."""
 function reads_default(registration, block)

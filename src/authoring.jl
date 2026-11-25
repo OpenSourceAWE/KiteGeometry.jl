@@ -273,7 +273,12 @@ end
 """The dynamics types of SymbolicAWEModels."""
 const DYNAMICS_TYPES = ("DYNAMIC", "STATIC", "BODY_STATIC", "KINEMATIC")
 
-"""The dynamics type a cell names, upper case, refusing the removed `WING`."""
+"""
+    parse_dynamics_type(text)
+
+The dynamics type of SymbolicAWEModels that `text` names, upper case, refusing the removed
+`WING`.
+"""
 function parse_dynamics_type(text)
     name = uppercase(String(text))
     name == "WING" && error(

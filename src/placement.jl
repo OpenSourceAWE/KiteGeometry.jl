@@ -21,36 +21,50 @@ end
 
 # ==================== ROTATIONS ==================== #
 
-"""Rotation matrix of the scalar-first quaternion `q`."""
+"""
+    quaternion_to_rotation_matrix(q)
+
+Rotation matrix of the scalar-first quaternion `q`, which need not be of unit length.
+"""
 function quaternion_to_rotation_matrix(q)
     w, x, y, z = q
     s = 2 / (w * w + x * x + y * y + z * z)
-    return Mat3(1 - s * (y * y + z * z), s * (x * y + z * w), s * (x * z - y * w),
-                s * (x * y - z * w), 1 - s * (x * x + z * z), s * (y * z + x * w),
-                s * (x * z + y * w), s * (y * z - x * w), 1 - s * (x * x + y * y))
+    return SMatrix{3, 3}(1 - s * (y * y + z * z), s * (x * y + z * w), s * (x * z - y * w),
+                         s * (x * y - z * w), 1 - s * (x * x + z * z), s * (y * z + x * w),
+                         s * (x * z + y * w), s * (y * z - x * w), 1 - s * (x * x + y * y))
 end
 
-"""Scalar-first quaternion of the rotation matrix `R`, from its numerically stable branch:
-the trace where it is positive, else the largest diagonal element."""
+"""
+    rotation_matrix_to_quaternion(R)
+
+Scalar-first quaternion of the rotation matrix `R`, from its numerically stable branch: the
+trace where it is positive, else the largest diagonal element. The branch is chosen with
+`ifelse`, so `R` may hold symbolic numbers.
+"""
 function rotation_matrix_to_quaternion(R)
     trace = R[1, 1] + R[2, 2] + R[3, 3]
-    if trace > 0
-        S = 2 * sqrt(trace + 1)
-        return SVector(S / 4, (R[3, 2] - R[2, 3]) / S, (R[1, 3] - R[3, 1]) / S,
+    S = 2 * clamped_sqrt(trace + 1)
+    by_trace = SVector(S / 4, (R[3, 2] - R[2, 3]) / S, (R[1, 3] - R[3, 1]) / S,
                        (R[2, 1] - R[1, 2]) / S)
-    elseif R[1, 1] >= R[2, 2] && R[1, 1] >= R[3, 3]
-        S = 2 * sqrt(1 + R[1, 1] - R[2, 2] - R[3, 3])
-        return SVector((R[3, 2] - R[2, 3]) / S, S / 4, (R[1, 2] + R[2, 1]) / S,
-                       (R[1, 3] + R[3, 1]) / S)
-    elseif R[2, 2] >= R[3, 3]
-        S = 2 * sqrt(1 + R[2, 2] - R[1, 1] - R[3, 3])
-        return SVector((R[1, 3] - R[3, 1]) / S, (R[1, 2] + R[2, 1]) / S, S / 4,
-                       (R[2, 3] + R[3, 2]) / S)
-    end
-    S = 2 * sqrt(1 + R[3, 3] - R[1, 1] - R[2, 2])
-    return SVector((R[2, 1] - R[1, 2]) / S, (R[1, 3] + R[3, 1]) / S,
+    S = 2 * clamped_sqrt(1 + R[1, 1] - R[2, 2] - R[3, 3])
+    by_x = SVector((R[3, 2] - R[2, 3]) / S, S / 4, (R[1, 2] + R[2, 1]) / S,
+                   (R[1, 3] + R[3, 1]) / S)
+    S = 2 * clamped_sqrt(1 + R[2, 2] - R[1, 1] - R[3, 3])
+    by_y = SVector((R[1, 3] - R[3, 1]) / S, (R[1, 2] + R[2, 1]) / S, S / 4,
+                   (R[2, 3] + R[3, 2]) / S)
+    S = 2 * clamped_sqrt(1 + R[3, 3] - R[1, 1] - R[2, 2])
+    by_z = SVector((R[2, 1] - R[1, 2]) / S, (R[1, 3] + R[3, 1]) / S,
                    (R[2, 3] + R[3, 2]) / S, S / 4)
+    by_diagonal = choose(R[1, 1] >= R[2, 2], choose(R[1, 1] >= R[3, 3], by_x, by_z),
+                         choose(R[2, 2] >= R[3, 3], by_y, by_z))
+    return choose(trace > 0, by_trace, by_diagonal)
 end
+
+"""The square root of `x`, zero where `x` is negative."""
+clamped_sqrt(x) = sqrt(max(x, 0))
+
+"""`a` where `condition` holds, else `b`, element by element."""
+choose(condition, a, b) = map((x, y) -> ifelse(condition, x, y), a, b)
 
 """`v` rotated about the axis `k` by `θ` [rad], by Rodrigues' formula."""
 function rotate_v_around_k(v, k, θ)
@@ -129,8 +143,14 @@ function place!(system::SystemDefinition, transforms=Transform[]; ignore_l0=fals
     return system
 end
 
-"""Length of `segment` between the positions `pos` [m]."""
-segment_length(segment, pos) = norm(pos[segment.points[1]] - pos[segment.points[2]])
+"""
+    segment_length(segment, positions)
+
+Length [m] of `segment` between the `positions` [m] of its points, indexed as the points.
+"""
+function segment_length(segment, positions)
+    return norm(positions[segment.points[1]] - positions[segment.points[2]])
+end
 
 """Set every unset (zero) rest length of `segments` to its length between the positions
 `pos`."""
