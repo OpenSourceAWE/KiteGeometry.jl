@@ -126,12 +126,11 @@ end
 
 Spread `set.mass` equally over the frame points `members` of wing `wing` where the wing
 carries no mass of its own: for a rigid wing, neither its body nor its members; for a
-particle wing, neither its members nor the bodies they and its stations ride
-([`KiteGeometry.particle_wing_parts`](@ref)).
+particle wing, none of its parts ([`KiteGeometry.particle_wing_parts`](@ref)).
 """
 function wing_mass!(system, wing, spec, members, set)
     if spec.particle
-        point_idxs, body_idxs = particle_wing_parts(system, wing, members)
+        point_idxs, body_idxs = particle_wing_parts(system, wing)
         mass = sum(own_mass(system.points[index]) for index in point_idxs; init=0.0) +
                sum(own_mass(system.bodies[index]) for index in body_idxs; init=0.0)
         mass > 0 && return nothing
@@ -150,21 +149,32 @@ function wing_mass!(system, wing, spec, members, set)
 end
 
 """
-    particle_wing_parts(system, wing, members) -> (point_idxs, body_idxs)
+    particle_wing_parts(system, wing) -> (point_idxs, body_idxs)
 
-The points of particle wing `wing` — its stations' points, else its frame points `members`
-— and the other bodies sharing a tube-connected group with the bodies those points ride.
+The parts that carry the mass of particle wing `wing` of `system`: its stations' points,
+else its frame points, and the bodies of no wing that tubes connect to a body, not a wing's,
+that those points ride or its stations' models name ([`model_references`](@ref)).
 """
-function particle_wing_parts(system, wing, members)
+function particle_wing_parts(system, wing)
     point_idxs = Set{Int}()
+    seed_bodies = Set{Int}()
     for station in system.spanwise_stations
-        station.wing == wing && union!(point_idxs, station.points)
+        station.wing == wing || continue
+        union!(point_idxs, station.points)
+        model = station.model
+        for (column, reference) in pairs(model_references(typeof(model)))
+            cell = getfield(model, column)
+            union!(seed_bodies, referenced_rows(cell, reference, :bodies))
+        end
     end
-    isempty(point_idxs) && union!(point_idxs, members)
+    isempty(point_idxs) && union!(point_idxs, frame_points(system, wing))
+    for index in point_idxs
+        body = system.points[index].body
+        isnothing(body) || push!(seed_bodies, body)
+    end
     root = connected_body_groups(length(system.bodies), system.tubes)
     wing_bodies = Set(row.body for row in system.wings)
-    seeds = Set(root[body] for body in (system.points[index].body for index in point_idxs)
-                if !isnothing(body) && !(body in wing_bodies))
+    seeds = Set(root[body] for body in setdiff(seed_bodies, wing_bodies))
     body_idxs = [index for index in eachindex(system.bodies)
                  if !(index in wing_bodies) && root[index] in seeds]
     return point_idxs, body_idxs

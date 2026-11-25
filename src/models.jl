@@ -61,6 +61,23 @@ function map_weighted(f, value)
     return [Any[f(ref), weight] for (ref, weight) in value]
 end
 
+"""The indices of the rows of `block` the model cell `value` names through `reference`
+([`model_references`](@ref))."""
+function referenced_rows(value, reference, block)
+    rows = Int[]
+    isnothing(value) && return rows
+    if reference isa Tuple
+        for (cell, cell_reference) in zip_references(value, reference)
+            append!(rows, referenced_rows(cell, cell_reference, block))
+        end
+    elseif reference == block
+        append!(rows, value)
+    elseif reference isa WeightedRefs && reference.block == block
+        map_weighted(index -> push!(rows, index), value)
+    end
+    return rows
+end
+
 """
     register_model!(block, name, M, units; default=false)
 

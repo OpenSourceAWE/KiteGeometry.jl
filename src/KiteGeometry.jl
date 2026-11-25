@@ -34,7 +34,8 @@ export from_yaml, to_yaml, from_json, to_json
 public definition, unit_stiffness, resolve_material, expand_tether!, line_segment,
        MaterialTable, row_index
 public Component, parse_table, tube_law_parameters
-public ref_position, WingFrame, wing_frame, connected_body_groups, tether_ends
+public ref_position, WingFrame, wing_frame, connected_body_groups, tether_ends,
+       particle_wing_parts
 public quaternion_to_rotation_matrix, rotation_matrix_to_quaternion, segment_length,
        parse_dynamics_type, Positions
 
