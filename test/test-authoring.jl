@@ -863,4 +863,35 @@ end
     @test isapprox(body.extra_inertia_KA, R' * (2.0 * unit_inertia) * R; rtol=0, atol=1e-12)
 end
 
+"""A station model naming the body of its flap."""
+struct FlapStation <: AbstractModel
+    flap_body::Any
+end
+KiteGeometry.model_references(::Type{FlapStation}) = (flap_body=:bodies,)
+
+@testset "a particle wing weighs the bodies tubes join to a body its stations name" begin
+    model = SamWing(nothing, nothing, nothing, nothing, nothing, "PARTICLE_DYNAMICS", "le",
+                    nothing, nothing, nothing, nothing, nothing)
+    points = [Point(; name, pos_ENU) for (name, pos_ENU) in
+              ((:le, [0.0, 0.0, 5.0]), (:te, [1.0, 0.0, 5.0]), (:hook, [0.0, 0.0, 0.0]))]
+    system = SystemDefinition(;
+        metadata=Metadata(; name="flapped", n_points=3), points,
+        spanwise_stations=[SpanwiseStation(; name=:mid, wing=:wing, points=[:le, :te],
+                                           model=FlapStation(:flap))],
+        wings=[Wing(; name=:wing, pos_ENU=zeros(3), body=:wing, model)],
+        bodies=[Body(; name, pos_ENU=zeros(3), extra_mass)
+                for (name, extra_mass) in ((:wing, 0.0), (:flap, 0.0), (:servo, 0.5))],
+        tubes=[Tube(; name=:arm, bodies=(:flap, :servo))])
+    @test KiteGeometry.particle_wing_parts(system, 1) == (Set([1, 2]), [2, 3])
+    references = (:bodies, WeightedRefs(:bodies), :points)
+    @test KiteGeometry.referenced_rows([3, [Any[2, 0.5], Any[4, 0.5]], 1], references,
+                                       :bodies) == [3, 2, 4]
+    @test isempty(KiteGeometry.referenced_rows(nothing, :bodies, :bodies))
+    set = kite_settings()
+    set.mass = 1.0
+    complete_wings!(system, set)
+    @test all(point -> isnothing(point.extra_mass) || iszero(point.extra_mass),
+              system.points)
+end
+
 foreach(model -> unregister_model!(model[1], model[2]), SAM_MODELS)

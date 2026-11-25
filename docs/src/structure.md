@@ -95,12 +95,13 @@ system.tethers[:main].init_stretched_length = 120.0
 place!(system, transforms)                        # the main tether is now 120 m long
 ```
 
-A definition built in Julia completes its wings with `complete_wings!` before it is placed, as `load_authoring` does: each wing gets the kite's mass where it carries none, and its body is put at the centre of its own mass, turned into the frame its reference points give. A wing's frame points are the points of its stations and the points fixed in its body. What frames and weighs it is a `WingSpec`, which a tool's wing model gives by adding a `wing_spec` method, its reference points as point indices (`model_references`). A wing whose model adds none has nothing to complete.
+A definition built in Julia completes its wings with `complete_wings!` before it is placed, as `load_authoring` does: each wing gets the kite's mass where it carries none, and its body is put at the centre of its own mass, turned into the frame its reference points give. A wing's frame points are the points of its stations and the points fixed in its body. What frames and weighs it is a `WingSpec`, which a tool's wing model gives by adding a `wing_spec` method, its reference points as point indices (`model_references`). A wing whose model adds none has nothing to complete. A particle wing's mass is carried by the parts `KiteGeometry.particle_wing_parts` gives.
 
 ```@docs
 complete_wings!
 WingSpec
 wing_spec
+KiteGeometry.particle_wing_parts
 place!
 KiteGeometry.segment_length
 ```
