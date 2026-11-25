@@ -5,6 +5,16 @@ SPDX-License-Identifier: MIT
 
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Public, for a tool that builds on a definition: `KiteGeometry.quaternion_to_rotation_matrix` and `KiteGeometry.rotation_matrix_to_quaternion`, `KiteGeometry.segment_length`, `KiteGeometry.parse_dynamics_type` and `KiteGeometry.Positions`. Both rotation conversions take symbolic numbers, such as ModelingToolkit's, as well as plain ones, and give the same result as before for plain ones.
+
+### Fixed
+
+- `to_yaml`, `to_json` and `structure_document` refuse a cell that YAML and JSON cannot write back, such as a material whose `unit_stiffness` is a Julia function, with an `ArgumentError` naming the block, the row and the column. Before, YAML wrote it as a comment and JSON as a string, and the material read back without it.
+
 ## KiteGeometry v0.6.1 2026-11-25
 
 ### Fixed

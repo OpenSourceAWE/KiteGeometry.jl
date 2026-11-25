@@ -515,6 +515,15 @@ end
     @test_throws "no points named nowhere" structure_document(held_names)
 end
 
+@testset "a material whose parameter is a callable is refused by both writers" begin
+    law = OrderedDict{String, Any}("unit_stiffness" => x -> x)
+    system = small_system(; materials=[Material(; name=:line, law="unit_stiffness",
+                                                parameters=law)])
+    message = "materials row line, column parameters"
+    @test_throws message to_yaml(system)
+    @test_throws message to_json(system)
+end
+
 @testset "models giving one column two units are refused on writing" begin
     tubes = [Tube(; name="le", bodies=("a", "b"), model=TestBeam(1, 2)),
              Tube(; name="te", bodies=("a", "b"), model=StiffBeam(3))]
