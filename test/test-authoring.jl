@@ -815,6 +815,20 @@ end
     @test isnothing(WingSpec(; origin=9).frame)
 end
 
+@testset "reference points weigh one index fully, a list equally, pairs by weight" begin
+    origin(value) = WingSpec(; origin=value).origin
+    @test origin(7) == [7 => 1.0]
+    @test origin([2, 4]) == [2 => 0.5, 4 => 0.5]
+    @test (@test_logs origin([Any[2, 0.25], Any[4, 0.75]])) == [2 => 0.25, 4 => 0.75]
+    @test (@test_logs origin([Any[2, 0.4], Any[4, 0.6]])) == [2 => 0.4, 4 => 0.6]
+    @test (@test_logs (:warn, r"sum to 4.0") origin([Any[2, 2.0], Any[4, 2.0]])) ==
+          [2 => 0.5, 4 => 0.5]
+    @test (@test_logs (:warn, r"sum to 4.0") origin([Any[2, 3.0], Any[4, 1.0]])) ==
+          [2 => 0.75, 4 => 0.25]
+    @test_throws "sum to 0.0" origin([Any[2, 0.0], Any[4, 0.0]])
+    @test_throws ArgumentError("reference points Any[] name no point") origin([])
+end
+
 @testset "a wing whose model gives no wing spec is left as it is" begin
     points = [Point(; name, pos_ENU, body=:wing)
               for (name, pos_ENU) in ((:tip, [1.0, 0.0, 5.0]), (:root, [-1.0, 0.0, 5.0]))]

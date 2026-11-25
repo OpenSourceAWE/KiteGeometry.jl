@@ -10,6 +10,7 @@ SPDX-License-Identifier: MIT
 ### Fixed
 
 - `complete_wings!` takes a wing's mesh centre and its unit inertia each where its model gives it, and the other from the wing's frame points. Before, a wing that gave only one of the two lost it: one with a unit inertia but no centre, and massless frame points, got no inertia.
+- An empty list of reference points, such as a wing's `origin=[]`, is refused with an `ArgumentError` naming it, rather than a `BoundsError`.
 
 ## KiteGeometry v0.6.0 2026-11-24
 
