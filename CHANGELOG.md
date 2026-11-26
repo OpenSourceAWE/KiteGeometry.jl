@@ -5,6 +5,12 @@ SPDX-License-Identifier: MIT
 
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- BREAKING: KiteGeometry no longer has a `calc_heading(R_b_to_w, pos)` of its own; use KiteUtils' `calc_heading(attitude, elevation, azimuth)`. `using KiteUtils, KiteGeometry` no longer leaves `calc_heading` ambiguous.
+
 ## KiteGeometry v0.6.3 2026-11-25
 
 ### Added
@@ -49,7 +55,6 @@ SPDX-License-Identifier: MIT
 
 - BREAKING: `load_authoring` no longer reads a wing's `dynamics_type` or deprecated `type`, `origin_idx`, `z_ref_points`, `y_ref_points`, `com` and `unit_inertia` itself, but completes its wings with `complete_wings!`. These columns must be fields of the wing's registered model, or they are refused as unread, and the wing is completed only where that model gives a `WingSpec`.
 - BREAKING: A component built by its keyword constructor, such as `Point(; name, pos_ENU)`, carries its block's registered default model where every column of that model can be unset, as a loaded row without a `model` column does, rather than `NoModel()`; a `model` passed explicitly still wins.
-- BREAKING: KiteGeometry no longer has a `calc_heading(R_b_to_w, pos)` of its own; use KiteUtils' `calc_heading(attitude, elevation, azimuth)`. `using KiteUtils, KiteGeometry` no longer leaves `calc_heading` ambiguous.
 
 ## KiteGeometry v0.5.0 2026-11-13
 
