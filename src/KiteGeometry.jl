@@ -26,13 +26,17 @@ export SystemDefinition, Rows, Metadata, Material, Point, Segment, SpanwiseStati
        Tether, Winch, Wing, CanopyFace, Body, Tube, pos_KA
 export Transform, Pose, place!, place_transforms!, reposition!, transform_velocities
 export NameRef, AbstractModel, NoModel, register_model!, model_type, model_columns,
-       model_references, WeightedRefs
-export load_structure, load_authoring, structure_document, connectivity_sha
+       model_references, WeightedRefs, WingSpec, wing_spec
+export load_structure, load_authoring, complete_wings!,
+       structure_document, connectivity_sha
 export from_yaml, to_yaml, from_json, to_json
 public definition, unit_stiffness, resolve_material, expand_tether!, line_segment,
        MaterialTable, row_index
 public Component, parse_table, tube_law_parameters
-public ref_position, WingFrame, wing_frame, connected_body_groups, tether_ends
+public ref_position, WingFrame, wing_frame, connected_body_groups, tether_ends,
+       particle_wing_parts
+public quaternion_to_rotation_matrix, rotation_matrix_to_quaternion, segment_length,
+       parse_dynamics_type, Positions
 
 """
     NameRef
@@ -56,6 +60,7 @@ include("components.jl")
 include("document.jl")
 include("placement.jl")
 include("transforms.jl")
+include("wings.jl")
 include("authoring.jl")
 
 end

@@ -83,7 +83,11 @@ end
 
 Base.copy(pose::Pose) = Pose(copy(pose.pos), copy(pose.body_pos), copy(pose.body_R))
 
-"""The `pos_ENU` [m] of each of `rows`, read from and written to the row."""
+"""
+    Positions(rows)
+
+The `pos_ENU` [m] of each of `rows` as a vector, read from and written to the row.
+"""
 struct Positions{R} <: AbstractVector{Vec3}
     rows::R
 end

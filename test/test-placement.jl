@@ -316,3 +316,35 @@ end
     groups = KiteGeometry.connected_body_groups(4, [(; bodies=(1, 3)), (; bodies=(3, 4))])
     @test groups[1] == groups[3] == groups[4] != groups[2]
 end
+
+"""A number whose comparisons give an `Undecided`, not a `Bool`, as a symbolic one's do."""
+struct Unevaluated <: Real
+    value::Float64
+end
+"""The result of comparing `Unevaluated` numbers, which `if` cannot branch on."""
+struct Undecided
+    holds::Bool
+end
+Unevaluated(number::Unevaluated) = number
+Base.promote_rule(::Type{Unevaluated}, ::Type{<:Real}) = Unevaluated
+for operator in (:+, :-, :*, :/, :max)
+    @eval Base.$operator(a::Unevaluated, b::Unevaluated) =
+        Unevaluated($operator(a.value, b.value))
+end
+Base.sqrt(number::Unevaluated) = Unevaluated(sqrt(number.value))
+Base.:<(a::Unevaluated, b::Unevaluated) = Undecided(a.value < b.value)
+Base.:<=(a::Unevaluated, b::Unevaluated) = Undecided(a.value <= b.value)
+Base.ifelse(condition::Undecided, a, b) = ifelse(condition.holds, a, b)
+
+@testset "each branch gives the matrix's quaternion, also where `if` cannot branch" begin
+    # the trace positive, then the largest of x, y and z
+    for q in normalize.(([0.9, 0.1, 0.2, 0.3], [0.1, 0.9, 0.2, 0.3], [0.1, 0.2, 0.9, 0.3],
+                         [0.1, 0.2, 0.3, 0.9]))
+        R = KiteGeometry.quaternion_to_rotation_matrix(q)
+        @test KiteGeometry.rotation_matrix_to_quaternion(R) ≈ q atol=1e-14
+        unevaluated = KiteGeometry.rotation_matrix_to_quaternion(Unevaluated.(R))
+        @test getfield.(unevaluated, :value) ≈ q atol=1e-14
+        @test getfield.(KiteGeometry.quaternion_to_rotation_matrix(Unevaluated.(q)),
+                        :value) ≈ R atol=1e-14
+    end
+end

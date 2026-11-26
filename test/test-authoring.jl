@@ -39,7 +39,8 @@ struct SamBody <: AbstractModel
     type::Union{Nothing, String}
 end
 
-"""SAM's wing columns, each optional, with the columns that frame a wing's body."""
+"""SAM's wing columns, each optional, with the columns that frame and weigh a wing's
+body."""
 struct SamWing <: AbstractModel
     aero_mode::Union{Nothing, String}
     angular_damping::Union{Nothing, Float64, Vector{Float64}}
@@ -50,6 +51,30 @@ struct SamWing <: AbstractModel
     origin_idx::Any
     z_ref_points::Any
     y_ref_points::Any
+    com::Union{Nothing, Vector{Float64}}
+    unit_inertia::Any
+    type::Union{Nothing, String}
+end
+KiteGeometry.model_references(::Type{SamWing}) =
+    (origin_idx=WeightedRefs(:points),
+     z_ref_points=(WeightedRefs(:points), WeightedRefs(:points)),
+     y_ref_points=(WeightedRefs(:points), WeightedRefs(:points)))
+
+"""The wing SAM's columns describe: of `dynamics_type`, else the deprecated `type`, rigid
+where both are unset."""
+function KiteGeometry.wing_spec(wing::SamWing)
+    dynamics = something(wing.dynamics_type, wing.type, "RIGID_DYNAMICS")
+    dynamics in ("PARTICLE_DYNAMICS", "RIGID_DYNAMICS") ||
+        throw(ArgumentError("no wing dynamics type $dynamics"))
+    unit_inertia = isnothing(wing.unit_inertia) ? nothing :
+                   sam_unit_inertia(wing.unit_inertia)
+    return WingSpec(; particle=dynamics == "PARTICLE_DYNAMICS", origin=wing.origin_idx,
+                    wing.z_ref_points, wing.y_ref_points, wing.com, unit_inertia)
+end
+
+"""The 3×3 per-unit-mass inertia [m²] SAM gives as `[Ixx, Iyy, Izz, Ixy, Ixz, Iyz]`."""
+function sam_unit_inertia((Ixx, Iyy, Izz, Ixy, Ixz, Iyz))
+    return [Ixx Ixy Ixz; Ixy Iyy Iyz; Ixz Iyz Izz]
 end
 
 """SAM's Timoshenko beam, a tube model chosen by name."""
@@ -64,8 +89,8 @@ SAM_MODELS = [(:points, "sam_point", SamPoint, POINT_UNITS, true),
               (:spanwise_stations, "sam_station", SamStation, ("-", "-", "N*m*s"), true),
               (:pulleys, "sam_pulley", SamPulley, ("-", "-"), true),
               (:segments, "spring", SamSpring, SPRING_UNITS, true),
-              (:wings, "sam_wing", SamWing, ("-", "1/s", "-", "m", "-", "-", "-", "-", "-"),
-               true),
+              (:wings, "sam_wing", SamWing,
+               ("-", "1/s", "-", "m", "-", "-", "-", "-", "-", "m", "m^2", "-"), true),
               (:bodies, "sam_body", SamBody, ("-",), true),
               (:tubes, "timoshenko", Timoshenko, ("N*m^2", "N*m^2", "-"), false)]
 
@@ -307,15 +332,21 @@ end
     @test all(≈(20.0 / 6), lengths)
 end
 
-"""The 2-plate kite of the authoring `file` with `edit` applied to its parsed YAML,
-loaded."""
-function load_edited(edit, file="rigid_structural_geometry.yaml")
+"""The 2-plate kite of the authoring `file` with `edit` applied to its parsed YAML, loaded
+against `set`, and its transforms."""
+function load_edited_transforms(edit, file="rigid_structural_geometry.yaml";
+                                set=kite_settings())
     data = YAML.load_file(joinpath(KITE, file))
     edit(data)
     path = joinpath(mktempdir(), "edited.yaml")
     YAML.write_file(path, data)
-    return first(load_authoring(path; set=kite_settings()))
+    return load_authoring(path; set)
 end
+
+"""The 2-plate kite of the authoring `file` with `edit` applied to its parsed YAML,
+loaded."""
+load_edited(edit, file="rigid_structural_geometry.yaml") =
+    first(load_edited_transforms(edit, file))
 
 """`data` with its segments giving only a line's stiffness and density."""
 function without_segment_spring!(data)
@@ -626,13 +657,15 @@ end
     end
 end
 
-@testset "a wing keeps the columns that frame its body in its model" begin
-    wing = only(load_kite("particle_structural_geometry.yaml").wings)
+@testset "a wing keeps the columns that frame its body in its model, as point indices" begin
+    system = load_kite("particle_structural_geometry.yaml")
+    wing = only(system.wings)
+    point_name(index) = system.points[index].name
     @test wing.dynamics_type == "PARTICLE_DYNAMICS"
-    @test wing.origin_idx == "kcu"
-    @test wing.z_ref_points == ["kcu", "le_center"]
-    @test wing.y_ref_points == ["le_right", "le_left"]
-    no_origin = ErrorException("particle wing main_wing needs an `origin_idx`")
+    @test point_name(wing.origin_idx) == :kcu
+    @test point_name.(wing.z_ref_points) == [:kcu, :le_center]
+    @test point_name.(wing.y_ref_points) == [:le_right, :le_left]
+    no_origin = ArgumentError("a particle wing needs an origin")
     @test_throws no_origin load_edited("particle_structural_geometry.yaml") do data
         only(data["wings"]["data"])["origin_idx"] = nothing
     end
@@ -649,6 +682,216 @@ model_types(system) = [typeof.(getfield.(getfield(system, block), :model))
         @test all(point -> point.model isa SamPoint, system.points)
         @test all(body -> body.model isa SamBody, system.bodies)
     end
+end
+
+"""SAM's wing columns of the 2-plate kite's wing, of `dynamics_type`, with the centre and
+unit inertia of its mesh."""
+function kite_wing_model(dynamics_type; com=nothing, unit_inertia=nothing)
+    return SamWing(nothing, nothing, nothing, nothing, nothing, dynamics_type, "kcu",
+                   ["kcu", "le_center"], ["le_right", "le_left"], com, unit_inertia,
+                   nothing)
+end
+
+"""The 2-plate kite of `<dynamics>_structural_geometry.yaml` built row by row with keyword
+constructors, every point carrying `point_mass` where it is given and its wing body
+`extra_mass`, with its wings completed for `set`; `mesh` is the centre and unit inertia of
+its wing's mesh."""
+function keyword_kite(dynamics, set; point_mass=nothing, extra_mass=0.0, mesh...)
+    rigid = dynamics == "RIGID_DYNAMICS"
+    wing_body = rigid ? :main_wing : nothing
+    points = Point[Point(; name, pos_ENU, body, extra_mass=something(point_mass, mass),
+                         fixed=name == :ground)
+                   for (name, pos_ENU, body, mass) in (
+                       (:le_left, [-0.5, 1.0, 2.0], wing_body, 0.1),
+                       (:te_left, [0.5, 1.0, 2.3], wing_body, 0.1),
+                       (:le_center, [-0.5, 0.0, 2.5], wing_body, 0.1),
+                       (:te_center, [0.5, 0.0, 2.8], wing_body, 0.1),
+                       (:le_right, [-0.5, -1.0, 2.0], wing_body, 0.1),
+                       (:te_right, [0.5, -1.0, 2.3], wing_body, 0.1),
+                       (:steering_left, [0.0, 0.5, 0.5], nothing, 0.1),
+                       (:steering_right, [0.0, -0.5, 0.5], nothing, 0.1),
+                       (:kcu, [0.0, 0.0, 0.0], wing_body, 1.0),
+                       (:ground, [0.0, 0.0, -20.0], nothing, 0.0))]
+    segments = Segment[Segment(; name, points) for (name, points) in (
+        :le_tube_left => (:te_left, :te_center), :le_tube_right => (:te_center, :te_right),
+        :strut_left => (:le_left, :te_left), :strut_center => (:le_center, :te_center),
+        :strut_right => (:le_right, :te_right), :te_wire_left => (:le_center, :le_right),
+        :te_wire_right => (:le_center, :le_left), :diag_1 => (:te_left, :le_center),
+        :diag_2 => (:le_left, :te_center), :diag_3 => (:te_right, :le_center),
+        :diag_4 => (:le_right, :te_center), :le_left => (:le_left, :kcu),
+        :le_center => (:le_center, :kcu), :le_right => (:le_right, :kcu),
+        :te_center => (:te_center, :kcu), :le_steering_left => (:le_left, :steering_left),
+        :te_steering_left => (:te_left, :steering_left),
+        :kcu_steering_left => (:steering_left, :kcu),
+        :le_steering_right => (:le_right, :steering_right),
+        :te_steering_right => (:te_right, :steering_right),
+        :kcu_steering_right => (:steering_right, :kcu))]
+    materials = KiteGeometry.MaterialTable(Material[], Dict{String, Any}())
+    tether = KiteGeometry.expand_tether!(
+        points, segments, fill(nothing, length(points)), :main_tether, :kcu, :ground, 6,
+        set, materials; init=(; init_stretched_length=20.0), model=NoModel(),
+        segment_model=NoModel())
+    stations = [SpanwiseStation(; name, wing=:main_wing, points=[Symbol("le_$name"),
+                                                                 Symbol("te_$name")])
+                for name in (:left, :center, :right)]
+    faces = [CanopyFace(; name=:canopy_1, wing=:main_wing,
+                        points=[:le_left, :te_left, :te_center, :le_center]),
+             CanopyFace(; name=:canopy_2, wing=:main_wing,
+                        points=[:le_center, :te_center, :te_right, :le_right])]
+    system = SystemDefinition(;
+        metadata=Metadata(; name="2plate_kite", n_points=length(points)),
+        materials=materials.rows, points, segments,
+        spanwise_stations=stations, tethers=[tether],
+        winches=[Winch(; name=:main_winch, tethers=[:main_tether], winch_point=:ground)],
+        wings=[Wing(; name=:main_wing, pos_ENU=zeros(3), body=:main_wing,
+                    model=kite_wing_model(dynamics; mesh...))],
+        canopy_faces=faces,
+        bodies=[Body(; name=:main_wing, pos_ENU=zeros(3), extra_mass,
+                     extra_inertia_KA=zeros(3, 3))])
+    return complete_wings!(system, set)
+end
+
+"""`data` with every point carrying no mass of its own."""
+function massless_points!(data)
+    column = findfirst(==("extra_mass"), data["points"]["headers"])
+    foreach(row -> row[column] = 0.0, data["points"]["data"])
+end
+
+@testset "a kite built in Julia completes to the wing load_authoring gives" begin
+    unit_inertia = [0.5, 0.2, 0.6, 0.0, 0.01, 0.0]
+    with_mesh(data) = merge!(only(data["wings"]["data"]),
+                             Dict("com" => [0.1, 0.0, 2.4], "unit_inertia" => unit_inertia,
+                                  "extra_mass" => 2.0))
+    cases = Any[(dynamics, identity, 0.0, (;)) for dynamics in ("RIGID", "PARTICLE")]
+    append!(cases, [(dynamics, massless_points!, 1.5, (; point_mass=0.0))
+                    for dynamics in ("RIGID", "PARTICLE")])
+    push!(cases, ("RIGID", with_mesh, 0.0,
+                  (; extra_mass=2.0, com=[0.1, 0.0, 2.4], unit_inertia)))
+    close(a, b) = isapprox(a, b; rtol=0, atol=1e-12)
+    for (dynamics, edit, mass, built) in cases
+        set = kite_settings()
+        set.mass = mass
+        file = "$(lowercase(dynamics))_structural_geometry.yaml"
+        loaded, transforms = load_edited_transforms(edit, file; set)
+        system = place!(keyword_kite("$(dynamics)_DYNAMICS", set; built...), transforms)
+        @test [point.extra_mass for point in system.points] ==
+              [point.extra_mass for point in loaded.points]
+        @test all(close.(getfield.(system.points, :pos_ENU),
+                         getfield.(loaded.points, :pos_ENU)))
+        body, loaded_body = only(system.bodies), only(loaded.bodies)
+        @test body.extra_mass == loaded_body.extra_mass
+        @test close(body.pos_ENU, loaded_body.pos_ENU)
+        @test close(body.Q_KA2ENU, loaded_body.Q_KA2ENU)
+        @test close(body.extra_inertia_KA, loaded_body.extra_inertia_KA)
+        wing, loaded_wing = only(system.wings), only(loaded.wings)
+        @test close(wing.pos_ENU, loaded_wing.pos_ENU)
+        @test close(wing.Q_KA2ENU, loaded_wing.Q_KA2ENU)
+    end
+end
+
+@testset "a wing's centre and unit inertia each count where its model gives only one" begin
+    unit_inertia = [0.5, 0.2, 0.6, 0.0, 0.01, 0.0]
+    set = kite_settings()
+    set.mass = 0.0
+    body = only(keyword_kite("RIGID_DYNAMICS", set; point_mass=0.0, extra_mass=2.0,
+                             unit_inertia).bodies)
+    R = KiteGeometry.quaternion_to_rotation_matrix(body.Q_KA2ENU)
+    expected = R' * (2.0 * sam_unit_inertia(unit_inertia)) * R
+    @test isapprox(body.extra_inertia_KA, expected; rtol=0, atol=1e-12)
+    com = [0.1, 0.0, 2.4]
+    body = only(keyword_kite("RIGID_DYNAMICS", set; extra_mass=2.0, com).bodies)
+    @test isapprox(body.pos_ENU, com; rtol=0, atol=1e-12)
+end
+
+@testset "a wing spec takes point indices and two reference points per axis" begin
+    spec = WingSpec(; origin=9, z_ref_points=[9, [Any[1, 0.5], Any[5, 0.5]]],
+                    y_ref_points=[5, [1 => 1.0]])
+    @test spec.frame.origin == [9 => 1.0]
+    @test spec.frame.z_ref_points == ([9 => 1.0], [1 => 0.5, 5 => 0.5])
+    @test spec.frame.y_ref_points == ([5 => 1.0], [1 => 1.0])
+    @test_throws ArgumentError("reference points kcu are not point indices") WingSpec(;
+        origin="kcu")
+    @test_throws ArgumentError WingSpec(; origin=9, z_ref_points=[9])
+    @test isnothing(WingSpec(; origin=9).frame)
+end
+
+@testset "reference points weigh one index fully, a list equally, pairs by weight" begin
+    origin(value) = WingSpec(; origin=value).origin
+    @test origin(7) == [7 => 1.0]
+    @test origin([2, 4]) == [2 => 0.5, 4 => 0.5]
+    @test (@test_logs origin([Any[2, 0.25], Any[4, 0.75]])) == [2 => 0.25, 4 => 0.75]
+    @test (@test_logs origin([Any[2, 0.4], Any[4, 0.6]])) == [2 => 0.4, 4 => 0.6]
+    @test (@test_logs (:warn, r"sum to 4.0") origin([Any[2, 2.0], Any[4, 2.0]])) ==
+          [2 => 0.5, 4 => 0.5]
+    @test (@test_logs (:warn, r"sum to 4.0") origin([Any[2, 3.0], Any[4, 1.0]])) ==
+          [2 => 0.75, 4 => 0.25]
+    @test_throws "sum to 0.0" origin([Any[2, 0.0], Any[4, 0.0]])
+    @test_throws ArgumentError("reference points Any[] name no point") origin([])
+end
+
+@testset "a wing whose model gives no wing spec is left as it is" begin
+    points = [Point(; name, pos_ENU, body=:wing)
+              for (name, pos_ENU) in ((:tip, [1.0, 0.0, 5.0]), (:root, [-1.0, 0.0, 5.0]))]
+    system = SystemDefinition(; metadata=Metadata(; name="bare", n_points=2), points,
+                              wings=[Wing(; name=:wing, pos_ENU=zeros(3), body=:wing,
+                                          model=NoModel())],
+                              bodies=[Body(; name=:wing, pos_ENU=zeros(3))])
+    masses = [point.extra_mass for point in system.points]
+    set = kite_settings()
+    set.mass = 1.0
+    complete_wings!(system, set)
+    @test [point.extra_mass for point in system.points] == masses
+    @test system.bodies[:wing].pos_ENU == zeros(3)
+end
+
+@testset "a wing with no frame points keeps its pose and weighs its unit inertia" begin
+    R = KiteGeometry.quaternion_to_rotation_matrix([cos(0.3), 0.0, 0.0, sin(0.3)])
+    Q_KA2ENU = KiteGeometry.rotation_matrix_to_quaternion(R)
+    model = SamWing(nothing, nothing, nothing, nothing, nothing, "RIGID_DYNAMICS", nothing,
+                    nothing, nothing, nothing, [0.5, 0.2, 0.5, 0.1, 0.0, 0.0], nothing)
+    system = SystemDefinition(; metadata=Metadata(; name="hanging", n_points=1),
+                              points=[Point(; name=:hook, pos_ENU=[0.0, 0.0, 6.0])],
+                              wings=[Wing(; name=:wing, pos_ENU=zeros(3), body=:wing,
+                                          model)],
+                              bodies=[Body(; name=:wing, pos_ENU=[1.0, 2.0, 3.0], Q_KA2ENU,
+                                           extra_mass=2.0)])
+    complete_wings!(system, kite_settings())
+    body = system.bodies[:wing]
+    @test body.pos_ENU == [1.0, 2.0, 3.0]
+    @test body.Q_KA2ENU == Q_KA2ENU
+    unit_inertia = [0.5 0.1 0.0; 0.1 0.2 0.0; 0.0 0.0 0.5]
+    @test isapprox(body.extra_inertia_KA, R' * (2.0 * unit_inertia) * R; rtol=0, atol=1e-12)
+end
+
+"""A station model naming the body of its flap."""
+struct FlapStation <: AbstractModel
+    flap_body::Any
+end
+KiteGeometry.model_references(::Type{FlapStation}) = (flap_body=:bodies,)
+
+@testset "a particle wing weighs the bodies tubes join to a body its stations name" begin
+    model = SamWing(nothing, nothing, nothing, nothing, nothing, "PARTICLE_DYNAMICS", "le",
+                    nothing, nothing, nothing, nothing, nothing)
+    points = [Point(; name, pos_ENU) for (name, pos_ENU) in
+              ((:le, [0.0, 0.0, 5.0]), (:te, [1.0, 0.0, 5.0]), (:hook, [0.0, 0.0, 0.0]))]
+    system = SystemDefinition(;
+        metadata=Metadata(; name="flapped", n_points=3), points,
+        spanwise_stations=[SpanwiseStation(; name=:mid, wing=:wing, points=[:le, :te],
+                                           model=FlapStation(:flap))],
+        wings=[Wing(; name=:wing, pos_ENU=zeros(3), body=:wing, model)],
+        bodies=[Body(; name, pos_ENU=zeros(3), extra_mass)
+                for (name, extra_mass) in ((:wing, 0.0), (:flap, 0.0), (:servo, 0.5))],
+        tubes=[Tube(; name=:arm, bodies=(:flap, :servo))])
+    @test KiteGeometry.particle_wing_parts(system, 1) == (Set([1, 2]), [2, 3])
+    references = (:bodies, WeightedRefs(:bodies), :points)
+    @test KiteGeometry.referenced_rows([3, [Any[2, 0.5], Any[4, 0.5]], 1], references,
+                                       :bodies) == [3, 2, 4]
+    @test isempty(KiteGeometry.referenced_rows(nothing, :bodies, :bodies))
+    set = kite_settings()
+    set.mass = 1.0
+    complete_wings!(system, set)
+    @test all(point -> isnothing(point.extra_mass) || iszero(point.extra_mass),
+              system.points)
 end
 
 foreach(model -> unregister_model!(model[1], model[2]), SAM_MODELS)

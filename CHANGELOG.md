@@ -5,11 +5,39 @@ SPDX-License-Identifier: MIT
 
 # Changelog
 
-## Unreleased
+## KiteGeometry v0.6.3 2026-11-25
+
+### Added
+
+- `KiteGeometry.particle_wing_parts(system, wing)` is public: the points and bodies that carry a particle wing's mass.
+
+### Fixed
+
+- A particle wing's mass counts the bodies tube-connected to a body its stations' models name (`model_references` targeting `:bodies`), not only to the bodies its points ride. `complete_wings!` no longer gives such a wing the kite's mass where those bodies carry some.
+
+## KiteGeometry v0.6.2 2026-11-25
+
+### Added
+
+- Public, for a tool that builds on a definition: `KiteGeometry.quaternion_to_rotation_matrix` and `KiteGeometry.rotation_matrix_to_quaternion`, `KiteGeometry.segment_length`, `KiteGeometry.parse_dynamics_type` and `KiteGeometry.Positions`. Both rotation conversions take symbolic numbers, such as ModelingToolkit's, as well as plain ones, and give the same result as before for plain ones.
+
+### Fixed
+
+- `to_yaml`, `to_json` and `structure_document` refuse a cell that YAML and JSON cannot write back, such as a material whose `unit_stiffness` is a Julia function, with an `ArgumentError` naming the block, the row and the column. Before, YAML wrote it as a comment and JSON as a string, and the material read back without it.
+
+## KiteGeometry v0.6.1 2026-11-25
+
+### Fixed
+
+- `complete_wings!` takes a wing's mesh centre and its unit inertia each where its model gives it, and the other from the wing's frame points. Before, a wing that gave only one of the two lost it: one with a unit inertia but no centre, and massless frame points, got no inertia.
+- An empty list of reference points, such as a wing's `origin=[]`, is refused with an `ArgumentError` naming it, rather than a `BoundsError`.
+
+## KiteGeometry v0.6.0 2026-11-24
 
 ### Added
 
 - Public, for a tool that models a definition: `KiteGeometry.Component`, the supertype of every row type; `KiteGeometry.WingFrame`, `KiteGeometry.wing_frame` and `KiteGeometry.ref_position`, a wing frame from its reference points; `KiteGeometry.connected_body_groups`, the bodies tubes join; `KiteGeometry.tube_law_parameters`, the parameters a tube's material takes from its law; and `KiteGeometry.parse_table`, the rows of a table in the authoring YAML's format.
+- `complete_wings!(system, set)` gives a definition's wings their mass and puts each wing's body in its design pose, as `load_authoring` does, so a definition built in Julia completes to the same wing. What frames and weighs a wing is the `WingSpec` its model gives through a `wing_spec(model)` method: whether it is a particle wing, its frame reference points, and its mesh centre and inertia. A wing whose model adds no such method is left as it is. A wing's frame points are the points of its stations and those fixed in its body; a wing with none keeps its body's pose and gets the inertia its unit inertia gives its body's mass.
 - `model_references(M)` declares the columns of a model that refer to rows, with `WeightedRefs` for reference points: a document gives them by name and a definition holds them as indices.
 - A `Tether` built in Julia may leave its `start_point` and `end_point` unset, `Tether(; name, segments)`: a `SystemDefinition` sets them to its first segment's first point and its last segment's second point, which the public `KiteGeometry.tether_ends(system, tether)` gives.
 
@@ -19,6 +47,7 @@ SPDX-License-Identifier: MIT
 
 ### Changed
 
+- BREAKING: `load_authoring` no longer reads a wing's `dynamics_type` or deprecated `type`, `origin_idx`, `z_ref_points`, `y_ref_points`, `com` and `unit_inertia` itself, but completes its wings with `complete_wings!`. These columns must be fields of the wing's registered model, or they are refused as unread, and the wing is completed only where that model gives a `WingSpec`.
 - BREAKING: A component built by its keyword constructor, such as `Point(; name, pos_ENU)`, carries its block's registered default model where every column of that model can be unset, as a loaded row without a `model` column does, rather than `NoModel()`; a `model` passed explicitly still wins.
 - BREAKING: KiteGeometry no longer has a `calc_heading(R_b_to_w, pos)` of its own; use KiteUtils' `calc_heading(attitude, elevation, azimuth)`. `using KiteUtils, KiteGeometry` no longer leaves `calc_heading` ambiguous.
 
