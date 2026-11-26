@@ -5,6 +5,17 @@ SPDX-License-Identifier: MIT
 
 # Changelog
 
+## Unreleased
+
+### Added
+
+- A point can name the wing it belongs to: `Point` has a `wing` reference column, from awesIO's new optional `points.wing` column, set by `Point(; wing)`, held as an index in a `SystemDefinition` and written back by `to_yaml`, `to_json` and `structure_document`. `load_authoring` keeps a point's `wing_idx` there, so a bridle point that names its wing keeps it through a write and read.
+- `SystemDefinition` refuses a station's point that names another wing than the station's, with an `ArgumentError`.
+
+### Changed
+
+- `load_authoring` refuses a point naming a wing that does not exist as `point <name>: no wings <ref>`, as it already did for a `BODY_STATIC` point, and a station's point naming another wing with the `ArgumentError` above instead of an `ErrorException`.
+
 ## KiteGeometry v0.6.3 2026-11-25
 
 ### Added

@@ -5,6 +5,7 @@
 const REFERENCES = Dict(
     (:points, :body) => :bodies,
     (:points, :tube) => :tubes,
+    (:points, :wing) => :wings,
     (:segments, :points) => :points,
     (:segments, :material) => :materials,
     (:spanwise_stations, :wing) => :wings,
@@ -43,8 +44,9 @@ end
 A system definition from its components, every reference resolved to the index of the
 component it names, and each tether's unset ends those of its segment chain,
 [`tether_ends`](@ref). Absent blocks are empty; `extras` holds the blocks the schema does
-not name. Refuses a `metadata.n_points` that is not the number of points, and a point
-riding a tube that is on a body or held in the world.
+not name. Refuses a `metadata.n_points` that is not the number of points, a point riding a
+tube that is on a body or held in the world, and a station's point naming another wing than
+the station's.
 """
 function SystemDefinition(; metadata::Metadata, extras=OrderedDict{String, Any}(),
                           components...)
@@ -66,6 +68,14 @@ function SystemDefinition(; metadata::Metadata, extras=OrderedDict{String, Any}(
     resolved = ([resolve(component, block, indices) for component in blocks[block]]
                 for block in keys(BLOCKS))
     system = SystemDefinition(metadata, resolved..., extras)
+    for station in system.spanwise_stations, index in station.points
+        point = system.points[index]
+        isnothing(point.wing) || point.wing == station.wing ||
+            throw(ArgumentError("point $(point.name) is a point of station " *
+                                "$(station.name) of wing " *
+                                "$(system.wings[station.wing].name), but names " *
+                                "$(system.wings[point.wing].name)"))
+    end
     for tether in system.tethers
         tether.start_point, tether.end_point = tether_ends(system, tether)
     end

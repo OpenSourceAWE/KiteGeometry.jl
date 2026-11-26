@@ -37,7 +37,7 @@ points:
       - 0.1
       - 0.0
       - 0.0
-      - ~
+      - "main_wing"
     -
       - "te_left"
       - "BODY_STATIC"
@@ -49,7 +49,7 @@ points:
       - 0.1
       - 0.0
       - 0.0
-      - ~
+      - "main_wing"
     -
       - "le_center"
       - "BODY_STATIC"
@@ -61,7 +61,7 @@ points:
       - 0.1
       - 0.0
       - 0.0
-      - ~
+      - "main_wing"
     -
       - "te_center"
       - "BODY_STATIC"
@@ -73,7 +73,7 @@ points:
       - 0.1
       - 0.0
       - 0.0
-      - ~
+      - "main_wing"
     -
       - "le_right"
       - "BODY_STATIC"
@@ -85,7 +85,7 @@ points:
       - 0.1
       - 0.0
       - 0.0
-      - ~
+      - "main_wing"
     -
       - "te_right"
       - "BODY_STATIC"
@@ -97,7 +97,7 @@ points:
       - 0.1
       - 0.0
       - 0.0
-      - ~
+      - "main_wing"
     -
       - "steering_left"
       - "DYNAMIC"
@@ -109,7 +109,7 @@ points:
       - 0.1
       - 0.0
       - 0.0
-      - ~
+      - "main_wing"
     -
       - "steering_right"
       - "DYNAMIC"
@@ -121,7 +121,7 @@ points:
       - 0.1
       - 0.0
       - 0.0
-      - ~
+      - "main_wing"
     -
       - "kcu"
       - "BODY_STATIC"
@@ -133,7 +133,7 @@ points:
       - 1.0
       - 0.1
       - 1.0
-      - ~
+      - "main_wing"
     -
       - "ground"
       - "STATIC"
@@ -145,7 +145,7 @@ points:
       - 0.0
       - 0.0
       - 0.0
-      - ~
+      - "main_wing"
     -
       - "main_tether_point_1"
       - "DYNAMIC"

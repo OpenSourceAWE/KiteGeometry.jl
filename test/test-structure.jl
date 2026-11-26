@@ -515,6 +515,31 @@ end
     @test_throws "no points named nowhere" structure_document(held_names)
 end
 
+"""A small system whose kite point names the wing `wing`, a station of `main` holding it."""
+function system_with_point_wing(wing)
+    wings = [Wing(; name, pos_ENU=[0, 0, 100]) for name in ("main", "spare")]
+    metadata = Metadata(; name="small", n_points=2, connectivity_sha="0"^64)
+    points = [Point(; name="anchor", fixed=true, pos_ENU=[0, 0, 0]),
+              Point(; name="kite", pos_ENU=[0, 0, 100], wing)]
+    stations = [SpanwiseStation(; name="mid", wing="main", points=["kite"])]
+    return SystemDefinition(; metadata, points, segments=[line_segment()], wings,
+                            spanwise_stations=stations)
+end
+
+@testset "a point keeps the wing it names through both writers" begin
+    system = system_with_point_wing("main")
+    @test system.points[2].wing == 1
+    @test isnothing(system.points[1].wing)
+    @test from_yaml(to_yaml(system)).points[2].wing == 1
+    @test from_json(to_json(system)).points[2].wing == 1
+    @test isnothing(system_with_point_wing(nothing).points[2].wing)
+end
+
+@testset "a station's point naming another wing than the station's is refused" begin
+    @test_throws ArgumentError("point kite is a point of station mid of wing main, but " *
+                               "names spare") system_with_point_wing("spare")
+end
+
 @testset "a material whose parameter is a callable is refused by both writers" begin
     law = OrderedDict{String, Any}("unit_stiffness" => x -> x)
     system = small_system(; materials=[Material(; name=:line, law="unit_stiffness",

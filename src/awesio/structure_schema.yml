@@ -221,6 +221,14 @@ properties:
         unit: "-"
         value:
           $ref: "#/definitions/optional_name"
+      wing:
+        description: >
+          The wing the point belongs to, flying with it; null for a point of no
+          wing. A point of a wing's station belongs to that wing and names no
+          other.
+        unit: "-"
+        value:
+          $ref: "#/definitions/optional_name"
 
   segments:
     description: Straight elastic elements between two points.

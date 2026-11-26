@@ -487,11 +487,10 @@ function find_row(rows, ref, block, owner)
     return rows[index]
 end
 
-"""The points of the `points` block, each with the wing and transform it names, a point
-riding a wing fixed in that wing's body among `wings`."""
+"""The points of the `points` block, each with the transform it names, a point riding a
+wing fixed in that wing's body among `wings`."""
 function read_points(data, wings)
     points = Point[]
-    point_wings = Union{Nothing, NameRef}[]
     point_transforms = Union{Nothing, NameRef}[]
     columns = (:name, :type, :wing_idx, :body_idx, :body, :tube, :pos_cad, :extra_mass,
                :transform_idx)
@@ -501,23 +500,22 @@ function read_points(data, wings)
         wing = yaml_ref(row, :wing_idx)
         body = something(yaml_ref(row, :body_idx), yaml_ref(row, :body), Some(nothing))
         tube = yaml_ref(row, :tube)
+        wing_row = isnothing(wing) ? nothing : find_row(wings, wing, "wings", "point $name")
         if type == "BODY_STATIC"
             !isnothing(body) && !isnothing(tube) && error(
                 "point $name: a point rides a `body` or a `tube`, not both")
             isnothing(body) && isnothing(tube) && isnothing(wing) && error(
                 "point $name: BODY_STATIC requires a `body`, a `tube` or a `wing` to ride")
-            isnothing(body) && isnothing(tube) &&
-                (body = find_row(wings, wing, "wings", "point $name").body)
+            isnothing(body) && isnothing(tube) && (body = wing_row.body)
         elseif !isnothing(body) || !isnothing(tube)
             error("point $name: `body` and `tube` are only valid with type BODY_STATIC")
         end
-        push!(points, Point(; name, fixed=type == "STATIC", body, tube,
+        push!(points, Point(; name, fixed=type == "STATIC", body, tube, wing,
                             pos_ENU=yaml_vec3(row, :pos_cad),
                             extra_mass=something(yaml_float(row, :extra_mass), 0.0), model))
-        push!(point_wings, wing)
         push!(point_transforms, yaml_ref(row, :transform_idx))
     end
-    return points, point_wings, point_transforms
+    return points, point_transforms
 end
 
 """The segments of the `segments` block, their materials resolved against `set` and named
@@ -838,7 +836,7 @@ function load_authoring(authored::AbstractDict; set::Settings, name::AbstractStr
     end
     materials = MaterialTable(Material[], variables)
     wings, wing_bodies, authored_wings = read_wings(data)
-    points, point_wings, point_transforms = read_points(data, wings)
+    points, point_transforms = read_points(data, wings)
     segments = read_segments(data, set, materials)
     tethers = read_tethers!(points, segments, point_transforms, data, set, materials)
     bodies, plain_body_transforms = read_bodies(data)
@@ -856,7 +854,7 @@ function load_authoring(authored::AbstractDict; set::Settings, name::AbstractStr
                              winches=read_winches(data, set), wings,
                              canopy_faces=read_canopy_faces(data),
                              bodies=[wing_bodies; bodies], tubes, extras)
-    check_point_wings(draft, point_wings)
+    check_point_wings(draft)
     transforms = resolve_transforms(authored_transforms, draft, point_transforms,
                                     body_transforms)
     complete_wings!(draft, set)
@@ -917,32 +915,17 @@ indices_of(system, block) = name_indices(getfield(system, block))
 resolve_index(::Nothing, names, block) = 0
 resolve_index(ref, names, block) = resolve(ref, block, NamedTuple{(block,)}((names,)))
 
-"""The index of the wing `ref` names for `point`, 0 for none, refusing one that does not
-exist."""
-function point_wing_index(point, ref, wing_names)
-    isnothing(ref) && return 0
-    index = ref isa Int ? (ref in values(wing_names) ? ref : nothing) :
-            get(wing_names, ref, nothing)
-    isnothing(index) && error("point $(point.name): wing $ref does not exist")
-    return index
-end
-
 """
-    check_point_wings(draft, point_wings)
+    check_point_wings(draft)
 
-Refuses a point of `draft` naming in `point_wings` a wing that does not exist
-([`KiteGeometry.point_wing_index`](@ref)), and a station's point naming another wing than
-the station's, or none; a point a tether adds names none.
+Refuses a station's point of `draft` naming no wing; a point a tether adds names none.
 """
-function check_point_wings(draft, point_wings)
-    wing_names = indices_of(draft, :wings)
-    point_wing = [point_wing_index(point, get(point_wings, index, nothing), wing_names)
-                  for (index, point) in enumerate(draft.points)]
+function check_point_wings(draft)
     for station in draft.spanwise_stations, index in station.points
-        point_wing[index] == station.wing && continue
-        named = point_wing[index] == 0 ? "no wing" : draft.wings[point_wing[index]].name
-        error("point $(draft.points[index].name) is a point of station $(station.name) " *
-              "of wing $(draft.wings[station.wing].name), but names $named")
+        point = draft.points[index]
+        isnothing(point.wing) && error(
+            "point $(point.name) is a point of station $(station.name) of wing " *
+            "$(draft.wings[station.wing].name), but names no wing")
     end
     return nothing
 end

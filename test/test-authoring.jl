@@ -204,7 +204,7 @@ POINT_MODEL_COLUMNS = ("type", "drag_area", "drag_coefficient")
         end
     end
     @test sort(unread) == ["bodies.apparent_mass", "bodies.type",
-                           "bodies.wing", "points.wing", "pulleys.efficiency",
+                           "bodies.wing", "pulleys.efficiency",
                            "segments.density", "segments.unit_stiffness",
                            "stations.stiffness", "winches.model", "wings.aero",
                            "wings.canopy_material"]
@@ -623,6 +623,14 @@ end
           structure_document(load_with_point_wing("kcu", nothing))
 end
 
+@testset "a bridle point keeps the wing it names, written and read back" begin
+    system = load_with_point_wing("kcu", "main_wing")
+    kcu = findfirst(point -> point.name == :kcu, system.points)
+    @test system.wings[system.points[kcu].wing].name == :main_wing
+    @test from_yaml(to_yaml(system)).points[kcu].wing == system.points[kcu].wing
+    @test isnothing(load_with_point_wing("kcu", nothing).points[kcu].wing)
+end
+
 @testset "a refusal is an error naming the row" begin
     for (file, message) in (
         "cyclic.yaml" => "Cyclic variable reference: a -> b -> a",
@@ -644,8 +652,7 @@ end
     end
     @test_throws "point le_left is a point of station left of wing main_wing, but names " *
                  "no wing" load_with_point_wing("le_left", 0)
-    @test_throws ErrorException("point kcu: wing 7 does not exist") load_with_point_wing(
-        "kcu", 7)
+    @test_throws ErrorException("point kcu: no wings 7") load_with_point_wing("kcu", 7)
 end
 
 @testset "a name two rows of an authored block share is refused, naming that block" begin
