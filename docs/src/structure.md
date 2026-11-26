@@ -80,7 +80,6 @@ KiteGeometry.Positions
 place_transforms!
 reposition!
 transform_velocities
-calc_heading
 ```
 
 ## Placing

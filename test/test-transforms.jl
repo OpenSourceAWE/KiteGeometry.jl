@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: MIT
 
 using KiteGeometry: radial_direction
-using KiteUtils: Settings, set_data_path
+using KiteUtils: KiteUtils, Settings, azimuth_east, calc_elevation, calc_heading,
+    set_data_path
 using LinearAlgebra: norm, normalize
 using YAML
 
@@ -36,6 +37,14 @@ function tilt_kite!(transforms)
     kite_tilt = transforms[2]
     kite_tilt.elevation, kite_tilt.heading = deg2rad(48), deg2rad(-35)
     return transforms
+end
+
+"""Heading [rad] of the kite body of `pose`, in the sense of a transform's `heading`, in
+the tangential frame of where its origin stands from the KCU."""
+function kite_heading(pose)
+    rel_pos = pose.pos[7] - pose.pos[2]
+    return calc_heading(pose.body_R[1], calc_elevation(rel_pos), azimuth_east(rel_pos);
+                        respos=false)
 end
 
 """`data`, the chained system's YAML, with its kite tilted as [`tilt_kite!`](@ref)."""
@@ -79,7 +88,7 @@ end
     ground, kcu, kite_origin = pose.pos[1], pose.pos[2], pose.pos[7]
     @test normalize(kcu - ground) ≈ radial_direction(main_tf)
     @test normalize(kite_origin - kcu) ≈ radial_direction(kite_tilt)
-    @test calc_heading(pose.body_R[1], kite_origin - kcu) ≈ kite_tilt.heading
+    @test kite_heading(pose) ≈ kite_tilt.heading
     @test norm(pose.pos[4] - kite_origin) ≈ kite_rigid
 end
 
@@ -119,7 +128,19 @@ end
     kcu, kite_origin = pose.pos[2], pose.pos[7]
     @test pose.pos[2] == system.points[2].pos_ENU
     @test normalize(kite_origin - kcu) ≈ radial_direction(transforms[2])
-    @test calc_heading(pose.body_R[1], kite_origin - kcu) ≈ deg2rad(-35)
+    @test kite_heading(pose) ≈ deg2rad(-35)
+end
+
+"""The kite body's frame once the chained system is placed with its kite at `elevation`
+[deg] above the KCU."""
+function kite_frame_at(elevation)
+    system, transforms = load_chained()
+    transforms[2].elevation = deg2rad(elevation)
+    return Pose(place!(system, transforms)).body_R[1]
+end
+
+@testset "a heading body turns smoothly through the zenith" begin
+    @test norm(kite_frame_at(90.1) - kite_frame_at(89.9)) < 0.01
 end
 
 """`data`, the chained system's YAML, with its first transform turning no point."""
@@ -168,4 +189,10 @@ end
         @test iszero(point_vel[1])
         @test iszero(body_spin[1]) == (moving == 1)
     end
+end
+
+@testset "calc_heading is KiteUtils' alone" begin
+    probe = Module()
+    Core.eval(probe, :(using KiteUtils, KiteGeometry))
+    @test Core.eval(probe, :calc_heading) === KiteUtils.calc_heading
 end
