@@ -126,13 +126,15 @@ Pose(system::SystemDefinition) =
     calc_R_t_to_w(pos)
 
 Rotation from the tangential frame at `pos` [m] into the world: z radial along `pos`, y
-azimuthal and level, x towards elevation, `y × z`.
+azimuthal and level, x towards elevation, `y × z`. The zenith branch is chosen with
+`ifelse`, so `pos` may hold symbolic numbers.
 """
 function calc_R_t_to_w(pos)
-    z = normalize(pos)
-    y = abs(pos[1]) < 1e-6 && abs(pos[2]) < 1e-6 ? Vec3(0, 1, 0) :
-        normalize(Vec3(-pos[2], pos[1], 0))
-    return hcat(cross(y, z), y, z)
+    radial = SVector{3}(pos) ./ sqrt(sum(abs2, pos))
+    level = SVector(-pos[2], pos[1], zero(pos[3]))
+    azimuthal = choose(max(abs(pos[1]), abs(pos[2])) < 1e-6, Vec3(0, 1, 0),
+                       level ./ sqrt(sum(abs2, level)))
+    return hcat(cross(azimuthal, radial), azimuthal, radial)
 end
 
 """
@@ -194,29 +196,16 @@ function shift_members!(pose, transform, shift)
     return nothing
 end
 
-"""Rotate the members of `transform` in `pose`, bodies' frames included, about the axis
-`k` through `base_pos` [m] by `θ` [rad]."""
-function rotate_members!(pose, transform, base_pos, k, θ)
-    for index in transform.points
-        pose.pos[index] = base_pos + rotate_v_around_k(pose.pos[index] - base_pos, k, θ)
-    end
-    for index in transform.bodies
-        pose.body_pos[index] = base_pos +
-                               rotate_v_around_k(pose.body_pos[index] - base_pos, k, θ)
-        pose.body_R[index] = rotate_frame(pose.body_R[index], k, θ)
-    end
-    return nothing
-end
-
 """
-    turn!(pose, transform, base_pos)
+    turn_rotation(pose, transforms, transform) -> Mat3
 
-Rotate the members of `transform` about `base_pos` [m]: by the smallest rotation that puts
-what it turns on its [`radial_direction`](@ref), then about that radial until its `body`
-has its `heading`. Refuses a turned object at the base, and warns at the zenith or nadir,
-where azimuth and heading are undefined.
+Rotation [`turn!`](@ref) gives the members of `transform`, one of `transforms`, in `pose`:
+the smallest one putting what it turns on its [`radial_direction`](@ref) from its base,
+then about that radial until its `body` has its `heading`. Refuses a turned object at the
+base, and warns at the zenith or nadir, where azimuth and heading are undefined.
 """
-function turn!(pose, transform, base_pos)
+function turn_rotation(pose, transforms, transform)
+    base_pos = base_position(pose, transforms, transform)
     rel_pos = turned_position(pose, transform) - base_pos
     norm(rel_pos) < 1e-6 && error(
         "transform $(transform.name): what it turns is at its base $base_pos, so it has " *
@@ -226,12 +215,29 @@ function turn!(pose, transform, base_pos)
               "$(round(rad2deg(transform.elevation); digits=2))° is at the zenith or " *
               "nadir, where azimuth and heading are undefined."
     radial = radial_direction(transform)
-    rotate_members!(pose, transform, base_pos, min_rotation(normalize(rel_pos), radial)...)
-    isnothing(transform.body) && return nothing
-    heading = calc_heading(pose.body_R[transform.body], radial)
-    rotate_members!(pose, transform, base_pos, radial,
-                    wrap2pi(transform.heading - heading))
-    return nothing
+    R = rotation_about(min_rotation(normalize(rel_pos), radial)...)
+    isnothing(transform.body) && return R
+    heading = calc_heading(R * pose.body_R[transform.body], radial)
+    return rotation_about(radial, wrap2pi(transform.heading - heading)) * R
+end
+
+"""
+    turn!(pose, transforms, transform) -> Mat3
+
+Rotate the members of `transform`, one of `transforms`, in `pose`, bodies' frames
+included, about its base by [`turn_rotation`](@ref), and return that rotation.
+"""
+function turn!(pose, transforms, transform)
+    base_pos = base_position(pose, transforms, transform)
+    R = turn_rotation(pose, transforms, transform)
+    for index in transform.points
+        pose.pos[index] = base_pos + R * (pose.pos[index] - base_pos)
+    end
+    for index in transform.bodies
+        pose.body_pos[index] = base_pos + R * (pose.body_pos[index] - base_pos)
+        pose.body_R[index] = R * pose.body_R[index]
+    end
+    return R
 end
 
 """
@@ -243,14 +249,14 @@ then [`turn!`](@ref) them about that base.
 """
 function place_transforms!(pose::Pose, design::Pose, transforms)
     for transform in transforms
-        base_pos, curr_base_pos = if isnothing(transform.base_transform)
-            transform.base_pos, pose.pos[transform.base_point]
+        shift = if isnothing(transform.base_transform)
+            transform.base_pos - pose.pos[transform.base_point]
         else
-            base_position(pose, transforms, transform),
+            base_position(pose, transforms, transform) -
             base_position(design, transforms, transform)
         end
-        shift_members!(pose, transform, base_pos - curr_base_pos)
-        turn!(pose, transform, base_pos)
+        shift_members!(pose, transform, shift)
+        turn!(pose, transforms, transform)
     end
     return pose
 end
@@ -278,9 +284,7 @@ moving that base. A chained transform is not carried with its base, as
 [`place_transforms!`](@ref) carries it.
 """
 function reposition!(pose::Pose, transforms)
-    for transform in transforms
-        turn!(pose, transform, base_position(pose, transforms, transform))
-    end
+    foreach(transform -> turn!(pose, transforms, transform), transforms)
     return pose
 end
 

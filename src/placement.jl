@@ -64,16 +64,20 @@ end
 clamped_sqrt(x) = sqrt(max(x, 0))
 
 """`a` where `condition` holds, else `b`, element by element."""
-choose(condition, a, b) = map((x, y) -> ifelse(condition, x, y), a, b)
+choose(condition, a, b) = SVector(ntuple(i -> ifelse(condition, a[i], b[i]), length(a)))
 
-"""`v` rotated about the axis `k` by `θ` [rad], by Rodrigues' formula."""
+"""
+    rotate_v_around_k(v, k, θ)
+
+`v` rotated about the axis `k`, which need not be of unit length, by `θ` [rad].
+"""
 function rotate_v_around_k(v, k, θ)
     k = normalize(k)
     return v * cos(θ) + cross(k, v) * sin(θ) + k * dot(k, v) * (1 - cos(θ))
 end
 
-"""`R` with each column rotated about the axis `k` by `θ` [rad]."""
-rotate_frame(R, k, θ) = Mat3(hcat((rotate_v_around_k(R[:, i], k, θ) for i in 1:3)...))
+"""Rotation matrix about the axis `k` by `θ` [rad]."""
+rotation_about(k, θ) = hcat((rotate_v_around_k(axis, k, θ) for axis in eachcol(Mat3(I)))...)
 
 """
     min_rotation(curr_dir, target_dir) -> (axis, angle)
