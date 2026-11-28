@@ -5,6 +5,12 @@ SPDX-License-Identifier: MIT
 
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- BREAKING: `load_authoring` gives a winch the `gear_ratio` and `drum_radius` its row authors, and leaves them `nothing` where the row gives none, instead of copying the loading `Settings`' values into every winch. A tool fills an unset one from its own settings when it builds a run.
+
 ## KiteGeometry v0.6.3 2026-11-25
 
 ### Added
