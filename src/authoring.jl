@@ -683,12 +683,14 @@ function expand_tether!(points, segments, point_transforms, name, start_point, e
     return Tether(; name, start_point, end_point, segments=segment_names, init..., model)
 end
 
-"""The winches of the `winches` block, with `set`'s gear ratio and drum radius."""
-function read_winches(data, set)
-    rows = read_rows(data, :winches, (:name, :tether_idxs, :winch_point))
+"""The winches of the `winches` block, their gear ratio and drum radius as authored."""
+function read_winches(data)
+    columns = (:name, :tether_idxs, :winch_point, :gear_ratio, :drum_radius)
+    rows = read_rows(data, :winches, columns)
     return Winch[Winch(; name=yaml_row_name(row, i), tethers=yaml_to_ref.(row.tether_idxs),
-                       winch_point=yaml_to_ref(row.winch_point), gear_ratio=set.gear_ratio,
-                       drum_radius=set.drum_radius, model)
+                       winch_point=yaml_to_ref(row.winch_point),
+                       gear_ratio=yaml_float(row, :gear_ratio),
+                       drum_radius=yaml_float(row, :drum_radius), model)
                  for (i, (row, model)) in enumerate(rows)]
 end
 
@@ -805,9 +807,9 @@ stretched lengths and then by the transforms, each wing's KA frame the authored 
 with its body. Each transform holds the points and
 bodies it moves: those naming it, a tether's inner points that of its ends, and a wing's
 body its wing's, else the first transform.
-`set` gives what a row leaves out: segment material, and every winch's gear ratio and drum
-radius. Each distinct line material is named after the multi-variable giving it, else
-after its first segment.
+`set` gives the material a segment's row leaves out; a winch's gear ratio and drum radius
+are what its row authors, else `nothing`. Each distinct line material is named after the
+multi-variable giving it, else after its first segment.
 `name` is the metadata name, the file's by default for a path; `ignore_l0` makes every rest
 length the placed length. Each non-empty block it does not read is kept as an extra block;
 one named after a block of the structure document, or holding a single value, is refused.
@@ -853,7 +855,7 @@ function load_authoring(authored::AbstractDict; set::Settings, name::AbstractStr
     draft = SystemDefinition(; metadata, materials=materials.rows, points, segments,
                              spanwise_stations=read_stations(data, wings, authored_wings),
                              pulleys=read_pulleys(data), tethers,
-                             winches=read_winches(data, set), wings,
+                             winches=read_winches(data), wings,
                              canopy_faces=read_canopy_faces(data),
                              bodies=[wing_bodies; bodies], tubes, extras)
     check_point_wings(draft, point_wings)

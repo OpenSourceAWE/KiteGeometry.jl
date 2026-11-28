@@ -206,7 +206,8 @@ POINT_MODEL_COLUMNS = ("type", "drag_area", "drag_coefficient")
     @test sort(unread) == ["bodies.apparent_mass", "bodies.type",
                            "bodies.wing", "points.wing", "pulleys.efficiency",
                            "segments.density", "segments.unit_stiffness",
-                           "stations.stiffness", "winches.model", "wings.aero",
+                           "stations.stiffness", "winches.drum_radius",
+                           "winches.gear_ratio", "winches.model", "wings.aero",
                            "wings.canopy_material"]
 end
 
@@ -621,6 +622,19 @@ end
     end
     @test structure_document(load_with_point_wing("kcu", 0)) ==
           structure_document(load_with_point_wing("kcu", nothing))
+end
+
+@testset "a winch holds the gear ratio and drum radius its row authors, else none" begin
+    unauthored = only(load_kite("rigid_structural_geometry.yaml").winches)
+    @test isnothing(unauthored.gear_ratio) && isnothing(unauthored.drum_radius)
+    system = load_edited("rigid_structural_geometry.yaml") do data
+        winches = data["winches"]
+        append!(winches["headers"], ["gear_ratio", "drum_radius"])
+        append!(only(winches["data"]), [2.5, 0.2])
+    end
+    for winch in (only(system.winches), only(from_yaml(to_yaml(system)).winches))
+        @test (winch.gear_ratio, winch.drum_radius) == (2.5, 0.2)
+    end
 end
 
 @testset "a refusal is an error naming the row" begin
