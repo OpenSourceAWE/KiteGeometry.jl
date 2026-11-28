@@ -5,6 +5,12 @@ SPDX-License-Identifier: MIT
 
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `document_cell(value)`: a tool whose model column holds a value of its own type adds a method for that type, returning the table, vector, string or number `to_yaml`, `to_json` and `structure_document` write for it. The model's constructor reads the cell back, as before.
+
 ## KiteGeometry v0.6.3 2026-11-25
 
 ### Added

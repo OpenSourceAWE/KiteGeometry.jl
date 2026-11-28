@@ -26,6 +26,19 @@ struct TaggedBeam{A} <: AbstractModel
 end
 TaggedBeam(EA) = TaggedBeam{:stiff}(EA)
 
+"""A damping law of the test's own, written as a table naming it."""
+struct LinearDamping
+    coefficient::Float64
+end
+KiteGeometry.document_cell(damping::LinearDamping) =
+    OrderedDict{String, Any}("law" => "linear", "coefficient" => damping.coefficient)
+
+"""A tube model whose column `damping` holds a `LinearDamping`, read from its table."""
+struct DampedBeam{D} <: AbstractModel
+    damping::D
+end
+DampedBeam(table::AbstractDict) = DampedBeam(LinearDamping(table["coefficient"]))
+
 struct StiffBeam <: AbstractModel
     EA::Float64
 end
@@ -225,6 +238,25 @@ end
         @test structure_document(system) == document
     finally
         unregister_model!(:tubes, "tagged_beam")
+    end
+end
+
+@testset "a model column of a tool's own type writes its table to YAML and JSON" begin
+    document = fixture_document()
+    tubes = document["tubes"]
+    push!(tubes["headers"], "model", "damping")
+    push!(tubes["units"], "-", "-")
+    damping = OrderedDict{String, Any}("law" => "linear", "coefficient" => 0.1)
+    foreach(row -> push!(row, "damped_beam", damping), tubes["data"])
+    register_model!(:tubes, "damped_beam", DampedBeam, ("-",))
+    try
+        system = SystemDefinition(document)
+        @test system.tubes[1].damping == LinearDamping(0.1)
+        @test structure_document(system) == document
+        @test from_yaml(to_yaml(system)).tubes[1].damping == LinearDamping(0.1)
+        @test from_json(to_json(system)).tubes[1].damping == LinearDamping(0.1)
+    finally
+        unregister_model!(:tubes, "damped_beam")
     end
 end
 
