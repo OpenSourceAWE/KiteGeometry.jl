@@ -83,13 +83,13 @@ own_mass(component) = something(component.extra_mass, 0.0)
 """
     complete_wings!(system::SystemDefinition, set::Settings) -> system
 
-Give each wing of `system` the kite's mass `set.mass` where it carries none
-([`KiteGeometry.wing_mass!`](@ref)), and put its body in its design pose from where its
-points stand ([`KiteGeometry.wing_body_pose`](@ref)). A wing's frame points are its
-stations' points and the points fixed in its body; what frames and weighs it is what its
-model gives ([`wing_spec`](@ref)), and a wing whose model gives nothing is left as it is.
-A wing with no frame points keeps its body's pose and gets the inertia its unit inertia
-gives its body's mass.
+Put the body of each wing of `system` in its design pose from where its points stand
+([`KiteGeometry.wing_body_pose`](@ref)), weighing its points as if they carried their shares
+of the kite's mass `set.mass` ([`wing_mass_shares`](@ref)) without writing those into
+them. A wing's frame points are its stations' points and the points fixed in its body;
+what frames and weighs it is what its model gives ([`wing_spec`](@ref)), and a wing whose
+model gives nothing is left as it is. A wing with no frame points keeps its body's pose
+and gets the inertia its unit inertia gives its body's mass.
 A particle wing's body carries no mass of its own, warning where it had some. Call it
 before `place!`.
 """
@@ -98,7 +98,7 @@ function complete_wings!(system::SystemDefinition, set::Settings)
         spec = wing_spec(row.model)
         isnothing(spec) && continue
         members = frame_points(system, wing)
-        wing_mass!(system, wing, spec, members, set)
+        shares = wing_mass_shares(system, wing, set.mass)
         isnothing(row.body) && continue
         body = system.bodies[row.body]
         if spec.particle && own_mass(body) > 0
@@ -112,8 +112,9 @@ function complete_wings!(system::SystemDefinition, set::Settings)
                 (body.extra_inertia_KA = body_inertia(R, own_mass(body), spec.unit_inertia))
             continue
         end
+        masses = [get(shares, index, own_mass(system.points[index])) for index in members]
         origin, R, com_offset, inertia = wing_body_pose(system.points, spec, members,
-                                                        own_mass(body))
+                                                        masses, own_mass(body))
         body.pos_ENU .= origin + R * com_offset
         body.Q_KA2ENU .= rotation_matrix_to_quaternion(R)
         isnothing(inertia) || (body.extra_inertia_KA = inertia)
@@ -122,30 +123,36 @@ function complete_wings!(system::SystemDefinition, set::Settings)
 end
 
 """
-    wing_mass!(system, wing, spec, members, set)
+    wing_mass_shares(system::SystemDefinition, wing, mass) -> Dict{Int, Float64}
 
-Spread `set.mass` equally over the frame points `members` of wing `wing` where the wing
-carries no mass of its own: for a rigid wing, neither its body nor its members; for a
-particle wing, none of its parts ([`KiteGeometry.particle_wing_parts`](@ref)).
+The mass [kg] each point of wing `wing` (an index) of `system` takes of a wing mass `mass`
+[kg]: an equal share for each of its frame points where the wing carries no mass of its
+own, none where it does or where its model gives no [`wing_spec`](@ref). A rigid wing
+carries its own where its body or a frame point does, a particle wing where any of its
+parts does ([`KiteGeometry.particle_wing_parts`](@ref)).
 """
-function wing_mass!(system, wing, spec, members, set)
+function wing_mass_shares(system::SystemDefinition, wing, mass)
+    no_shares = Dict{Int, Float64}()
+    spec = wing_spec(system.wings[wing].model)
+    isnothing(spec) && return no_shares
+    members = frame_points(system, wing)
     if spec.particle
         point_idxs, body_idxs = particle_wing_parts(system, wing)
-        mass = sum(own_mass(system.points[index]) for index in point_idxs; init=0.0) +
-               sum(own_mass(system.bodies[index]) for index in body_idxs; init=0.0)
-        mass > 0 && return nothing
-        if set.mass <= 0
+        own = sum(own_mass(system.points[index]) for index in point_idxs; init=0.0) +
+              sum(own_mass(system.bodies[index]) for index in body_idxs; init=0.0)
+        own > 0 && return no_shares
+        if mass <= 0
             @warn "Particle wing $(system.wings[wing].name) has zero mass."
-            return nothing
+            return no_shares
         end
     else
         body = system.wings[wing].body
         body_mass = isnothing(body) ? 0.0 : own_mass(system.bodies[body])
-        iszero(body_mass) && set.mass > 0 &&
-            all(index -> iszero(own_mass(system.points[index])), members) || return nothing
+        iszero(body_mass) && mass > 0 &&
+            all(index -> iszero(own_mass(system.points[index])), members) ||
+            return no_shares
     end
-    foreach(index -> system.points[index].extra_mass = set.mass / length(members), members)
-    return nothing
+    return Dict(index => mass / length(members) for index in members)
 end
 
 """
@@ -181,22 +188,23 @@ function particle_wing_parts(system, wing)
 end
 
 """
-    wing_body_pose(points, spec, members, mass) -> (origin, R, com_offset, inertia)
+    wing_body_pose(points, spec, members, masses, mass) -> (origin, R, com_offset, inertia)
 
-The design pose of the body of a wing `spec` describes, of own mass `mass` [kg]: its origin
+The design pose of the body of a wing `spec` describes, of own mass `mass` [kg] and with
+its frame points `members` weighing `masses` [kg]: its origin
 [m], its rotation into the world, the centre of its own mass in its frame [m], and its own
 inertia about that centre in its axes [kg*m²], `nothing` for none. A particle wing's body
 sits at its origin, framed by its reference points where it has them; a rigid wing's is
 framed by its reference points, else at the centre of its own mass
 ([`KiteGeometry.wing_inertia`](@ref)) in the world's axes.
 """
-function wing_body_pose(points, spec, members, mass)
+function wing_body_pose(points, spec, members, masses, mass)
     pos = [point.pos_ENU for point in points]
     if spec.particle
         R = isnothing(spec.frame) ? Mat3(I) : first(wing_frame(pos, spec.frame))
         return ref_position(pos, spec.origin), R, zero(Vec3), nothing
     end
-    com, inertia = wing_inertia(points, members, spec)
+    com, inertia = wing_inertia(points, members, masses, spec)
     R, origin = isnothing(spec.frame) ? (Mat3(I), com) : wing_frame(pos, spec.frame)
     own_inertia = isnothing(inertia) ? nothing : body_inertia(R, mass, inertia)
     return origin, R, R' * (com - origin), own_inertia
@@ -207,14 +215,14 @@ per-unit-mass inertia `unit_inertia` [m²] in world axes."""
 body_inertia(R, mass, unit_inertia) = R' * (mass * unit_inertia) * R
 
 """
-    wing_inertia(points, members, spec) -> (com, inertia)
+    wing_inertia(points, members, masses, spec) -> (com, inertia)
 
 Centre [m] and per-unit-mass inertia [m²] about it, in world axes, of a rigid wing's own
 mass: each the one its `spec` gives, else that of its frame points `members` as point
-masses, the centre their centroid and `inertia` `nothing` where they carry no mass.
+masses `masses` [kg], the centre their centroid and `inertia` `nothing` where they weigh
+nothing.
 """
-function wing_inertia(points, members, spec)
-    masses = [own_mass(points[index]) for index in members]
+function wing_inertia(points, members, masses, spec)
     positions = [points[index].pos_ENU for index in members]
     total = sum(masses)
     com = something(spec.com, total > 0 ? sum(masses .* positions) / total :
