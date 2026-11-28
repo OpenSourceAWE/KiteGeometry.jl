@@ -5,6 +5,16 @@ SPDX-License-Identifier: MIT
 
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Public, for a tool that turns its own state with a pose: `KiteGeometry.turn_rotation(pose, transforms, transform)`, the rotation `reposition!` and `place_transforms!` give one transform's members, and `KiteGeometry.turn!(pose, transforms, transform)`, which turns them by it and returns it; `KiteGeometry.calc_R_t_to_w` and `KiteGeometry.rotate_v_around_k`.
+
+### Changed
+
+- `KiteGeometry.calc_R_t_to_w` takes symbolic numbers, such as ModelingToolkit's, as well as plain ones, and gives the same result as before for plain ones.
+
 ## KiteGeometry v0.6.3 2026-11-25
 
 ### Added

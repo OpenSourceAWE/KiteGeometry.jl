@@ -71,7 +71,7 @@ KiteGeometry.parse_dynamics_type
 
 ## Transforms
 
-A transform turns some of a system's points and bodies, its members, about a base: what it turns goes to an elevation and azimuth seen from that base, the azimuth running anti-clockwise from east towards north as `atan(y, x)` does, and the body it heads to a heading about the radial. Its base is a point moved to a base position, or what another transform turns, so one transform can be chained on another. The transforms are kept beside the definition rather than in it, and `reposition!` and `transform_velocities` act on a `Pose`, the positions and body frames a run holds. `KiteGeometry.Positions` reads and writes the positions of rows as one vector, as the pose of a definition does.
+A transform turns some of a system's points and bodies, its members, about a base: what it turns goes to an elevation and azimuth seen from that base, the azimuth running anti-clockwise from east towards north as `atan(y, x)` does, and the body it heads to a heading about the radial. Its base is a point moved to a base position, or what another transform turns, so one transform can be chained on another. The transforms are kept beside the definition rather than in it, and `reposition!` and `transform_velocities` act on a `Pose`, the positions and body frames a run holds. `KiteGeometry.Positions` reads and writes the positions of rows as one vector, as the pose of a definition does. `KiteGeometry.turn!` turns one transform's members and returns the rotation it gave them, which `KiteGeometry.turn_rotation` gives without turning, so a tool can turn its velocities with the pose. `KiteGeometry.calc_R_t_to_w` takes symbolic numbers as well as plain ones.
 
 ```@docs
 Transform
@@ -79,8 +79,12 @@ Pose
 KiteGeometry.Positions
 place_transforms!
 reposition!
+KiteGeometry.turn!
+KiteGeometry.turn_rotation
 transform_velocities
 calc_heading
+KiteGeometry.calc_R_t_to_w
+KiteGeometry.rotate_v_around_k
 ```
 
 ## Placing

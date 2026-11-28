@@ -36,7 +36,8 @@ public definition, unit_stiffness, resolve_material, expand_tether!, line_segmen
 public Component, parse_table, tube_law_parameters
 public ref_position, WingFrame, wing_frame, connected_body_groups, tether_ends,
        particle_wing_parts
-public quaternion_to_rotation_matrix, rotation_matrix_to_quaternion, segment_length,
+public quaternion_to_rotation_matrix, rotation_matrix_to_quaternion, rotate_v_around_k,
+       calc_R_t_to_w, turn_rotation, turn!, segment_length,
        parse_dynamics_type, Positions
 
 """

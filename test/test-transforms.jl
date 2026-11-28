@@ -1,9 +1,10 @@
 # SPDX-FileCopyrightText: 2026 Bart van de Lint
 # SPDX-License-Identifier: MIT
 
-using KiteGeometry: radial_direction
+using KiteGeometry: base_position, calc_R_t_to_w, radial_direction, turn!, turn_rotation
 using KiteUtils: Settings, set_data_path
-using LinearAlgebra: norm, normalize
+using LinearAlgebra: I, norm, normalize
+using Symbolics: Symbolics, @variables
 using YAML
 
 include("models.jl")
@@ -120,6 +121,32 @@ end
     @test pose.pos[2] == system.points[2].pos_ENU
     @test normalize(kite_origin - kcu) ≈ radial_direction(transforms[2])
     @test calc_heading(pose.body_R[1], kite_origin - kcu) ≈ deg2rad(-35)
+end
+
+@testset "turn! moves each transform's members by the rotation turn_rotation gives" begin
+    system, transforms = load_chained()
+    pose = copy(Pose(system))
+    for transform in tilt_kite!(transforms)
+        before = copy(pose)
+        R = turn_rotation(pose, transforms, transform)
+        base_pos = base_position(pose, transforms, transform)
+        @test turn!(pose, transforms, transform) == R
+        @test R' * R ≈ I
+        (; points, bodies) = transform
+        @test pose.pos[points] ≈
+              [base_pos + R * (position - base_pos) for position in before.pos[points]]
+        @test pose.body_R[bodies] ≈ [R * body_R for body_R in before.body_R[bodies]]
+    end
+    @test poses_agree(pose, reposition!(Pose(system), transforms))
+end
+
+@testset "the tangential frame of a symbolic position is the numeric one" begin
+    @variables x y z
+    traced = first(Symbolics.build_function(calc_R_t_to_w([x, y, z]), [x, y, z];
+                                            expression=Val(false)))
+    for pos in ([30.0, -40.0, 120.0], [0.0, 0.0, 100.0], [1e-7, -1e-7, 50.0])
+        @test traced(pos) ≈ calc_R_t_to_w(pos) atol=1e-12
+    end
 end
 
 """`data`, the chained system's YAML, with its first transform turning no point."""
