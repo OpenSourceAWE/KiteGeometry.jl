@@ -402,14 +402,16 @@ const BREUKELS2011 = OrderedDict{String, Any}(
 
 """
     MaterialTable(rows::Vector{Material}, variables::Dict{String, Any})
+    MaterialTable()
 
-The materials a load has named so far, and the variables of its YAML they may be named
-after.
+The materials a load or a structure built in Julia has named so far, and the variables of
+its YAML they may be named after; empty, with no variables, from no arguments.
 """
 struct MaterialTable
     rows::Vector{Material}
     variables::Dict{String, Any}
 end
+MaterialTable() = MaterialTable(Material[], Dict{String, Any}())
 
 """
     material!(materials::MaterialTable, name, law, parameters)

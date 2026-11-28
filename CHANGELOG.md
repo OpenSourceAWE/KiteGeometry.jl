@@ -5,6 +5,12 @@ SPDX-License-Identifier: MIT
 
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `KiteGeometry.MaterialTable()` is an empty table with no variables, for a structure built in Julia.
+
 ## KiteGeometry v0.6.3 2026-11-25
 
 ### Added

@@ -402,11 +402,30 @@ function add_riders!(data; keep_body=false)
 end
 
 @testset "materials of one law and different parameters get distinct names" begin
-    materials = KiteGeometry.MaterialTable(Material[], Dict{String, Any}())
+    materials = KiteGeometry.MaterialTable()
     names = [KiteGeometry.line_material!(materials, "line", density, "rope")
              for density in (970.0, 1100.0, 970.0)]
     @test names == [:rope, :rope_2, :rope]
     @test KiteGeometry.line_material!(materials, "rope", 970.0, 1.0e9) == :rope_3
+end
+
+@testset "a table from no arguments builds lines as an empty table does" begin
+    set_data_path(joinpath(@__DIR__, "data", "2plate_kite"))
+    set = Settings("system.yaml")
+    function build(materials)
+        points = [Point(; name=:ground, extra_mass=0.0, pos_ENU=[0.0, 0.0, 0.0]),
+                  Point(; name=:kite, extra_mass=0.0, pos_ENU=[0.0, 0.0, 30.0])]
+        segments = [KiteGeometry.line_segment(:bridle, (:ground, :kite), set, materials;
+                                              model=NoModel(), unit_stiffness=1.0e4)]
+        tether = KiteGeometry.expand_tether!(points, segments, [nothing, nothing], :main,
+                                             :ground, :kite, 3, set, materials;
+                                             model=NoModel(), segment_model=NoModel())
+        return points, segments, tether, materials.rows
+    end
+    @test isempty(KiteGeometry.MaterialTable().rows)
+    @test isempty(KiteGeometry.MaterialTable().variables)
+    @test build(KiteGeometry.MaterialTable()) ==
+          build(KiteGeometry.MaterialTable(Material[], Dict{String, Any}()))
 end
 
 @testset "a tether of a callable stiffness expands to segments reading that force law" begin
@@ -416,7 +435,7 @@ end
     points = [tether_end(:ground, [0.0, 0.0, 0.0]), tether_end(:kite, [0.0, 0.0, 30.0])]
     segments = Segment[]
     point_transforms = Union{Nothing, NameRef}[nothing, nothing]
-    materials = KiteGeometry.MaterialTable(Material[], Dict{String, Any}())
+    materials = KiteGeometry.MaterialTable()
     tether = KiteGeometry.expand_tether!(points, segments, point_transforms, :main, :ground,
                                          :kite, 3, Settings("system.yaml"), materials;
                                          init=(; init_stretched_length=33.0),
@@ -726,7 +745,7 @@ function keyword_kite(dynamics, set; point_mass=nothing, extra_mass=0.0, mesh...
         :le_steering_right => (:le_right, :steering_right),
         :te_steering_right => (:te_right, :steering_right),
         :kcu_steering_right => (:steering_right, :kcu))]
-    materials = KiteGeometry.MaterialTable(Material[], Dict{String, Any}())
+    materials = KiteGeometry.MaterialTable()
     tether = KiteGeometry.expand_tether!(
         points, segments, fill(nothing, length(points)), :main_tether, :kcu, :ground, 6,
         set, materials; init=(; init_stretched_length=20.0), model=NoModel(),
