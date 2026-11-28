@@ -452,19 +452,24 @@ function model_cell(model, registration, header, system)
     return document_value(getfield(model, column), reference, system)
 end
 
+"""
+    document_cell(value)
+
+`value` as a cell of a structure document: a number, string or `nothing`, or a vector or
+table (an `AbstractDict` with string keys) of these, which the YAML and JSON writers write.
+A tool whose model column holds a value of its own type adds a method for that type; the
+model's constructor reads the cell back.
+"""
+document_cell(value) = value
+document_cell(name::Symbol) = String(name)
+document_cell(values::AbstractVector) = [document_cell(value) for value in values]
+document_cell(rows::StaticMatrix) = [collect(row) for row in eachrow(rows)]
+
 """`value` as a structure document writes it, a reference into `target` by name."""
-document_value(value, ::Nothing, system) = value
-document_value(value::StaticVector, ::Nothing, system) = collect(value)
-function document_value(value::StaticMatrix, ::Nothing, system)
-    return [collect(row) for row in eachrow(value)]
-end
+document_value(value, ::Nothing, system) = document_cell(value)
 document_value(::Nothing, ::Symbol, system) = nothing
 document_value(::Nothing, ::WeightedRefs, system) = nothing
 document_value(::Nothing, ::Tuple, system) = nothing
-document_value(name::Symbol, ::Nothing, system) = String(name)
-function document_value(names::AbstractVector{NameRef}, ::Nothing, system)
-    return document_value.(names, nothing, (system,))
-end
 function document_value(index::Int, target::Symbol, system)
     return String(getfield(system, target)[index].name)
 end
