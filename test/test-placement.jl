@@ -63,7 +63,7 @@ transform."""
 function rider_kite_in_julia(; elevation=60.0, azimuth=30.0)
     set = placement_settings()
     line = tether_line()
-    materials = MaterialTable(Material[], Dict{String, Any}())
+    materials = MaterialTable()
     points = Point[Point(; name=:ground, fixed=true, pos_ENU=[0.0, 0.0, 0.0],
                          extra_mass=0.0),
                    Point(; name=:kcu, pos_ENU=[0.0, 0.0, 10.0], extra_mass=0.0),
@@ -198,7 +198,7 @@ end
 naming neither end, to be placed at a stretched length of 12 m."""
 function segment_only_tether()
     set, line = placement_settings(), tether_line()
-    materials = MaterialTable(Material[], Dict{String, Any}())
+    materials = MaterialTable()
     points = [Point(; name=:ground, fixed=true, pos_ENU=[0.0, 0.0, 0.0], extra_mass=0.0),
               Point(; name=:joint, pos_ENU=[0.0, 0.0, 3.0], extra_mass=0.0),
               Point(; name=:kcu, pos_ENU=[0.0, 0.0, 10.0], extra_mass=0.0)]

@@ -55,7 +55,24 @@ KiteGeometry.definition
 
 SymbolicAWEModels authors a system in its wing's KA frame: points at `pos_cad`, tethers by their segment count and stretched length, `variables` shared between rows, and `transforms` that turn the whole to an elevation, azimuth and heading. `load_authoring` converts that dialect into a `SystemDefinition` placed by its transforms, and returns those transforms beside it, so `structure_document` writes the full-form document with no transforms in it. Each segment's stiffness and density become a `linear` material and a tube's `breukels2011` law the constants of the Breukels (2011) correlations. The columns the schema left to tools, such as a point's `type` and drag or a segment's damping and what it does in compression, are read only by the models SymbolicAWEModels registers, as the row authors them; a tether that gives a segment count reads its segments' model from its own row. A `canopy_faces` table with the schema's own columns states each wing's canopy: a face's wing, and its corners by name or index. A filled cell that neither the loader nor the row's model reads is refused, as `load_structure` refuses one, naming the block and its columns, and so is a block it does not read that holds rows; a row's `idx`, where it has one, must be its position. A column a dict row leaves out is an unset cell, which a model field holds only where it admits `nothing`.
 
-`KiteGeometry.resolve_material` completes a segment's diameter, stiffness and density from what its row gives and the settings, as the loader does, and `KiteGeometry.unit_stiffness` gives the stiffness of a `linear` material at a diameter, or of a placed segment from its material. `KiteGeometry.expand_tether!` adds a tether's segments and inner points to rows a tool holds, as the loader does for a row that gives a segment count, its stiffness a number, a law's name or a callable force law, collected in a `KiteGeometry.MaterialTable`. `KiteGeometry.line_segment` makes one segment the same way, for a structure built row by row. `KiteGeometry.tube_law_parameters` gives the parameters a tube's material takes from its law, and `KiteGeometry.parse_table` reads the rows of a table in the authoring YAML's format, such as a block the loader leaves to the tool. `KiteGeometry.parse_dynamics_type` reads a point's or wing's dynamics type.
+`KiteGeometry.resolve_material` completes a segment's diameter, stiffness and density from what its row gives and the settings, as the loader does, and `KiteGeometry.unit_stiffness` gives the stiffness of a `linear` material at a diameter, or of a placed segment from its material. `KiteGeometry.expand_tether!` adds a tether's segments and inner points to rows a tool holds, as the loader does for a row that gives a segment count, its stiffness a number, a law's name or a callable force law, collected in a `KiteGeometry.MaterialTable`. `KiteGeometry.line_segment` makes one segment the same way, for a structure built row by row. A structure built in Julia starts from an empty `KiteGeometry.MaterialTable()` and hands its rows to the definition, since every segment names the material it adds there:
+
+```julia
+using KiteGeometry, KiteUtils
+set = Settings("system.yaml")
+materials = KiteGeometry.MaterialTable()
+points = [Point(; name=:ground, fixed=true, pos_ENU=[0.0, 0.0, 0.0], extra_mass=0.0),
+          Point(; name=:kite, pos_ENU=[0.0, 0.0, 30.0], extra_mass=0.0)]
+segments = Segment[]
+tether = KiteGeometry.expand_tether!(points, segments, [nothing, nothing], :main, :ground,
+                                     :kite, 3, set, materials; model=NoModel(),
+                                     segment_model=NoModel(), diameter=0.004,
+                                     unit_stiffness=1.0e4)
+system = SystemDefinition(; metadata=Metadata(; name="tether", n_points=length(points)),
+                          materials=materials.rows, points, segments, tethers=[tether])
+```
+
+`KiteGeometry.tube_law_parameters` gives the parameters a tube's material takes from its law, and `KiteGeometry.parse_table` reads the rows of a table in the authoring YAML's format, such as a block the loader leaves to the tool. `KiteGeometry.parse_dynamics_type` reads a point's or wing's dynamics type.
 
 ```@docs
 load_authoring
