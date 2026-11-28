@@ -5,6 +5,16 @@ SPDX-License-Identifier: MIT
 
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `wing_mass_shares(system, wing, mass)` gives the mass each point of a wing takes of a wing mass, as a `Dict` of point index to kg, without changing the definition.
+
+### Changed
+
+- BREAKING: `complete_wings!`, and so `load_authoring`, no longer write the kite's mass `set.mass` into a wing's point rows: points keep the `extra_mass` they were authored with. Wing bodies are posed and given inertia as before, as if those points carried their shares. A tool that read the filled masses off the rows applies `wing_mass_shares` with its own mass instead.
+
 ## KiteGeometry v0.6.3 2026-11-25
 
 ### Added

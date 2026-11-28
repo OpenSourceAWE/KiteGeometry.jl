@@ -887,11 +887,39 @@ KiteGeometry.model_references(::Type{FlapStation}) = (flap_body=:bodies,)
     @test KiteGeometry.referenced_rows([3, [Any[2, 0.5], Any[4, 0.5]], 1], references,
                                        :bodies) == [3, 2, 4]
     @test isempty(KiteGeometry.referenced_rows(nothing, :bodies, :bodies))
+    @test isempty(wing_mass_shares(system, 1, 1.0))
+    system.bodies[:servo].extra_mass = 0.0
+    @test wing_mass_shares(system, 1, 1.0) == Dict(1 => 0.5, 2 => 0.5)
+end
+
+"""A rigid wing of four points framed by them, the points weighing `point_masses` [kg]."""
+function framed_wing(point_masses)
+    model = SamWing(nothing, nothing, nothing, nothing, nothing, "RIGID_DYNAMICS", 1,
+                    [1, 3], [2, 1], nothing, nothing, nothing)
+    points = [Point(; name, pos_ENU, body=:wing, extra_mass)
+              for (name, pos_ENU, extra_mass) in zip(
+                  (:le_left, :le_right, :te_left, :te_right),
+                  ([0.0, 1.0, 5.0], [0.0, -1.0, 5.0], [1.0, 1.0, 5.2], [1.2, -1.0, 5.5]),
+                  point_masses)]
+    return SystemDefinition(; metadata=Metadata(; name="framed", n_points=4), points,
+                            wings=[Wing(; name=:wing, pos_ENU=zeros(3), body=:wing, model)],
+                            bodies=[Body(; name=:wing, pos_ENU=zeros(3))])
+end
+
+@testset "a completed wing weighs the kite's mass but leaves its points' masses unset" begin
     set = kite_settings()
-    set.mass = 1.0
-    complete_wings!(system, set)
-    @test all(point -> isnothing(point.extra_mass) || iszero(point.extra_mass),
-              system.points)
+    set.mass = 2.0
+    shares = wing_mass_shares(framed_wing(fill(nothing, 4)), 1, set.mass)
+    @test sum(values(shares)) ≈ set.mass
+    @test sort(collect(keys(shares))) == 1:4
+    system = complete_wings!(framed_wing(fill(nothing, 4)), set)
+    @test all(point -> isnothing(point.extra_mass), system.points)
+    weighed = complete_wings!(framed_wing([shares[index] for index in 1:4]), set)
+    body, weighed_body = system.bodies[:wing], weighed.bodies[:wing]
+    @test body.pos_ENU == weighed_body.pos_ENU
+    @test body.Q_KA2ENU == weighed_body.Q_KA2ENU
+    @test body.extra_inertia_KA == weighed_body.extra_inertia_KA
+    @test isempty(wing_mass_shares(weighed, 1, set.mass))
 end
 
 foreach(model -> unregister_model!(model[1], model[2]), SAM_MODELS)
